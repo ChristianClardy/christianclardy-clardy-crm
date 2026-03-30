@@ -96,7 +96,7 @@ export default function Login() {
           <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3" style={{ backgroundColor: '#3d3530' }}>
             <HardHat className="w-6 h-6" style={{ color: '#b5965a' }} />
           </div>
-          <h1 className="text-2xl font-bold tracking-wide" style={{ color: '#3d3530' }}>ConstructIQ</h1>
+          <h1 className="text-2xl font-bold tracking-wide" style={{ color: '#3d3530' }}>Siteline</h1>
           <p className="text-sm mt-1" style={{ color: '#7a6e66' }}>Construction Management Platform</p>
         </div>
 

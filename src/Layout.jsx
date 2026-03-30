@@ -61,7 +61,7 @@ export default function Layout({ children, currentPageName }) {
             <div className="w-8 h-8 rounded flex items-center justify-center" style={{ backgroundColor: "var(--brand-gold)" }}>
               <HardHat className="w-4 h-4" style={{ color: "#f5f0eb" }} />
             </div>
-            <span className="text-sm font-bold" style={{ color: "#f5f0eb", letterSpacing: "0.08em" }}>ConstructIQ</span>
+            <span className="text-sm font-bold" style={{ color: "#f5f0eb", letterSpacing: "0.08em" }}>Siteline</span>
           </div>
         </div>
         {showCloseButton && (
@@ -166,7 +166,7 @@ export default function Layout({ children, currentPageName }) {
             <div className="w-7 h-7 rounded flex items-center justify-center" style={{ backgroundColor: "var(--brand-gold)" }}>
               <HardHat className="w-4 h-4" style={{ color: "#f5f0eb" }} />
             </div>
-            <span className="font-bold tracking-widest uppercase text-sm" style={{ color: "#f5f0eb" }}>ConstructIQ</span>
+            <span className="font-bold tracking-widest uppercase text-sm" style={{ color: "#f5f0eb" }}>Siteline</span>
           </div>
           <div className="flex items-center gap-2">
             <button

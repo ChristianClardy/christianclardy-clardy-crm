@@ -12,7 +12,6 @@ import {
   User,
   Building2,
   ChevronRight,
-  Download
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,7 +53,6 @@ export default function Clients() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isAccuLynxOpen, setIsAccuLynxOpen] = useState(false);
   const [editingClient, setEditingClient] = useState(null);
   const [duplicateError, setDuplicateError] = useState("");
 
@@ -184,14 +182,6 @@ export default function Clients() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setIsAccuLynxOpen(true)}
-            className="border-blue-200 text-blue-700 hover:bg-blue-50"
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Import from AccuLynx
-          </Button>
           <Button
             onClick={openNewDialog}
             className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-lg shadow-orange-500/25"

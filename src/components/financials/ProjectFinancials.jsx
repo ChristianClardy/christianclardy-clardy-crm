@@ -269,14 +269,7 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <div>
             <h3 className="text-base font-semibold text-slate-800">Job Cost Breakdown</h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Click any cell to edit. Budgeted values sync from AccuLynx.
-              {lastSyncedAt && (
-                <span className="ml-2 text-emerald-600 font-medium">
-                  ✓ Synced from AccuLynx {new Date(lastSyncedAt).toLocaleDateString()}
-                </span>
-              )}
-            </p>
+            <p className="text-xs text-slate-400 mt-0.5">Click any cell to edit.</p>
           </div>
           <Button size="sm" variant="outline" onClick={addSection}>
             <Plus className="w-4 h-4 mr-1" /> Add Section

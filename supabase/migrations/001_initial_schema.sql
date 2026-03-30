@@ -1,5 +1,5 @@
 -- ============================================================
--- ConstructIQ — Supabase Migration
+-- Siteline — Supabase Migration
 -- Generated: 2026-03-30
 -- 35 tables covering all Base44 entities
 -- ============================================================

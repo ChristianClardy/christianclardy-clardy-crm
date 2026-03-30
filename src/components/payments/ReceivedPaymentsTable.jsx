@@ -9,13 +9,13 @@ export default function ReceivedPaymentsTable({ payments, projectMap, clientMap 
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
         <h2 className="text-lg font-semibold text-slate-900">Recorded Payments</h2>
-        <p className="mt-1 text-sm text-slate-500">Payments synced from AccuLynx will appear here.</p>
+        <p className="mt-1 text-sm text-slate-500">Recorded payments will appear here.</p>
       </div>
 
       {sortedPayments.length === 0 ? (
         <div className="p-12 text-center text-slate-500">
           <p className="font-medium">No payment records found</p>
-          <p className="mt-1 text-sm">Use the sync button to pull in payment activity from AccuLynx.</p>
+          <p className="mt-1 text-sm">No payments have been recorded yet.</p>
         </div>
       ) : (
         <div className="overflow-x-auto">

@@ -183,7 +183,7 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 lg:text-3xl">Payments</h1>
-          <p className="mt-1 text-slate-500">Track draw schedules and sync payment activity from AccuLynx.</p>
+          <p className="mt-1 text-slate-500">Track draw schedules and payment activity.</p>
         </div>
         <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center lg:w-auto">
           <div className="relative w-full sm:min-w-[320px]">
@@ -290,7 +290,7 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
       </div>
 
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-        Need to add or edit payment draws? Open any <Link to={createPageUrl("Projects")} className="font-semibold underline">project</Link> and use its <span className="font-semibold">Cash Flow</span> tab, then use the sync button here to pull in recorded AccuLynx payments.
+        Need to add or edit payment draws? Open any <Link to={createPageUrl("Projects")} className="font-semibold underline">project</Link> and use its <span className="font-semibold">Cash Flow</span> tab.
       </div>
 
       <InvoiceDialog

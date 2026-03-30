@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { 
   Target, Phone, Mail, MapPin, FileText,
   ChevronDown, ChevronRight, ExternalLink, Plus, Search, ArrowUpDown,
-  Workflow, Calendar, AlertCircle, Download, RefreshCw
+  Workflow, Calendar, AlertCircle, Download
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import WorkflowBadge, { WORKFLOW_STAGES } from "@/components/prospects/WorkflowBadge";
@@ -315,35 +315,6 @@ export default function Prospects({ initialBucket = "all", showBucketTabs = true
     doc.save("prospects.pdf");
   };
 
-  const [syncing, setSyncing] = useState(false);
-  const [syncProgress, setSyncProgress] = useState(null);
-
-  const handleSync = async () => {
-    setSyncing(true);
-    setSyncProgress({ current: 0, total: 0 });
-    let nextPage = 1;
-    let done = false;
-    let consecutiveErrors = 0;
-    while (!done) {
-      try {
-        const res = await base44.functions.invoke("syncProspects", { acculynxPage: nextPage, manual: true });
-        const data = res.data;
-        nextPage = data.nextPage || (nextPage + 1);
-        done = data.done || nextPage > (data.totalPages || 1);
-        consecutiveErrors = 0;
-        setSyncProgress({ current: nextPage - 1, total: data.totalPages || 0 });
-        if (!done) await new Promise(r => setTimeout(r, 1000));
-      } catch (err) {
-        consecutiveErrors++;
-        if (consecutiveErrors >= 3) break;
-        await new Promise(r => setTimeout(r, 4000 * consecutiveErrors));
-      }
-    }
-    setSyncing(false);
-    setSyncProgress(null);
-    loadData();
-  };
-
   const [exportOpen, setExportOpen] = useState(false);
   const exportRef = useRef(null);
   useEffect(() => {
@@ -395,19 +366,6 @@ export default function Prospects({ initialBucket = "all", showBucketTabs = true
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {/* Sync button */}
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            className="flex items-center gap-2 px-4 py-2.5 rounded text-sm font-semibold tracking-wide border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-all duration-200 disabled:opacity-60"
-          >
-            <RefreshCw className={`w-4 h-4 ${syncing ? "animate-spin" : ""}`} />
-            {syncing
-              ? syncProgress?.total
-                ? `Syncing… page ${syncProgress.current}/${syncProgress.total}`
-                : "Syncing…"
-              : "Sync AccuLynx"}
-          </button>
           {/* Export dropdown */}
           <div className="relative" ref={exportRef}>
             <button
@@ -534,7 +492,7 @@ export default function Prospects({ initialBucket = "all", showBucketTabs = true
             <Target className="w-8 h-8 text-amber-400" />
           </div>
           <h3 className="text-lg font-semibold text-slate-700">No records in this bucket</h3>
-          <p className="text-sm text-slate-400 mt-1">Try another bucket or sync the latest AccuLynx data.</p>
+          <p className="text-sm text-slate-400 mt-1">Try another bucket or adjust your search.</p>
           <Link
             to={createPageUrl("Clients")}
             className="mt-4 px-4 py-2 rounded-lg text-sm font-semibold text-white"
@@ -687,7 +645,7 @@ export default function Prospects({ initialBucket = "all", showBucketTabs = true
                         <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
                           <div>
                             <p className="font-medium text-slate-800 text-sm">AccuLynx Primary Estimate</p>
-                            <p className="text-xs text-slate-400 mt-0.5">Synced from AccuLynx</p>
+                            <p className="text-xs text-slate-400 mt-0.5">Estimate</p>
                           </div>
                           <div className="text-right">
                             <p className="text-xs text-slate-400">Total</p>
