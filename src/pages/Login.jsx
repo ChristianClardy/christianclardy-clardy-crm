@@ -1,15 +1,26 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { HardHat, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 export default function Login() {
-  const [mode, setMode]         = useState('login');   // 'login' | 'signup' | 'reset'
+  const [mode, setMode]         = useState('login');   // 'login' | 'signup' | 'reset' | 'update_password'
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading]   = useState(false);
   const [message, setMessage]   = useState(null);   // { type: 'success'|'error', text }
+
+  // Detect when Supabase redirects back with a password recovery token
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setMode('update_password');
+        setMessage({ type: 'success', text: 'Enter your new password below.' });
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   const clearMessage = () => setMessage(null);
 
@@ -58,7 +69,24 @@ export default function Login() {
     setLoading(false);
   };
 
-  const submit = mode === 'login' ? handleLogin : mode === 'signup' ? handleSignup : handleReset;
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    clearMessage();
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) {
+      setMessage({ type: 'error', text: error.message });
+    } else {
+      setMessage({ type: 'success', text: 'Password updated! Signing you in…' });
+      setTimeout(() => { window.location.href = '/'; }, 1500);
+    }
+    setLoading(false);
+  };
+
+  const submit = mode === 'login'            ? handleLogin
+               : mode === 'signup'           ? handleSignup
+               : mode === 'update_password'  ? handleUpdatePassword
+               :                               handleReset;
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: '#f5f0eb', fontFamily: "'Georgia', serif" }}>
@@ -75,7 +103,7 @@ export default function Login() {
         {/* Card */}
         <div className="rounded-2xl p-8 shadow-lg" style={{ backgroundColor: '#fff', border: '1px solid #ddd5c8' }}>
           <h2 className="text-lg font-semibold mb-6" style={{ color: '#3d3530' }}>
-            {mode === 'login' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Reset password'}
+            {mode === 'login' ? 'Sign in' : mode === 'signup' ? 'Create account' : mode === 'update_password' ? 'Set new password' : 'Reset password'}
           </h2>
 
           {message && (
@@ -111,7 +139,7 @@ export default function Login() {
               </div>
             )}
 
-            <div>
+            {mode !== 'update_password' && <div>
               <label className="block text-xs font-semibold mb-1.5 tracking-wide uppercase" style={{ color: '#5a4f48' }}>
                 Email
               </label>
@@ -129,9 +157,9 @@ export default function Login() {
                   onBlur={e => (e.target.style.borderColor = '#ddd5c8')}
                 />
               </div>
-            </div>
+            </div>}
 
-            {mode !== 'reset' && (
+            {(mode !== 'reset') && (
               <div>
                 <label className="block text-xs font-semibold mb-1.5 tracking-wide uppercase" style={{ color: '#5a4f48' }}>
                   Password
@@ -168,7 +196,7 @@ export default function Login() {
               style={{ backgroundColor: '#3d3530', color: '#f5f0eb', opacity: loading ? 0.7 : 1 }}
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {mode === 'login' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Send reset link'}
+              {mode === 'login' ? 'Sign in' : mode === 'signup' ? 'Create account' : mode === 'update_password' ? 'Update password' : 'Send reset link'}
             </button>
           </form>
 
