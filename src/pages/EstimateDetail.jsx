@@ -1,886 +1,838 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
-  ArrowLeft, Save, Send, Plus, Trash2, GripVertical,
-  ChevronDown, Loader2, CheckCircle, Copy, Mail, Package, BookmarkPlus
+  ArrowLeft, Save, Download, Plus, Trash2, ChevronDown, ChevronRight,
+  Package, FileText, Loader2, Check, GripVertical
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { Slider } from "@/components/ui/slider";
-import GoodBetterBestEstimator from "@/components/estimates/GoodBetterBestEstimator";
-import MaterialPickerDialog from "@/components/estimates/MaterialPickerDialog";
-import EstimatorMaterialsPanel from "@/components/estimates/EstimatorMaterialsPanel";
-import SaveMaterialDialog from "@/components/estimates/SaveMaterialDialog";
-import { buildMaterialFromEstimateItem } from "@/components/estimates/saveMaterialUtils";
+import { jsPDF } from "jspdf";
 
-function newId() { return Math.random().toString(36).slice(2, 10); }
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-function getItemRawUnitCost(item) {
-  const splitCost =
-    Number(item.material_unit_cost || 0) +
-    Number(item.labor_unit_cost || 0) +
-    Number(item.equipment_unit_cost || 0) +
-    Number(item.subcontract_unit_cost || 0);
-  return splitCost || Number(item.unit_cost || 0);
-}
+const MARGIN = 0.40; // 40% margin → sell = cost / (1 - 0.40) = cost / 0.60
 
-function getItemCostAmount(item) {
-  const quantity = Number(item.qty || 0);
-  const wasteMultiplier = 1 + (Number(item.waste_percent || 0) / 100);
-  return quantity * getItemRawUnitCost(item) * wasteMultiplier;
-}
+const UNITS = ["SF", "LF", "SY", "EA", "LS", "HR", "CY"];
 
-function getItemSellAmount(item, marginPercent) {
-  const markup = Number(item.markup_percent ?? marginPercent ?? 0) / 100;
-  return getItemCostAmount(item) * (1 + markup);
-}
+const TRADE_GROUPS = {
+  "Pool": [
+    "Excavation", "Steel/Rebar", "Gunite/Shotcrete", "Plumbing",
+    "Electrical", "Coping & Tile", "Plaster/Finish", "Equipment", "Decking",
+  ],
+  "GC / Outdoor Living": [
+    "Excavation", "Concrete/Flatwork", "Framing/Carpentry", "Roofing",
+    "Electrical", "Plumbing", "Drainage", "Masonry", "Demo/Site Prep",
+    "Painting", "Insulation", "Permits & Fees",
+  ],
+};
 
-function calcTotals(lineItems, taxRate, marginPercent) {
-  const rows = (lineItems || []).filter(r => !r.is_section_header);
-  const materialSubtotal = rows.reduce((s, r) => s + (Number(r.qty || 0) * Number(r.material_unit_cost || 0)), 0);
-  const laborSubtotal = rows.reduce((s, r) => s + (Number(r.qty || 0) * Number(r.labor_unit_cost || 0)), 0);
-  const equipmentSubtotal = rows.reduce((s, r) => s + (Number(r.qty || 0) * Number(r.equipment_unit_cost || 0)), 0);
-  const subcontractSubtotal = rows.reduce((s, r) => s + (Number(r.qty || 0) * Number(r.subcontract_unit_cost || 0)), 0);
-  const totalCost = rows.reduce((s, r) => s + getItemCostAmount(r), 0);
-  const subtotal = rows.reduce((s, r) => s + getItemSellAmount(r, marginPercent), 0);
-  const taxAmount = subtotal * (Number(taxRate) || 0) / 100;
-  const total = subtotal + taxAmount;
-  const grossProfit = subtotal - totalCost;
-  const grossMarginPercent = subtotal > 0 ? (grossProfit / subtotal) * 100 : 0;
+const ALL_TRADES = Array.from(new Set([
+  ...TRADE_GROUPS["Pool"],
+  ...TRADE_GROUPS["GC / Outdoor Living"],
+]));
 
+// ─── Templates ────────────────────────────────────────────────────────────────
+
+function blankItem(trade, description = "", unit = "SF", qty = 1) {
   return {
-    materialSubtotal,
-    laborSubtotal,
-    equipmentSubtotal,
-    subcontractSubtotal,
-    totalCost,
-    subtotal,
-    taxAmount,
-    total,
-    grossProfit,
-    grossMarginPercent,
+    id: Math.random().toString(36).slice(2, 10),
+    trade,
+    description,
+    unit,
+    quantity: qty,
+    cost_per_unit: "",
   };
 }
 
-function calcVersionTotals(lineItems) {
-  const items = (lineItems || []).filter(r => !r.is_section_header);
-  const totals = {
-    subtotal_material: 0,
-    subtotal_labor: 0,
-    subtotal_equipment: 0,
-    subtotal_subcontract: 0,
-    subtotal_other: 0,
-    subtotal_allowances: 0,
-    subtotal_contingency: 0,
-    total_cost: 0,
-    total_price: 0,
-    gross_profit: 0,
-    gross_margin_percent: 0,
+const TEMPLATES = [
+  {
+    key: "patio_cover",
+    label: "20×20 Patio Cover",
+    group: "GC / Outdoor Living",
+    items: [
+      blankItem("Demo/Site Prep",      "Site preparation and layout",            "LS",  1),
+      blankItem("Concrete/Flatwork",   "Concrete footings",                       "EA",  4),
+      blankItem("Framing/Carpentry",   "2×6 roof framing & ledger attachment",    "SF",  400),
+      blankItem("Roofing",             "Metal or shingle roofing w/ underlayment","SF",  400),
+      blankItem("Framing/Carpentry",   "Fascia, trim & finish carpentry",         "LF",  80),
+      blankItem("Electrical",          "Recessed lighting (4 cans)",              "EA",  4),
+      blankItem("Painting",            "Paint – prime & finish coat",             "SF",  400),
+      blankItem("Permits & Fees",      "Building permit & inspection fees",        "LS",  1),
+    ],
+  },
+  {
+    key: "pergola",
+    label: "15×25 Pergola w/ Polycarbonate Roof",
+    group: "GC / Outdoor Living",
+    items: [
+      blankItem("Demo/Site Prep",      "Site preparation and layout",             "LS",  1),
+      blankItem("Concrete/Flatwork",   "Concrete footings / post bases",          "EA",  6),
+      blankItem("Framing/Carpentry",   "Cedar/pine post & beam structure",        "SF",  375),
+      blankItem("Roofing",             "Polycarbonate panels & framing",          "SF",  375),
+      blankItem("Framing/Carpentry",   "Decorative rafter tails & trim",          "LF",  80),
+      blankItem("Electrical",          "Ceiling fan rough-in & fixture",          "EA",  2),
+      blankItem("Permits & Fees",      "Building permit",                          "LS",  1),
+    ],
+  },
+  {
+    key: "outdoor_kitchen",
+    label: "15 ft Outdoor Kitchen",
+    group: "GC / Outdoor Living",
+    items: [
+      blankItem("Demo/Site Prep",      "Demo & site prep",                        "LS",  1),
+      blankItem("Concrete/Flatwork",   "Concrete slab / pad",                     "SF",  120),
+      blankItem("Masonry",             "CMU block structure",                     "SF",  45),
+      blankItem("Masonry",             "Stone or tile veneer",                    "SF",  45),
+      blankItem("Plumbing",            "Gas line – black iron / CSST",            "LF",  25),
+      blankItem("Electrical",          "Dedicated circuit & GFCI outlets",        "EA",  3),
+      blankItem("Framing/Carpentry",   "Countertop – granite / concrete",         "LF",  15),
+      blankItem("Electrical",          "Under-counter refrigerator rough-in",     "EA",  1),
+      blankItem("Permits & Fees",      "Permits",                                  "LS",  1),
+    ],
+  },
+  {
+    key: "cabana",
+    label: "25×20 Cabana",
+    group: "GC / Outdoor Living",
+    items: [
+      blankItem("Demo/Site Prep",      "Site prep & layout",                      "LS",  1),
+      blankItem("Concrete/Flatwork",   "Concrete slab floor",                     "SF",  500),
+      blankItem("Concrete/Flatwork",   "Footings",                                "EA",  6),
+      blankItem("Framing/Carpentry",   "Wall & roof framing",                     "SF",  500),
+      blankItem("Roofing",             "Shingle roof w/ underlayment",            "SF",  500),
+      blankItem("Electrical",          "Panel sub-feed & wiring",                 "LS",  1),
+      blankItem("Electrical",          "Lighting & fans",                         "EA",  4),
+      blankItem("Plumbing",            "Sink rough-in & fixture",                 "EA",  1),
+      blankItem("Painting",            "Interior & exterior paint",               "SF",  800),
+      blankItem("Insulation",          "Spray foam / batt insulation",            "SF",  500),
+      blankItem("Permits & Fees",      "Building permit",                          "LS",  1),
+    ],
+  },
+  {
+    key: "gunite_pool",
+    label: "13×30 Gunite Pool",
+    group: "Pool",
+    items: [
+      blankItem("Excavation",          "Pool excavation & haul-off",              "CY",  120),
+      blankItem("Steel/Rebar",         "#3 rebar grid 12″ o.c.",                  "SF",  390),
+      blankItem("Plumbing",            "Main drain, returns, skimmer rough-in",   "LS",  1),
+      blankItem("Electrical",          "Bonding, GFCI, light niche rough-in",     "LS",  1),
+      blankItem("Gunite/Shotcrete",    "Gunite shell – 4″ walls / 6″ floor",      "SF",  390),
+      blankItem("Coping & Tile",       "Bullnose coping – travertine or concrete","LF",  86),
+      blankItem("Coping & Tile",       "Waterline tile – 6″ band",               "LF",  86),
+      blankItem("Plaster/Finish",      "Pebble-tec or white plaster finish",      "SF",  390),
+      blankItem("Equipment",           "Pump, filter, heater & automation pkg",   "LS",  1),
+      blankItem("Decking",             "Concrete or travertine decking",           "SF",  600),
+      blankItem("Electrical",          "Equipment pad wiring & final connections","LS",  1),
+    ],
+  },
+];
+
+// ─── Pricing helpers ──────────────────────────────────────────────────────────
+
+const sellFromCost = (cost) => (cost > 0 ? cost / (1 - MARGIN) : 0);
+
+function itemTotals(item) {
+  const qty  = Number(item.quantity)     || 0;
+  const cost = Number(item.cost_per_unit) || 0;
+  const sell = sellFromCost(cost);
+  return {
+    sell_per_unit: sell,
+    total_cost:    qty * cost,
+    total_sell:    qty * sell,
+    profit:        qty * (sell - cost),
+  };
+}
+
+function summaryTotals(items) {
+  let totalCost = 0, totalSell = 0;
+  for (const it of items) {
+    const t = itemTotals(it);
+    totalCost += t.total_cost;
+    totalSell += t.total_sell;
+  }
+  const profit = totalSell - totalCost;
+  const margin = totalSell > 0 ? (profit / totalSell) * 100 : 0;
+  return { totalCost, totalSell, profit, margin };
+}
+
+// ─── Formatters ──────────────────────────────────────────────────────────────
+
+const fmt  = (n) => `$${Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtp = (n) => `${Number(n || 0).toFixed(1)}%`;
+
+// ─── Template Selector Modal ──────────────────────────────────────────────────
+
+function TemplatePicker({ onSelect }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
+        <div className="px-6 py-5 border-b border-slate-200">
+          <h2 className="text-xl font-bold text-slate-900">Start New Estimate</h2>
+          <p className="text-sm text-slate-500 mt-0.5">Choose a template or start from scratch.</p>
+        </div>
+        <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button
+            onClick={() => onSelect(null)}
+            className="text-left p-4 rounded-xl border-2 border-dashed border-slate-300 hover:border-amber-400 hover:bg-amber-50/40 transition-all group"
+          >
+            <FileText className="w-6 h-6 text-slate-400 group-hover:text-amber-500 mb-2" />
+            <p className="font-semibold text-slate-700">Blank Estimate</p>
+            <p className="text-xs text-slate-400 mt-0.5">Start with no pre-filled items</p>
+          </button>
+          {TEMPLATES.map(t => (
+            <button
+              key={t.key}
+              onClick={() => onSelect(t)}
+              className="text-left p-4 rounded-xl border border-slate-200 hover:border-amber-400 hover:bg-amber-50/40 transition-all group"
+            >
+              <div className="flex items-start justify-between">
+                <p className="font-semibold text-slate-800">{t.label}</p>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 ml-2 flex-shrink-0">{t.group}</span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">{t.items.length} line items pre-loaded · costs blank</p>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Line Item Row ────────────────────────────────────────────────────────────
+
+function LineItemRow({ item, onChange, onDelete }) {
+  const { sell_per_unit, total_cost, total_sell } = itemTotals(item);
+  const hasCost = Number(item.cost_per_unit) > 0;
+
+  return (
+    <tr className="border-b border-slate-100 hover:bg-amber-50/20 group">
+      <td className="pl-3 pr-1 py-2 w-6 text-slate-300 cursor-grab"><GripVertical className="w-3.5 h-3.5" /></td>
+      <td className="px-2 py-1.5 min-w-[200px]">
+        <input
+          type="text"
+          value={item.description}
+          onChange={e => onChange({ ...item, description: e.target.value })}
+          placeholder="Description…"
+          className="w-full bg-transparent text-sm text-slate-800 border-b border-transparent focus:border-amber-400 outline-none py-0.5 placeholder:text-slate-300"
+        />
+      </td>
+      <td className="px-2 py-1.5 w-32">
+        <select
+          value={item.unit}
+          onChange={e => onChange({ ...item, unit: e.target.value })}
+          className="w-full text-xs text-slate-600 bg-transparent border-b border-transparent focus:border-amber-400 outline-none py-0.5"
+        >
+          {UNITS.map(u => <option key={u}>{u}</option>)}
+        </select>
+      </td>
+      <td className="px-2 py-1.5 w-24">
+        <input
+          type="number"
+          min="0"
+          value={item.quantity}
+          onChange={e => onChange({ ...item, quantity: e.target.value })}
+          className="w-full text-xs text-right text-slate-700 bg-transparent border-b border-transparent focus:border-amber-400 outline-none py-0.5"
+        />
+      </td>
+      <td className="px-2 py-1.5 w-28">
+        <div className="relative">
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={item.cost_per_unit}
+            onChange={e => onChange({ ...item, cost_per_unit: e.target.value })}
+            placeholder="0.00"
+            className="w-full pl-3 text-xs text-right text-slate-700 bg-transparent border-b border-transparent focus:border-amber-400 outline-none py-0.5 placeholder:text-slate-300"
+          />
+        </div>
+      </td>
+      <td className="px-2 py-1.5 w-28 text-right text-xs text-slate-500">
+        {hasCost ? fmt(sell_per_unit) : <span className="text-slate-300">—</span>}
+      </td>
+      <td className="px-2 py-1.5 w-28 text-right text-xs text-slate-600">
+        {hasCost ? fmt(total_cost) : <span className="text-slate-300">—</span>}
+      </td>
+      <td className="px-2 py-1.5 w-28 text-right text-xs font-medium text-slate-800">
+        {hasCost ? fmt(total_sell) : <span className="text-slate-300">—</span>}
+      </td>
+      <td className="px-2 py-1.5 w-16 text-center">
+        <div className="flex items-center gap-1">
+          <button
+            title="Link to material library"
+            className="p-1 rounded hover:bg-slate-100 text-slate-300 hover:text-amber-500 transition-colors"
+            onClick={() => {/* placeholder for material library hook */}}
+          >
+            <Package className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => onDelete(item.id)}
+            className="p-1 rounded hover:bg-rose-100 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+// ─── Trade Section ────────────────────────────────────────────────────────────
+
+function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const tradeItems = items.filter(it => it.trade === trade);
+  const { totalCost, totalSell } = summaryTotals(tradeItems);
+  const hasValues = totalSell > 0;
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-3">
+      {/* Section header */}
+      <div
+        className="flex items-center justify-between px-4 py-3 cursor-pointer select-none bg-slate-50 border-b border-slate-200 hover:bg-slate-100 transition-colors"
+        onClick={() => setCollapsed(c => !c)}
+      >
+        <div className="flex items-center gap-2">
+          {collapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+          <span className="text-sm font-semibold text-slate-800">{trade}</span>
+          <span className="text-xs text-slate-400">({tradeItems.length} item{tradeItems.length !== 1 ? "s" : ""})</span>
+        </div>
+        {hasValues && (
+          <div className="flex items-center gap-4 text-xs text-slate-500">
+            <span>Cost: <strong className="text-slate-700">{fmt(totalCost)}</strong></span>
+            <span>Sell: <strong className="text-amber-700">{fmt(totalSell)}</strong></span>
+          </div>
+        )}
+      </div>
+
+      {!collapsed && (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-100">
+                  <th className="w-6"></th>
+                  <th className="px-2 py-2 text-left">Description</th>
+                  <th className="px-2 py-2 text-left w-32">Unit</th>
+                  <th className="px-2 py-2 text-right w-24">Qty</th>
+                  <th className="px-2 py-2 text-right w-28">Cost/Unit</th>
+                  <th className="px-2 py-2 text-right w-28">Sell/Unit</th>
+                  <th className="px-2 py-2 text-right w-28">Total Cost</th>
+                  <th className="px-2 py-2 text-right w-28">Total Sell</th>
+                  <th className="w-16"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {tradeItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-300">No items yet</td>
+                  </tr>
+                ) : (
+                  tradeItems.map(item => (
+                    <LineItemRow
+                      key={item.id}
+                      item={item}
+                      onChange={onChangeItem}
+                      onDelete={onDeleteItem}
+                    />
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-4 py-2 border-t border-slate-100">
+            <button
+              onClick={() => onAddItem(trade)}
+              className="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-700 font-medium"
+            >
+              <Plus className="w-3.5 h-3.5" /> Add line item
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Summary Panel ────────────────────────────────────────────────────────────
+
+function SummaryPanel({ items }) {
+  const { totalCost, totalSell, profit, margin } = summaryTotals(items);
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3 sticky top-6">
+      <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Summary</h3>
+      <div className="space-y-2">
+        <div className="flex justify-between text-sm">
+          <span className="text-slate-500">Total Cost</span>
+          <span className="font-medium text-slate-700">{fmt(totalCost)}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-slate-500">Total Sell</span>
+          <span className="font-semibold text-slate-900">{fmt(totalSell)}</span>
+        </div>
+        <div className="border-t border-slate-100 pt-2 flex justify-between text-sm">
+          <span className="text-slate-500">Gross Profit</span>
+          <span className={cn("font-semibold", profit >= 0 ? "text-emerald-600" : "text-rose-600")}>{fmt(profit)}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-slate-500">Margin</span>
+          <span className={cn("font-bold text-base", margin >= 38 ? "text-emerald-600" : margin >= 30 ? "text-amber-600" : "text-rose-600")}>
+            {fmtp(margin)}
+          </span>
+        </div>
+      </div>
+
+      {/* Per-trade breakdown */}
+      {items.length > 0 && (() => {
+        const byTrade = {};
+        for (const it of items) {
+          const t = itemTotals(it);
+          byTrade[it.trade] = (byTrade[it.trade] || 0) + t.total_sell;
+        }
+        const sorted = Object.entries(byTrade).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
+        if (!sorted.length) return null;
+        return (
+          <div className="border-t border-slate-100 pt-3 space-y-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">By Trade</p>
+            {sorted.map(([trade, sell]) => (
+              <div key={trade} className="flex justify-between text-xs">
+                <span className="text-slate-500 truncate max-w-[120px]">{trade}</span>
+                <span className="font-medium text-slate-700">{fmt(sell)}</span>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      <div className="border-t border-slate-100 pt-3">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Formula</div>
+        <div className="text-xs text-slate-400">Sell = Cost ÷ 0.60 (40% margin)</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── PDF Export ───────────────────────────────────────────────────────────────
+
+function exportPDF(estimate, clientName, items) {
+  const doc = new jsPDF({ unit: "pt", format: "letter" });
+  const W = 612, ML = 50, MR = 562, TW = MR - ML;
+  let y = 50;
+
+  // Header
+  doc.setFillColor(61, 53, 48); // #3d3530
+  doc.rect(0, 0, W, 80, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(22);
+  doc.setTextColor(245, 240, 235);
+  doc.text("Siteline", ML, 45);
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(181, 150, 90); // gold
+  doc.text("Construction Estimate", ML, 62);
+
+  // Estimate meta
+  y = 100;
+  doc.setTextColor(61, 53, 48);
+  doc.setFontSize(16);
+  doc.setFont("helvetica", "bold");
+  doc.text(estimate.title || "Estimate", ML, y);
+  y += 18;
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100);
+  if (clientName) { doc.text(`Client: ${clientName}`, ML, y); y += 13; }
+  if (estimate.issue_date) { doc.text(`Date: ${estimate.issue_date}`, ML, y); y += 13; }
+  doc.text(`Status: ${(estimate.status || "draft").toUpperCase()}`, ML, y);
+
+  // Section header helper
+  const sectionHeader = (title, yy) => {
+    doc.setFillColor(245, 245, 245);
+    doc.rect(ML, yy, TW, 16, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(61, 53, 48);
+    doc.text(title.toUpperCase(), ML + 4, yy + 11);
+    return yy + 16;
   };
 
-  items.forEach((item) => {
-    const quantity = Number(item.qty || 0);
-    const material = quantity * Number(item.material_unit_cost || 0);
-    const labor = quantity * Number(item.labor_unit_cost || 0);
-    const equipment = quantity * Number(item.equipment_unit_cost || 0);
-    const subcontract = quantity * Number(item.subcontract_unit_cost || 0);
-    const wasteMultiplier = 1 + ((Number(item.waste_percent || 0)) / 100);
-    const rawCost = material + labor + equipment + subcontract;
-    const baseCost = Number(item.base_cost || rawCost * wasteMultiplier || quantity * Number(item.unit_cost || 0));
-    const sellPrice = Number(item.sell_price || quantity * Number(item.unit_cost || 0));
+  // Column headers
+  const colHeaders = (yy) => {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(120);
+    doc.text("Description",   ML,      yy);
+    doc.text("Unit",          ML+200,  yy);
+    doc.text("Qty",           ML+240,  yy);
+    doc.text("Cost/Unit",     ML+275,  yy);
+    doc.text("Sell/Unit",     ML+325,  yy);
+    doc.text("Total Cost",    ML+375,  yy);
+    doc.text("Total Sell",    ML+430,  yy);
+    doc.setDrawColor(200);
+    doc.line(ML, yy + 3, MR, yy + 3);
+    return yy + 8;
+  };
 
-    totals.subtotal_material += material;
-    totals.subtotal_labor += labor;
-    totals.subtotal_equipment += equipment;
-    totals.subtotal_subcontract += subcontract;
-    if (["Fee", "Permit", "Delivery", "Disposal"].includes(item.cost_type)) totals.subtotal_other += sellPrice;
-    if (item.allowance_flag || item.cost_type === "Allowance") totals.subtotal_allowances += sellPrice;
-    if (item.cost_type === "Contingency") totals.subtotal_contingency += sellPrice;
-    totals.total_cost += baseCost;
-    totals.total_price += sellPrice;
-  });
+  // Group by trade
+  const trades = [...new Set(items.map(i => i.trade))];
+  const { totalCost, totalSell, profit, margin } = summaryTotals(items);
 
-  totals.gross_profit = totals.total_price - totals.total_cost;
-  totals.gross_margin_percent = totals.total_price > 0 ? totals.gross_profit / totals.total_price : 0;
-  return totals;
+  y += 20;
+
+  for (const trade of trades) {
+    const tradeItems = items.filter(i => i.trade === trade);
+    if (!tradeItems.length) continue;
+
+    if (y > 680) { doc.addPage(); y = 50; }
+    y = sectionHeader(trade, y);
+    y = colHeaders(y + 4) + 2;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(50);
+
+    for (const item of tradeItems) {
+      if (y > 700) { doc.addPage(); y = 50; y = colHeaders(y); }
+      const { sell_per_unit, total_cost, total_sell } = itemTotals(item);
+      const hasCost = Number(item.cost_per_unit) > 0;
+      doc.text(String(item.description || "").substring(0, 38), ML, y);
+      doc.text(item.unit || "",                                  ML+200, y);
+      doc.text(String(item.quantity || ""),                      ML+240, y);
+      doc.text(hasCost ? fmt(item.cost_per_unit) : "—",          ML+275, y);
+      doc.text(hasCost ? fmt(sell_per_unit) : "—",               ML+325, y);
+      doc.text(hasCost ? fmt(total_cost) : "—",                  ML+375, y);
+      doc.text(hasCost ? fmt(total_sell) : "—",                  ML+430, y);
+      y += 12;
+    }
+    y += 6;
+  }
+
+  // Totals
+  if (y > 650) { doc.addPage(); y = 50; }
+  y += 8;
+  doc.setDrawColor(61, 53, 48);
+  doc.line(ML, y, MR, y);
+  y += 14;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(61, 53, 48);
+  const totRows = [
+    ["Total Cost",   fmt(totalCost)],
+    ["Total Sell",   fmt(totalSell)],
+    ["Gross Profit", fmt(profit)],
+    ["Margin",       fmtp(margin)],
+  ];
+  for (const [label, val] of totRows) {
+    doc.text(label, MR - 130, y);
+    doc.text(val,   MR,       y, { align: "right" });
+    y += 13;
+  }
+
+  // Notes
+  if (estimate.notes) {
+    y += 12;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("Notes", ML, y);
+    y += 11;
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(80);
+    const lines = doc.splitTextToSize(estimate.notes, TW);
+    doc.text(lines, ML, y);
+  }
+
+  doc.save(`Estimate - ${estimate.title || "draft"}.pdf`);
 }
+
+// ─── Add Trade Dialog ─────────────────────────────────────────────────────────
+
+function AddTradeDialog({ activeTrades, onAdd, onClose }) {
+  const [group, setGroup] = useState("GC / Outdoor Living");
+  const available = TRADE_GROUPS[group].filter(t => !activeTrades.includes(t));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="font-bold text-slate-900">Add Trade Section</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><span className="text-xl leading-none">×</span></button>
+        </div>
+        <div className="p-4 space-y-3">
+          <div className="flex gap-2">
+            {Object.keys(TRADE_GROUPS).map(g => (
+              <button key={g} onClick={() => setGroup(g)}
+                className={cn("flex-1 text-xs font-semibold py-1.5 rounded-lg border transition-all",
+                  group === g ? "bg-amber-500 text-white border-amber-500" : "border-slate-200 text-slate-600 hover:border-amber-300"
+                )}>{g}</button>
+            ))}
+          </div>
+          {available.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-4">All trades in this group are already added.</p>
+          ) : (
+            <div className="space-y-1">
+              {available.map(t => (
+                <button key={t} onClick={() => { onAdd(t); onClose(); }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-amber-50 hover:text-amber-700 text-slate-700 transition-colors">
+                  {t}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function EstimateDetail() {
   const navigate = useNavigate();
-  const urlParams = new URLSearchParams(window.location.search);
-  const estimateId = urlParams.get("id");
-  const isNew = urlParams.get("new") === "true";
-  const preselectedClientId = urlParams.get("client_id") || "";
+  const params   = new URLSearchParams(window.location.search);
+  const existingId = params.get("id");
+  const isNew    = params.get("new") === "true" || !existingId;
 
-  const [clients, setClients] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [estimateTemplates, setEstimateTemplates] = useState([]);
-  const [materials, setMaterials] = useState([]);
-  const [loading, setLoading] = useState(!isNew);
-  const [saving, setSaving] = useState(false);
-  const [sendDialogOpen, setSendDialogOpen] = useState(false);
-  const [sendEmail, setSendEmail] = useState("");
-  const [sendName, setSendName] = useState("");
-  const [sendingEmail, setSendingEmail] = useState(false);
-  const [sendSuccess, setSendSuccess] = useState(false);
-  const [companyName, setCompanyName] = useState("Clarity Construction");
-  const [viewMode, setViewMode] = useState("internal");
-  const [materialPickerOpen, setMaterialPickerOpen] = useState(false);
-  const [saveMaterialOpen, setSaveMaterialOpen] = useState(false);
-  const [savingMaterial, setSavingMaterial] = useState(false);
-  const [saveMaterialTargetId, setSaveMaterialTargetId] = useState(null);
-  const [materialDraft, setMaterialDraft] = useState({
-    name: "",
-    description: "",
-    category: "Other",
-    unit: "EA",
-    material_cost: "0",
-    labor_cost: "0",
-    sub_cost: "0",
-    supplier: "",
-    sku: "",
-  });
+  const [showPicker, setShowPicker]   = useState(isNew);
+  const [showAddTrade, setShowAddTrade] = useState(false);
+  const [saving, setSaving]           = useState(false);
+  const [saved, setSaved]             = useState(false);
+  const [clients, setClients]         = useState([]);
 
-  const [form, setForm] = useState({
-    estimate_number: `EST-${Date.now().toString().slice(-5)}`,
-    client_id: preselectedClientId,
-    project_id: "",
-    project_type: "Pergola",
-    margin_percent: 35,
+  const [estimate, setEstimate] = useState({
     title: "",
+    client_id: "",
     status: "draft",
     issue_date: new Date().toISOString().slice(0, 10),
-    expiry_date: "",
-    tax_rate: 0,
     notes: "",
-    terms: "",
-    line_items: [],
   });
+  const [items, setItems] = useState([]);
+  const [activeTrades, setActiveTrades] = useState([]);
 
+  // Sync activeTrades from items
   useEffect(() => {
-    const loadAll = async () => {
-      const [clientsData, projectsData, etData, materialsData] = await Promise.all([
-        base44.entities.Client.list(),
-        base44.entities.Project.list(),
-        base44.entities.EstimateTemplate.list(),
-        base44.entities.Material.list("-created_date", 500),
-      ]);
-      setClients(clientsData);
-      setProjects(projectsData);
-      setEstimateTemplates(etData);
-      setMaterials(materialsData);
+    const trades = [...new Set(items.map(i => i.trade))];
+    setActiveTrades(prev => {
+      const merged = [...new Set([...prev, ...trades])];
+      return merged;
+    });
+  }, [items]);
 
-      if (isNew && preselectedClientId) {
-        const client = clientsData.find(c => c.id === preselectedClientId);
-        if (client?.email) setSendEmail(client.email);
-        if (client?.name) setSendName(client.name);
-      }
-
-      if (!isNew && estimateId) {
-        const est = await base44.entities.Estimate.get(estimateId);
-        setForm({
-          estimate_number: est.estimate_number || "",
-          client_id: est.client_id || "",
-          project_id: est.project_id || "",
-          project_type: est.project_type || "Pergola",
-          margin_percent: est.margin_percent ?? 35,
-          title: est.title || "",
-          status: est.status || "draft",
-          issue_date: est.issue_date || "",
-          expiry_date: est.expiry_date || "",
-          tax_rate: est.tax_rate || 0,
-          notes: est.notes || "",
-          terms: est.terms || "",
-          line_items: est.line_items || [],
-        });
-        const client = clientsData.find(c => c.id === est.client_id);
-        if (client?.email) setSendEmail(client.email);
-        if (client?.name) setSendName(client.name);
-      }
-      setLoading(false);
-    };
-    loadAll();
+  // Load clients
+  useEffect(() => {
+    base44.entities.Client.list("name").then(setClients);
   }, []);
 
-  const {
-    materialSubtotal,
-    laborSubtotal,
-    equipmentSubtotal,
-    subcontractSubtotal,
-    totalCost,
-    subtotal,
-    taxAmount,
-    total,
-    grossProfit,
-    grossMarginPercent,
-  } = calcTotals(form.line_items, form.tax_rate, form.margin_percent);
+  // Load existing estimate
+  useEffect(() => {
+    if (!existingId) return;
+    (async () => {
+      const est = await base44.entities.Estimate.get(existingId);
+      if (!est) return;
+      setEstimate({
+        title:      est.title      || "",
+        client_id:  est.client_id  || "",
+        status:     est.status     || "draft",
+        issue_date: est.issue_date || new Date().toISOString().slice(0, 10),
+        notes:      est.notes      || "",
+      });
+      const savedItems = Array.isArray(est.line_items) ? est.line_items : [];
+      setItems(savedItems);
+      setActiveTrades([...new Set(savedItems.map(i => i.trade))]);
+      setShowPicker(false);
+    })();
+  }, [existingId]);
 
-  const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
-
-  const syncEstimateVersion = async (savedEstimateId, data) => {
-    if (!data.project_id) return;
-
-    const estimateVersionId = `EV-${savedEstimateId}`;
-    const versionTotals = calcVersionTotals(data.line_items);
-    const existingVersions = await base44.entities.EstimateVersion.filter({ linked_estimate_id: savedEstimateId }, "-created_date", 1);
-
-    let version = existingVersions[0];
-    const versionPayload = {
-      estimate_version_id: version?.estimate_version_id || estimateVersionId,
-      project_id: data.project_id,
-      linked_estimate_id: savedEstimateId,
-      version_name: data.title || data.estimate_number,
-      version_type: "Custom",
-      created_by_name: sendName || "",
-      created_date_value: new Date().toISOString().slice(0, 10),
-      active_version: true,
-      notes: data.notes || "",
-      ...versionTotals,
-    };
-
-    if (version) {
-      await base44.entities.EstimateVersion.update(version.id, versionPayload);
-    } else {
-      version = await base44.entities.EstimateVersion.create(versionPayload);
+  const handleTemplatePick = (template) => {
+    if (template) {
+      setItems(template.items.map(i => ({ ...i, id: Math.random().toString(36).slice(2, 10) })));
+      setActiveTrades([...new Set(template.items.map(i => i.trade))]);
+      setEstimate(e => ({ ...e, title: template.label }));
     }
-
-    const existingLineItems = await base44.entities.LineItem.filter({ estimate_version_id: versionPayload.estimate_version_id }, "sort_order", 5000);
-    await Promise.all(existingLineItems.map((item) => base44.entities.LineItem.delete(item.id)));
-
-    const detailRows = (data.line_items || [])
-      .filter((item) => !item.is_section_header)
-      .map((item, index) => ({
-        line_item_id: item.id || newId(),
-        estimate_version_id: versionPayload.estimate_version_id,
-        item_code: item.item_code || "",
-        item_name: item.description || item.item_name || "Item",
-        item_description: item.notes || "",
-        cost_type: item.cost_type || "Material",
-        unit_type: item.unit || item.unit_type || "each",
-        quantity: Number(item.qty || 0),
-        material_unit_cost: Number(item.material_unit_cost || 0),
-        labor_unit_cost: Number(item.labor_unit_cost || 0),
-        equipment_unit_cost: Number(item.equipment_unit_cost || 0),
-        subcontract_unit_cost: Number(item.subcontract_unit_cost || 0),
-        waste_percent: Number(item.waste_percent || 0),
-        base_cost: Number(item.base_cost || 0),
-        markup_percent: Number(item.markup_percent || 0),
-        sell_price: Number(item.sell_price || (Number(item.qty || 0) * Number(item.unit_cost || 0))),
-        optional_flag: Boolean(item.optional_flag),
-        allowance_flag: Boolean(item.allowance_flag),
-        included_flag: item.included_flag !== false,
-        good_better_best_tier: item.good_better_best_tier || "All",
-        production_rate: Number(item.production_rate || 0),
-        labor_hours: Number(item.labor_hours || 0),
-        notes: item.notes || "",
-        sort_order: index,
-      }));
-
-    for (const row of detailRows) {
-      await base44.entities.LineItem.create(row);
-    }
+    setShowPicker(false);
   };
 
-  const addLineItem = (isHeader = false) => {
-    const newItem = {
-      id: newId(),
-      is_section_header: isHeader,
-      section: isHeader ? "New Section" : "",
-      description: isHeader ? "" : "New Item",
-      unit: "",
-      qty: isHeader ? null : 1,
-      unit_cost: isHeader ? null : 0,
-    };
-    setField("line_items", [...form.line_items, newItem]);
+  const handleChangeItem = useCallback((updated) => {
+    setItems(prev => prev.map(it => it.id === updated.id ? updated : it));
+    setSaved(false);
+  }, []);
+
+  const handleDeleteItem = useCallback((id) => {
+    setItems(prev => prev.filter(it => it.id !== id));
+    setSaved(false);
+  }, []);
+
+  const handleAddItem = useCallback((trade) => {
+    setItems(prev => [...prev, blankItem(trade)]);
+    setSaved(false);
+  }, []);
+
+  const handleAddTrade = (trade) => {
+    setActiveTrades(prev => [...prev, trade]);
+    setSaved(false);
   };
 
-  const addMaterialLineItem = (lineItem) => {
-    setField("line_items", [...form.line_items, { ...lineItem, id: newId() }]);
-    setMaterialPickerOpen(false);
-  };
-
-  const openSaveMaterialDialog = (item) => {
-    setSaveMaterialTargetId(item.id);
-    setMaterialDraft(buildMaterialFromEstimateItem(item));
-    setSaveMaterialOpen(true);
-  };
-
-  const handleSaveMaterial = async () => {
-    setSavingMaterial(true);
-    const materialPayload = {
-      name: materialDraft.name,
-      description: materialDraft.description,
-      category: materialDraft.category || "Other",
-      unit: (materialDraft.unit || "EA").toUpperCase(),
-      material_cost: Number(materialDraft.material_cost || 0),
-      labor_cost: Number(materialDraft.labor_cost || 0),
-      sub_cost: Number(materialDraft.sub_cost || 0),
-      unit_cost: Number(materialDraft.material_cost || 0) + Number(materialDraft.labor_cost || 0) + Number(materialDraft.sub_cost || 0),
-      markup_type: "markup_percent",
-      markup_value: Number(form.margin_percent || 0),
-      overhead_percent: 0,
-      profit_percent: 0,
-      supplier: materialDraft.supplier,
-      sku: materialDraft.sku,
-      notes: materialDraft.description,
-    };
-
-    const created = await base44.entities.Material.create(materialPayload);
-    setMaterials((prev) => [created, ...prev]);
-    setSaveMaterialOpen(false);
-    setSaveMaterialTargetId(null);
-    setSavingMaterial(false);
-  };
-
-  const updateItem = (id, field, value) => {
-    setField("line_items", form.line_items.map(item =>
-      item.id === id ? { ...item, [field]: value } : item
-    ));
-  };
-
-  const deleteItem = (id) => {
-    setField("line_items", form.line_items.filter(item => item.id !== id));
-  };
-
-  const loadTemplate = (templateId) => {
-    const t = estimateTemplates.find(et => et.id === templateId);
-    if (t?.line_items?.length) {
-      setField("line_items", t.line_items.map(item => ({ ...item, id: newId() })));
-    }
-  };
-
-  const save = async () => {
-    if (!form.client_id) return;
+  const handleSave = async () => {
     setSaving(true);
-    const preparedLineItems = form.line_items.map((item, index) => item.is_section_header ? item : ({
-      ...item,
-      sort_order: index,
-      base_cost: getItemCostAmount(item),
-      sell_price: getItemSellAmount(item, form.margin_percent),
-      unit_cost: Number(item.qty || 0) > 0 ? getItemSellAmount(item, form.margin_percent) / Number(item.qty || 0) : 0,
-      markup_percent: Number(item.markup_percent ?? form.margin_percent ?? 0),
-    }));
-    const data = {
-      ...form,
-      client_id: form.client_id,
-      linked_contact_id: form.client_id,
-      line_items: preparedLineItems,
-      subtotal,
-      tax_amount: taxAmount,
-      total,
-      margin_percent: Number(form.margin_percent || 0),
-      estimated_revenue: subtotal,
-      estimated_material_cost: materialSubtotal,
-      estimated_labor_cost: laborSubtotal,
-      estimated_subcontractor_cost: subcontractSubtotal,
-      estimated_gross_profit: grossProfit,
-      estimated_gross_margin_percent: grossMarginPercent,
+    const { totalCost, totalSell, profit, margin } = summaryTotals(items);
+    const payload = {
+      ...estimate,
+      line_items:    items,
+      total:         totalSell,
+      total_cost:    totalCost,
+      gross_profit:  profit,
+      margin_percent: margin,
     };
-    if (isNew || !estimateId) {
-      const created = await base44.entities.Estimate.create(data);
-      await syncEstimateVersion(created.id, data);
-      navigate(createPageUrl(`EstimateDetail?id=${created.id}`), { replace: true });
+    if (existingId) {
+      await base44.entities.Estimate.update(existingId, payload);
     } else {
-      await base44.entities.Estimate.update(estimateId, data);
-      await syncEstimateVersion(estimateId, data);
+      const created = await base44.entities.Estimate.create(payload);
+      window.history.replaceState({}, "", createPageUrl(`EstimateDetail?id=${created.id}`));
     }
     setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
   };
 
-  const handleSendEmail = async () => {
-    if (!form.client_id) return;
-    setSendingEmail(true);
-    const preparedLineItems = form.line_items.map((item, index) => item.is_section_header ? item : ({
-      ...item,
-      sort_order: index,
-      base_cost: getItemCostAmount(item),
-      sell_price: getItemSellAmount(item, form.margin_percent),
-      unit_cost: Number(item.qty || 0) > 0 ? getItemSellAmount(item, form.margin_percent) / Number(item.qty || 0) : 0,
-      markup_percent: Number(item.markup_percent ?? form.margin_percent ?? 0),
-    }));
-    const data = {
-      ...form,
-      client_id: form.client_id,
-      linked_contact_id: form.client_id,
-      line_items: preparedLineItems,
-      subtotal,
-      tax_amount: taxAmount,
-      total,
-      margin_percent: Number(form.margin_percent || 0),
-      estimated_revenue: subtotal,
-      estimated_material_cost: materialSubtotal,
-      estimated_labor_cost: laborSubtotal,
-      estimated_subcontractor_cost: subcontractSubtotal,
-      estimated_gross_profit: grossProfit,
-      estimated_gross_margin_percent: grossMarginPercent,
-    };
-    let id = estimateId;
-    if (!id) {
-      const created = await base44.entities.Estimate.create(data);
-      id = created.id;
-      await syncEstimateVersion(id, data);
-      navigate(createPageUrl(`EstimateDetail?id=${id}`), { replace: true });
-    } else {
-      await base44.entities.Estimate.update(id, data);
-      await syncEstimateVersion(id, data);
-    }
-
-    await base44.functions.invoke("sendEstimate", {
-      estimate_id: id,
-      recipient_email: sendEmail,
-      recipient_name: sendName,
-      company_name: companyName,
-    });
-
-    setSendingEmail(false);
-    setSendSuccess(true);
-    setForm(f => ({ ...f, status: "sent" }));
-    setTimeout(() => { setSendDialogOpen(false); setSendSuccess(false); }, 2500);
-  };
-
-  // drag reorder
-  const dragItem = useRef(null);
-  const dragOver = useRef(null);
-  const onDragStart = (id) => { dragItem.current = id; };
-  const onDragEnter = (id) => { dragOver.current = id; };
-  const onDragEnd = () => {
-    if (!dragItem.current || dragItem.current === dragOver.current) return;
-    const items = [...form.line_items];
-    const fromIdx = items.findIndex(i => i.id === dragItem.current);
-    const toIdx = items.findIndex(i => i.id === dragOver.current);
-    const [moved] = items.splice(fromIdx, 1);
-    items.splice(toIdx, 0, moved);
-    setField("line_items", items);
-    dragItem.current = null; dragOver.current = null;
-  };
-
-  if (loading) return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+  const clientName = clients.find(c => c.id === estimate.client_id)?.name || "";
+  const { totalCost, totalSell } = summaryTotals(items);
 
   return (
-    <div className="p-4 lg:p-8 max-w-5xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <button onClick={() => navigate(createPageUrl("Estimates"))} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500">
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold text-slate-900">{isNew ? "New Estimate" : form.title || "Estimate"}</h1>
-          <p className="text-slate-500 text-sm">{form.estimate_number}</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => {
-            const client = clients.find(c => c.id === form.client_id);
-            if (client?.email) setSendEmail(client.email);
-            if (client?.name) setSendName(client.name);
-            setSendDialogOpen(true);
-          }}>
-            <Send className="w-4 h-4 mr-2" /> Send to Client
+    <div className="min-h-screen bg-slate-50">
+      {showPicker && <TemplatePicker onSelect={handleTemplatePick} />}
+      {showAddTrade && (
+        <AddTradeDialog
+          activeTrades={activeTrades}
+          onAdd={handleAddTrade}
+          onClose={() => setShowAddTrade(false)}
+        />
+      )}
+
+      {/* Sticky top bar */}
+      <div className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-sm">
+        <div className="max-w-screen-xl mx-auto px-4 lg:px-6 py-3 flex items-center gap-3">
+          <button onClick={() => navigate(createPageUrl("Estimates"))} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500">
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+
+          <input
+            type="text"
+            value={estimate.title}
+            onChange={e => { setEstimate(est => ({ ...est, title: e.target.value })); setSaved(false); }}
+            placeholder="Estimate title…"
+            className="flex-1 min-w-0 text-lg font-bold text-slate-900 bg-transparent outline-none border-b border-transparent focus:border-amber-400 py-0.5"
+          />
+
+          <select
+            value={estimate.client_id}
+            onChange={e => { setEstimate(est => ({ ...est, client_id: e.target.value })); setSaved(false); }}
+            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-amber-300 min-w-[180px]"
+          >
+            <option value="">— Select client —</option>
+            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+
+          <select
+            value={estimate.status}
+            onChange={e => { setEstimate(est => ({ ...est, status: e.target.value })); setSaved(false); }}
+            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-amber-300"
+          >
+            <option value="draft">Draft</option>
+            <option value="sent">Sent</option>
+            <option value="accepted">Accepted</option>
+            <option value="declined">Declined</option>
+            <option value="revised">Revised</option>
+          </select>
+
+          <input
+            type="date"
+            value={estimate.issue_date}
+            onChange={e => { setEstimate(est => ({ ...est, issue_date: e.target.value })); setSaved(false); }}
+            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-amber-300"
+          />
+
+          <Button
+            variant="outline" size="sm"
+            onClick={() => exportPDF(estimate, clientName, items)}
+            className="gap-1.5"
+          >
+            <Download className="w-4 h-4" /> PDF
           </Button>
-          <Button onClick={save} disabled={saving || !form.client_id} className="bg-gradient-to-r from-amber-500 to-orange-500 text-white">
-            {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-            Save
+
+          <Button
+            size="sm"
+            onClick={handleSave}
+            disabled={saving}
+            className={cn("gap-1.5 min-w-[100px]", saved ? "bg-emerald-500 hover:bg-emerald-600" : "bg-gradient-to-r from-amber-500 to-orange-500")}
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+            {saving ? "Saving…" : saved ? "Saved" : "Save"}
           </Button>
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Left: Meta */}
-        <div className="space-y-4">
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
-            <h3 className="font-semibold text-slate-900 text-sm">Estimate Details</h3>
-            <div>
-              <Label className="text-xs text-slate-500">Estimate #</Label>
-              <Input value={form.estimate_number} onChange={e => setField("estimate_number", e.target.value)} className="mt-1 h-9 text-sm" />
-            </div>
-            <div>
-              <Label className="text-xs text-slate-500">Title *</Label>
-              <Input value={form.title} onChange={e => setField("title", e.target.value)} placeholder="e.g. Luxury Covered Patio" className="mt-1 h-9 text-sm" />
-            </div>
-            <div>
-              <Label className="text-xs text-slate-500">Project Type</Label>
-              <Select value={form.project_type || "Pergola"} onValueChange={v => setField("project_type", v)}>
-                <SelectTrigger className="mt-1 h-9 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {[
-                    "Pergola",
-                    "Covered Patio",
-                    "Cabana / Pool House",
-                    "Outdoor Kitchen",
-                    "Concrete / Hardscape",
-                    "Backyard Revamp",
-                    "Remodel / Addition",
-                    "Pool",
-                    "Spa",
-                    "Pool Decking",
-                    "Pool Water Features",
-                    "Pool Equipment",
-                    "Pool Side Structures",
-                  ].map((type) => (
-                    <SelectItem key={type} value={type}>{type}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs text-slate-500">Client *</Label>
-              <Select value={form.client_id} onValueChange={v => {
-                setField("client_id", v);
-                const client = clients.find(c => c.id === v);
-                if (client?.email) setSendEmail(client.email);
-                if (client?.name) setSendName(client.name);
-              }}>
-                <SelectTrigger className="mt-1 h-9 text-sm"><SelectValue placeholder="Select client" /></SelectTrigger>
-                <SelectContent>
-                  {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs text-slate-500">Linked Project (optional)</Label>
-              <Select value={form.project_id || "__none__"} onValueChange={v => setField("project_id", v === "__none__" ? "" : v)}>
-                <SelectTrigger className="mt-1 h-9 text-sm"><SelectValue placeholder="None" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">None</SelectItem>
-                  {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs text-slate-500">Status</Label>
-              <Select value={form.status} onValueChange={v => setField("status", v)}>
-                <SelectTrigger className="mt-1 h-9 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="sent">Sent</SelectItem>
-                  <SelectItem value="accepted">Accepted</SelectItem>
-                  <SelectItem value="declined">Declined</SelectItem>
-                  <SelectItem value="revised">Revised</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs text-slate-500">Issue Date</Label>
-                <Input type="date" value={form.issue_date} onChange={e => setField("issue_date", e.target.value)} className="mt-1 h-9 text-sm" />
-              </div>
-              <div>
-                <Label className="text-xs text-slate-500">Expiry Date</Label>
-                <Input type="date" value={form.expiry_date} onChange={e => setField("expiry_date", e.target.value)} className="mt-1 h-9 text-sm" />
-              </div>
-            </div>
-            <div>
-              <Label className="text-xs text-slate-500">Tax Rate (%)</Label>
-              <Input type="number" min={0} max={100} value={form.tax_rate} onChange={e => setField("tax_rate", e.target.value)} className="mt-1 h-9 text-sm" />
-            </div>
-            <div>
-              <Label className="text-xs text-slate-500">Job Margin %</Label>
-              <div className="mt-3 px-2">
-                <Slider value={[Number(form.margin_percent || 0)]} onValueChange={([v]) => setField("margin_percent", v)} min={0} max={100} step={1} />
-              </div>
-              <Input type="number" min={0} max={100} value={form.margin_percent} onChange={e => setField("margin_percent", e.target.value)} className="mt-3 h-9 text-sm" />
-              <p className="mt-2 text-xs text-slate-500">Default margin is set to 35% for new estimates.</p>
-            </div>
-          </div>
-
-          {/* Totals */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-2">
-            <h3 className="font-semibold text-slate-900 text-sm mb-3">Totals</h3>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Material Cost</span>
-              <span className="font-medium">${materialSubtotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Labor Cost</span>
-              <span className="font-medium">${laborSubtotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Equipment Cost</span>
-              <span className="font-medium">${equipmentSubtotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Subcontract Cost</span>
-              <span className="font-medium">${subcontractSubtotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Internal Cost</span>
-              <span className="font-medium">${totalCost.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Client Subtotal</span>
-              <span className="font-medium">${subtotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Gross Profit</span>
-              <span className="font-medium text-emerald-700">${grossProfit.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Gross Margin</span>
-              <span className="font-medium">{grossMarginPercent.toFixed(1)}%</span>
-            </div>
-            {Number(form.tax_rate) > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Tax ({form.tax_rate}%)</span>
-                <span className="font-medium">${taxAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
-              </div>
-            )}
-            <div className="flex justify-between text-base font-bold pt-2 border-t border-slate-200">
-              <span>Client Total</span>
-              <span className="text-amber-600">${total.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
-            </div>
-          </div>
-
-          {/* Notes & Terms */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
-            <div>
-              <Label className="text-xs text-slate-500">Notes</Label>
-              <Textarea value={form.notes} onChange={e => setField("notes", e.target.value)} className="mt-1 text-sm" rows={3} placeholder="Internal or client-facing notes…" />
-            </div>
-            <div>
-              <Label className="text-xs text-slate-500">Terms & Conditions</Label>
-              <Textarea value={form.terms} onChange={e => setField("terms", e.target.value)} className="mt-1 text-sm" rows={3} placeholder="Payment terms, warranty, etc." />
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Line Items */}
-        <div className="lg:col-span-2 space-y-4">
-          <GoodBetterBestEstimator
-            initialProjectType={form.project_type || "Pergola"}
-            materials={materials}
-            marginPercent={form.margin_percent}
-            onApply={({ projectType, title, lineItems }) => {
-              setForm((prev) => ({
-                ...prev,
-                project_type: projectType,
-                title: prev.title || title,
-                line_items: lineItems,
-              }));
-            }}
-          />
-
-          <EstimatorMaterialsPanel
-            projectType={form.project_type}
-            materials={materials}
-            marginPercent={form.margin_percent}
-            onAddMaterial={addMaterialLineItem}
-          />
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-            <div className="flex items-center gap-2">
-              <Button variant={viewMode === "internal" ? "default" : "outline"} onClick={() => setViewMode("internal")}>Internal Cost View</Button>
-              <Button variant={viewMode === "client" ? "default" : "outline"} onClick={() => setViewMode("client")}>Client View</Button>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 gap-3 flex-wrap">
-              <h3 className="font-semibold text-slate-900">Line Items</h3>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button variant="outline" size="sm" onClick={() => setMaterialPickerOpen(true)}>
-                  <Package className="w-4 h-4 mr-2" /> Add from Materials
-                </Button>
-                {estimateTemplates.length > 0 && (
-                  <Select onValueChange={loadTemplate}>
-                    <SelectTrigger className="h-8 text-xs w-48 border-dashed">
-                      <SelectValue placeholder="Load from template…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {estimateTemplates.map(et => <SelectItem key={et.id} value={et.id}>{et.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                    <th className="w-6 px-2 py-2"></th>
-                    <th className="px-3 py-2 text-left">Description</th>
-                    <th className="px-2 py-2 text-center w-20">Qty</th>
-                    <th className="px-2 py-2 text-center w-20">Unit</th>
-                    {viewMode === "internal" ? (
-                      <>
-                        <th className="px-2 py-2 text-right w-24">Material</th>
-                        <th className="px-2 py-2 text-right w-24">Labor</th>
-                        <th className="px-2 py-2 text-right w-28">Cost</th>
-                      </>
-                    ) : (
-                      <>
-                        <th className="px-2 py-2 text-right w-28">Unit Price</th>
-                        <th className="px-2 py-2 text-right w-28">Amount</th>
-                      </>
-                    )}
-                    <th className="w-8 px-2 py-2"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {form.line_items.map(item => {
-                    if (item.is_section_header) {
-                      return (
-                        <tr key={item.id} className="bg-slate-700 group"
-                          draggable onDragStart={() => onDragStart(item.id)} onDragEnter={() => onDragEnter(item.id)} onDragEnd={onDragEnd}>
-                          <td className="px-2 py-2 cursor-grab text-slate-400"><GripVertical className="w-3.5 h-3.5" /></td>
-                          <td colSpan={viewMode === "internal" ? 6 : 5} className="px-3 py-2">
-                            <input
-                              value={item.section || ""}
-                              onChange={e => updateItem(item.id, "section", e.target.value)}
-                              className="bg-transparent text-white font-bold text-xs uppercase tracking-widest w-full outline-none placeholder:text-slate-400"
-                              placeholder="Section name…"
-                            />
-                          </td>
-                          <td className="px-2 py-2">
-                            <button onClick={() => deleteItem(item.id)} className="p-1 rounded hover:bg-slate-600 text-slate-400 hover:text-rose-400">
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    }
-                    const costAmount = getItemCostAmount(item);
-                    const sellAmount = getItemSellAmount(item, form.margin_percent);
-                    const unitSellPrice = Number(item.qty || 0) > 0 ? sellAmount / Number(item.qty || 0) : 0;
-                    return (
-                      <tr key={item.id} className="border-b border-slate-100 hover:bg-amber-50/30 group"
-                        draggable onDragStart={() => onDragStart(item.id)} onDragEnter={() => onDragEnter(item.id)} onDragEnd={onDragEnd}>
-                        <td className="px-2 py-1 cursor-grab text-slate-300 opacity-0 group-hover:opacity-100"><GripVertical className="w-3.5 h-3.5" /></td>
-                        <td className="px-2 py-1">
-                          <input value={item.description || ""} onChange={e => updateItem(item.id, "description", e.target.value)}
-                            className="w-full bg-transparent text-slate-800 text-sm outline-none hover:bg-amber-50 rounded px-1 py-0.5 focus:bg-white focus:ring-1 focus:ring-amber-300 min-w-[140px]"
-                            placeholder="Description…" />
-                        </td>
-                        <td className="px-2 py-1">
-                          <input type="number" value={item.qty ?? ""} onChange={e => updateItem(item.id, "qty", e.target.value)}
-                            className="w-full text-center bg-transparent text-slate-600 text-sm outline-none hover:bg-amber-50 rounded px-1 py-0.5 focus:bg-white focus:ring-1 focus:ring-amber-300"
-                            placeholder="1" />
-                        </td>
-                        <td className="px-2 py-1">
-                          <input value={item.unit || ""} onChange={e => updateItem(item.id, "unit", e.target.value)}
-                            className="w-full text-center bg-transparent text-slate-600 text-sm outline-none hover:bg-amber-50 rounded px-1 py-0.5 focus:bg-white focus:ring-1 focus:ring-amber-300"
-                            placeholder="ea" />
-                        </td>
-                        {viewMode === "internal" ? (
-                          <>
-                            <td className="px-2 py-1">
-                              <input type="number" value={item.material_unit_cost ?? item.unit_cost ?? ""} onChange={e => updateItem(item.id, "material_unit_cost", e.target.value)}
-                                className="w-full text-right bg-transparent text-slate-600 text-sm outline-none hover:bg-amber-50 rounded px-1 py-0.5 focus:bg-white focus:ring-1 focus:ring-amber-300"
-                                placeholder="0.00" />
-                            </td>
-                            <td className="px-2 py-1">
-                              <input type="number" value={item.labor_unit_cost ?? ""} onChange={e => updateItem(item.id, "labor_unit_cost", e.target.value)}
-                                className="w-full text-right bg-transparent text-slate-600 text-sm outline-none hover:bg-amber-50 rounded px-1 py-0.5 focus:bg-white focus:ring-1 focus:ring-amber-300"
-                                placeholder="0.00" />
-                            </td>
-                            <td className="px-3 py-1 text-right text-sm font-medium text-slate-800">
-                              ${costAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                            </td>
-                          </>
-                        ) : (
-                          <>
-                            <td className="px-2 py-1 text-right text-sm font-medium text-slate-800">
-                              ${unitSellPrice.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                            </td>
-                            <td className="px-3 py-1 text-right text-sm font-medium text-slate-800">
-                              ${sellAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                            </td>
-                          </>
-                        )}
-                        <td className="px-2 py-1">
-                          <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100">
-                            <button onClick={() => openSaveMaterialDialog(item)} className="p-1 rounded hover:bg-amber-100 text-slate-300 hover:text-amber-600">
-                              <BookmarkPlus className="w-3.5 h-3.5" />
-                            </button>
-                            <button onClick={() => deleteItem(item.id)} className="p-1 rounded hover:bg-rose-100 text-slate-300 hover:text-rose-500">
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="px-4 py-3 border-t border-slate-100 flex items-center gap-2">
-              <button onClick={() => addLineItem(false)}
-                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-amber-600 hover:bg-amber-50 px-3 py-1.5 rounded-lg transition-colors">
-                <Plus className="w-4 h-4" /> Add Line Item
-              </button>
-              <button onClick={() => addLineItem(true)}
-                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-amber-600 hover:bg-amber-50 px-3 py-1.5 rounded-lg transition-colors">
-                <Plus className="w-4 h-4" /> Add Section
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <MaterialPickerDialog
-        open={materialPickerOpen}
-        onOpenChange={setMaterialPickerOpen}
-        materials={materials}
-        marginPercent={form.margin_percent}
-        onAddMaterial={addMaterialLineItem}
-      />
-
-      <SaveMaterialDialog
-        open={saveMaterialOpen}
-        onOpenChange={setSaveMaterialOpen}
-        form={materialDraft}
-        onChange={(field, value) => setMaterialDraft((prev) => ({ ...prev, [field]: value }))}
-        onSubmit={handleSaveMaterial}
-        isSaving={savingMaterial}
-      />
-
-      {/* Send Email Dialog */}
-      <Dialog open={sendDialogOpen} onOpenChange={setSendDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Mail className="w-5 h-5 text-amber-500" /> Send Estimate by Email</DialogTitle>
-          </DialogHeader>
-          {sendSuccess ? (
-            <div className="flex flex-col items-center gap-3 py-6">
-              <CheckCircle className="w-12 h-12 text-emerald-500" />
-              <p className="text-slate-700 font-semibold">Estimate sent successfully!</p>
-              <p className="text-slate-500 text-sm">Sent to {sendEmail}</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div>
-                <Label className="text-sm">Recipient Name</Label>
-                <Input value={sendName} onChange={e => setSendName(e.target.value)} className="mt-1.5" placeholder="Client name" />
-              </div>
-              <div>
-                <Label className="text-sm">Recipient Email *</Label>
-                <Input value={sendEmail} onChange={e => setSendEmail(e.target.value)} className="mt-1.5" placeholder="client@email.com" type="email" />
-              </div>
-              <div>
-                <Label className="text-sm">Your Company Name</Label>
-                <Input value={companyName} onChange={e => setCompanyName(e.target.value)} className="mt-1.5" />
-              </div>
-              <div className="flex justify-end gap-3 pt-2 border-t border-slate-200">
-                <Button variant="outline" onClick={() => setSendDialogOpen(false)}>Cancel</Button>
-                <Button onClick={handleSendEmail} disabled={!sendEmail || sendingEmail} className="bg-gradient-to-r from-amber-500 to-orange-500 text-white">
-                  {sendingEmail ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending…</> : <><Send className="w-4 h-4 mr-2" /> Send Estimate</>}
-                </Button>
-              </div>
+      {/* Main content */}
+      <div className="max-w-screen-xl mx-auto px-4 lg:px-6 py-6 flex gap-6 items-start">
+        {/* Left — trade sections */}
+        <div className="flex-1 min-w-0 space-y-1">
+          {activeTrades.length === 0 && (
+            <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-16 text-center">
+              <FileText className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+              <p className="text-slate-500 font-medium">No trade sections yet</p>
+              <p className="text-slate-400 text-sm mt-1">Add a trade section or start from a template.</p>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
+
+          {activeTrades.map(trade => (
+            <TradeSection
+              key={trade}
+              trade={trade}
+              items={items}
+              onChangeItem={handleChangeItem}
+              onDeleteItem={handleDeleteItem}
+              onAddItem={handleAddItem}
+            />
+          ))}
+
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={() => setShowAddTrade(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-slate-300 text-sm text-slate-500 hover:border-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-all"
+            >
+              <Plus className="w-4 h-4" /> Add Trade Section
+            </button>
+            <button
+              onClick={() => setShowPicker(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-slate-300 text-sm text-slate-500 hover:border-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-all"
+            >
+              <FileText className="w-4 h-4" /> Load Template
+            </button>
+          </div>
+
+          {/* Notes */}
+          <div className="bg-white rounded-xl border border-slate-200 p-4 mt-4">
+            <Label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Notes / Scope Summary</Label>
+            <textarea
+              value={estimate.notes}
+              onChange={e => { setEstimate(est => ({ ...est, notes: e.target.value })); setSaved(false); }}
+              placeholder="Add scope notes, exclusions, payment terms…"
+              rows={4}
+              className="mt-2 w-full text-sm text-slate-700 bg-transparent outline-none resize-none placeholder:text-slate-300"
+            />
+          </div>
+        </div>
+
+        {/* Right — summary */}
+        <div className="w-64 flex-shrink-0">
+          <SummaryPanel items={items} />
+        </div>
+      </div>
     </div>
   );
 }

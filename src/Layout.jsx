@@ -17,7 +17,8 @@ import {
   FolderOpen,
   CalendarDays,
   Sun,
-  Moon
+  Moon,
+  ShieldCheck
 } from "lucide-react";
 import { useState } from "react";
 import NotificationBell from "@/components/notifications/NotificationBell";
@@ -45,6 +46,7 @@ export default function Layout({ children, currentPageName }) {
     { name: "Reports", href: createPageUrl("Reports"), icon: FileText },
     { name: "Workspace Items", href: createPageUrl("WorkplaceItems"), icon: Wrench },
     { name: "Company", href: createPageUrl("Company"), icon: Building2 },
+    { name: "Settings", href: createPageUrl("Settings"), icon: ShieldCheck },
   ];
 
   const isActive = (href) => {

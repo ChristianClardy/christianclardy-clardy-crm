@@ -5,7 +5,6 @@ import { createPageUrl } from "@/utils";
 import { Plus, Search, FileText, Send, CheckCircle, XCircle, Clock, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 const STATUS_STYLES = {
@@ -113,10 +112,7 @@ export default function Estimates() {
                   >
                     <td className="px-5 py-3 font-mono text-xs text-slate-500">{est.estimate_number || "—"}</td>
                     <td className="px-5 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-slate-900">{est.title}</span>
-                        {est.acculynx_estimate_id && <Badge variant="outline" className="text-[10px]">AccuLynx</Badge>}
-                      </div>
+                      <span className="font-medium text-slate-900">{est.title}</span>
                     </td>
                     <td className="px-5 py-3 text-slate-600">{clientMap[est.client_id]?.name || "—"}</td>
                     <td className="px-5 py-3 text-slate-500">{est.issue_date || "—"}</td>

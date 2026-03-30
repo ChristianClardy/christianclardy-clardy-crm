@@ -134,14 +134,18 @@ export default function Clients() {
     setDuplicateError("");
 
     const normalizedName = formData.name.trim().toLowerCase();
-    const duplicate = clients.find(
-      (c) =>
-        c.name.trim().toLowerCase() === normalizedName &&
-        c.id !== editingClient?.id
-    );
+    const normalizedEmail = formData.email?.trim().toLowerCase();
+
+    const duplicate = clients.find((c) => c.id !== editingClient?.id && (
+      c.name.trim().toLowerCase() === normalizedName ||
+      (normalizedEmail && c.email?.trim().toLowerCase() === normalizedEmail)
+    ));
 
     if (duplicate) {
-      setDuplicateError(`A contact named "${duplicate.name}" already exists.`);
+      const reason = duplicate.name.trim().toLowerCase() === normalizedName
+        ? `A contact named "${duplicate.name}" already exists.`
+        : `A contact with email "${duplicate.email}" already exists.`;
+      setDuplicateError(reason);
       return;
     }
 
@@ -341,7 +345,7 @@ export default function Clients() {
                 required
                 className="mt-1.5"
               />
-              {duplicateError && (
+              {duplicateError && !duplicateError.includes("email") && (
                 <p className="text-sm text-rose-600 mt-1">{duplicateError}</p>
               )}
             </div>
@@ -362,11 +366,15 @@ export default function Clients() {
                 <Input
                   type="email"
                   value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
+                  onChange={(e) => {
+                    setDuplicateError("");
+                    setFormData({ ...formData, email: e.target.value });
+                  }}
                   className="mt-1.5"
                 />
+                {duplicateError && duplicateError.includes("email") && (
+                  <p className="text-sm text-rose-600 mt-1">{duplicateError}</p>
+                )}
               </div>
               <div>
                 <Label>Phone</Label>

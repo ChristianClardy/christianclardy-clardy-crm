@@ -25,14 +25,39 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated }) {
   const [form, setForm] = useState(initialForm);
   const [saving, setSaving] = useState(false);
   const [employees, setEmployees] = useState([]);
+  const [existingLeads, setExistingLeads] = useState([]);
+  const [dupError, setDupError] = useState("");
 
   useEffect(() => {
     if (!open) return;
+    setDupError("");
     base44.entities.Employee.list("full_name", 500).then((data) => setEmployees((data || []).filter((employee) => employee.status !== "inactive")));
+    base44.entities.Lead.list("-created_date", 5000).then(setExistingLeads);
   }, [open]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setDupError("");
+
+    const normName  = form.full_name.trim().toLowerCase();
+    const normEmail = form.email?.trim().toLowerCase();
+    const normPhone = form.phone?.trim().replace(/\D/g, "");
+
+    const dup = existingLeads.find((l) =>
+      l.full_name?.trim().toLowerCase() === normName ||
+      (normEmail && l.email?.trim().toLowerCase() === normEmail) ||
+      (normPhone && l.phone?.replace(/\D/g, "") === normPhone)
+    );
+
+    if (dup) {
+      const reason =
+        dup.full_name?.trim().toLowerCase() === normName  ? `A lead named "${dup.full_name}" already exists.` :
+        normEmail && dup.email?.trim().toLowerCase() === normEmail ? `A lead with email "${dup.email}" already exists.` :
+        `A lead with phone "${dup.phone}" already exists.`;
+      setDupError(reason);
+      return;
+    }
+
     setSaving(true);
     await base44.entities.Lead.create({ ...form, status: "New Lead" });
     setSaving(false);
@@ -51,7 +76,8 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated }) {
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <Label>Lead Name *</Label>
-              <Input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} className="mt-1.5" required />
+              <Input value={form.full_name} onChange={(e) => { setDupError(""); setForm({ ...form, full_name: e.target.value }); }} className="mt-1.5" required />
+              {dupError && <p className="text-sm text-rose-600 mt-1">{dupError}</p>}
             </div>
             <div>
               <Label>Assigned Sales Rep *</Label>
@@ -64,11 +90,11 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated }) {
             </div>
             <div>
               <Label>Email</Label>
-              <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="mt-1.5" />
+              <Input type="email" value={form.email} onChange={(e) => { setDupError(""); setForm({ ...form, email: e.target.value }); }} className="mt-1.5" />
             </div>
             <div>
               <Label>Phone</Label>
-              <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="mt-1.5" />
+              <Input value={form.phone} onChange={(e) => { setDupError(""); setForm({ ...form, phone: e.target.value }); }} className="mt-1.5" />
             </div>
             <div>
               <Label>Address</Label>

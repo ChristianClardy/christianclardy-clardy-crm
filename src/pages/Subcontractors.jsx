@@ -111,6 +111,7 @@ export default function Subcontractors() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingSub, setEditingSub] = useState(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
+  const [dupError, setDupError] = useState("");
 
   useEffect(() => {
     loadData();
@@ -142,10 +143,12 @@ export default function Subcontractors() {
   const openNewDialog = () => {
     setEditingSub(null);
     setFormData(EMPTY_FORM);
+    setDupError("");
     setIsDialogOpen(true);
   };
 
   const openEditDialog = (sub) => {
+    setDupError("");
     setEditingSub(sub);
     setFormData({
       name: sub.name,
@@ -165,6 +168,27 @@ export default function Subcontractors() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setDupError("");
+
+    const normName  = formData.name.trim().toLowerCase();
+    const normEmail = formData.email?.trim().toLowerCase();
+
+    const dup = subs.find((s) =>
+      s.id !== editingSub?.id && (
+        s.name.trim().toLowerCase() === normName ||
+        (normEmail && s.email?.trim().toLowerCase() === normEmail)
+      )
+    );
+
+    if (dup) {
+      setDupError(
+        dup.name.trim().toLowerCase() === normName
+          ? `A subcontractor named "${dup.name}" already exists.`
+          : `A subcontractor with email "${dup.email}" already exists.`
+      );
+      return;
+    }
+
     const data = {
       ...formData,
       hourly_rate: formData.hourly_rate ? parseFloat(formData.hourly_rate) : null,
@@ -402,7 +426,8 @@ export default function Subcontractors() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <Label>Company Name *</Label>
-              <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required className="mt-1.5" />
+              <Input value={formData.name} onChange={(e) => { setDupError(""); setFormData({ ...formData, name: e.target.value }); }} required className="mt-1.5" />
+              {dupError && !dupError.includes("email") && <p className="text-sm text-rose-600 mt-1">{dupError}</p>}
             </div>
             <div>
               <Label>Contact Person</Label>
@@ -422,7 +447,8 @@ export default function Subcontractors() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Email</Label>
-                <Input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="mt-1.5" />
+                <Input type="email" value={formData.email} onChange={(e) => { setDupError(""); setFormData({ ...formData, email: e.target.value }); }} className="mt-1.5" />
+                {dupError && dupError.includes("email") && <p className="text-sm text-rose-600 mt-1">{dupError}</p>}
               </div>
               <div>
                 <Label>Phone</Label>

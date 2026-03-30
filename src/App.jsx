@@ -19,6 +19,7 @@ import Calendar from './pages/Calendar';
 import LeadDetail from './pages/LeadDetail';
 import PublicLeadForm from './pages/PublicLeadForm';
 import InvoiceDesigner from './pages/InvoiceDesigner';
+import Settings from './pages/Settings';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -80,6 +81,7 @@ const AuthenticatedApp = () => {
       <Route path="/Calendar" element={<LayoutWrapper currentPageName="Calendar"><Calendar /></LayoutWrapper>} />
       <Route path="/LeadDetail" element={<LayoutWrapper currentPageName="CRM"><LeadDetail /></LayoutWrapper>} />
       <Route path="/InvoiceDesigner" element={<LayoutWrapper currentPageName="Payments"><InvoiceDesigner /></LayoutWrapper>} />
+      <Route path="/Settings" element={<LayoutWrapper currentPageName="Settings"><Settings /></LayoutWrapper>} />
       <Route path="/lead-form" element={<PublicLeadForm />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
