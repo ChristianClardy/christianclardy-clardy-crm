@@ -1,0 +1,122 @@
+{
+  "name": "Task",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "linked_lead_id": {
+      "type": "string"
+    },
+    "linked_estimate_id": {
+      "type": "string"
+    },
+    "linked_job_id": {
+      "type": "string"
+    },
+    "task_type": {
+      "type": "string",
+      "enum": [
+        "Call",
+        "Follow Up",
+        "Site Visit",
+        "Estimate",
+        "Permit",
+        "Material Order",
+        "Scheduling",
+        "Billing",
+        "Punch List",
+        "Closeout",
+        "Other"
+      ],
+      "default": "Other"
+    },
+    "description": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "not_started",
+        "in_progress",
+        "waiting",
+        "complete",
+        "overdue",
+        "completed",
+        "blocked"
+      ],
+      "default": "not_started"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "assigned_to": {
+      "type": "string"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "urgent"
+      ],
+      "default": "medium"
+    },
+    "estimated_hours": {
+      "type": "number"
+    },
+    "actual_hours": {
+      "type": "number"
+    },
+    "order": {
+      "type": "number",
+      "default": 0
+    },
+    "github_issue_number": {
+      "type": "number"
+    },
+    "github_issue_url": {
+      "type": "string"
+    },
+    "github_repo": {
+      "type": "string",
+      "default": "christianclardy/clardy-crm"
+    },
+    "subtasks": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "completed": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "name"
+  ]
+}
