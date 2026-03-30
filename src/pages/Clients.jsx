@@ -14,7 +14,6 @@ import {
   ChevronRight,
   Download
 } from "lucide-react";
-import AccuLynxImport from "@/components/clients/AccuLynxImport";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -331,14 +330,7 @@ export default function Clients() {
         </div>
       )}
 
-      {/* AccuLynx Import */}
-      <AccuLynxImport
-        open={isAccuLynxOpen}
-        onClose={() => setIsAccuLynxOpen(false)}
-        onImported={() => { setIsAccuLynxOpen(false); loadData(); }}
-      />
-
-      {/* Client Dialog */}
+{/* Client Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>

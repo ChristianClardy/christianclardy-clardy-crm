@@ -40,8 +40,6 @@ export default function Payments() {
   });
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [syncingAccuLynx, setSyncingAccuLynx] = useState(false);
-  const [syncSummary, setSyncSummary] = useState("");
 
   useEffect(() => {
     loadData();
@@ -67,18 +65,7 @@ export default function Payments() {
     setLoading(false);
   };
 
-  const handleAccuLynxSync = async () => {
-    setSyncingAccuLynx(true);
-    try {
-      const response = await base44.functions.invoke("acculynxSyncPayments", {});
-      setSyncSummary(response.data?.message || "AccuLynx payments synced.");
-      await loadData();
-    } finally {
-      setSyncingAccuLynx(false);
-    }
-  };
-
-  const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects : projects.filter((project) => project.company_id === selectedCompanyScope), [projects, selectedCompanyScope]);
+const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects : projects.filter((project) => project.company_id === selectedCompanyScope), [projects, selectedCompanyScope]);
   const projectMap = useMemo(() => Object.fromEntries(visibleProjects.map((p) => [p.id, p])), [visibleProjects]);
   const clientMap = useMemo(() => Object.fromEntries(clients.map((c) => [c.id, c])), [clients]);
   const companyMap = useMemo(() => Object.fromEntries(companies.map((company) => [company.id, company])), [companies]);
@@ -213,10 +200,6 @@ export default function Payments() {
               Invoice Design
             </Link>
           </Button>
-          <Button onClick={handleAccuLynxSync} disabled={syncingAccuLynx} className="bg-slate-900 text-white hover:bg-slate-800">
-            <RefreshCw className={cn("h-4 w-4", syncingAccuLynx && "animate-spin")} />
-            {syncingAccuLynx ? "Syncing..." : "Sync AccuLynx Payments"}
-          </Button>
         </div>
       </div>
 
@@ -234,13 +217,7 @@ export default function Payments() {
         ))}
       </div>
 
-      {syncSummary && (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-          {syncSummary}
-        </div>
-      )}
-
-      <InvoicesTable
+<InvoicesTable
         invoices={filteredInvoices}
         projectMap={projectMap}
         clientMap={clientMap}

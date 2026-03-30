@@ -8,7 +8,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import MaterialImportDialog from "./MaterialImportDialog";
-import AccuLynxSyncButton from "@/components/acculynx/AccuLynxSyncButton";
 
 const CATEGORIES = [
   "Concrete & Masonry", "Framing & Lumber", "Roofing", "Insulation",
@@ -105,8 +104,7 @@ export default function MaterialLibrary() {
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-900">Material Library</h2>
         <div className="flex flex-wrap gap-2 items-start">
-          <AccuLynxSyncButton onSynced={load} label="Sync from AccuLynx" className="border-amber-300 text-amber-700 hover:bg-amber-50" />
-          <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} className="gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50">
+<Button variant="outline" size="sm" onClick={() => setImportOpen(true)} className="gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50">
             <Upload className="w-4 h-4" /> Import
           </Button>
           <Button onClick={openNew} size="sm" className="bg-gradient-to-r from-amber-500 to-orange-500">

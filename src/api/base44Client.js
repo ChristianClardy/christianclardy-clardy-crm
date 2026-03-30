@@ -1,14 +1,262 @@
-import { createClient } from '@base44/sdk';
-import { appParams } from '@/lib/app-params';
+/**
+ * Supabase compatibility layer — mirrors the Base44 SDK interface so all
+ * existing component code works without changes.
+ *
+ * Exports:
+ *   - Named entity shortcuts: Project, Client, Lead, etc.
+ *   - base44 object: base44.entities.*, base44.auth.*, base44.functions.invoke(), base44.integrations.Core.UploadFile()
+ */
 
-const { appId, token, functionsVersion, appBaseUrl } = appParams;
+import { supabase } from '@/lib/supabase';
 
-//Create a client with authentication required
-export const base44 = createClient({
-  appId,
-  token,
-  functionsVersion,
-  serverUrl: '',
-  requiresAuth: false,
-  appBaseUrl
-});
+// ─── Entity → table name map ────────────────────────────────────────────────
+const TABLE_MAP = {
+  Project:                'projects',
+  Client:                 'clients',
+  Lead:                   'leads',
+  LeadFollowUp:           'lead_follow_ups',
+  ContactHistory:         'contact_history',
+  Task:                   'tasks',
+  TodoItem:               'todo_items',
+  Employee:               'employees',
+  CompanyProfile:         'company_profiles',
+  Estimate:               'estimates',
+  EstimateVersion:        'estimate_versions',
+  EstimateTemplate:       'estimate_templates',
+  LineItem:               'line_items',
+  Invoice:                'invoices',
+  Payment:                'payments',
+  Draw:                   'draws',
+  ChangeOrder:            'change_orders',
+  JobCostBreakdown:       'job_cost_breakdowns',
+  ProjectSheet:           'project_sheets',
+  ProjectSheetTemplate:   'project_sheet_templates',
+  Material:               'materials',
+  SelectionAllowance:     'selection_allowances',
+  SiteVisit:              'site_visits',
+  PermitUpdate:           'permit_updates',
+  PermitInspectionTask:   'permit_inspection_tasks',
+  ProjectPhoto:           'project_photos',
+  Municipality:           'municipalities',
+  Subcontractor:          'subcontractors',
+  Reminder:               'reminders',
+  CalendarEvent:          'calendar_events',
+  Document:               'documents',
+  Attachment:             'attachments',
+  Comment:                'comments',
+  Notification:           'notifications',
+  ChatMessage:            'chat_messages',
+};
+
+// ─── Field name compatibility ────────────────────────────────────────────────
+// Supabase schema uses created_at / updated_at.
+// Base44 code uses created_date / updated_date.
+// After reading we alias both so display code using either field name works.
+
+function mapDates(record) {
+  if (!record) return record;
+  return {
+    ...record,
+    created_date: record.created_date ?? record.created_at,
+    updated_date: record.updated_date ?? record.updated_at,
+  };
+}
+
+// Strip Base44-style date fields and undefined values before writing.
+function cleanForWrite(record) {
+  const { created_date, updated_date, created_at, updated_at, ...rest } = record;
+  // Remove undefined values so Supabase doesn't reject them
+  return Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
+}
+
+// Map Base44-style sort field (e.g. "-created_date") → Supabase order params
+function parseSortField(sortField) {
+  if (!sortField) return null;
+  const desc = sortField.startsWith('-');
+  let field = desc ? sortField.slice(1) : sortField;
+  // Map legacy field names to Supabase column names
+  if (field === 'created_date') field = 'created_at';
+  if (field === 'updated_date') field = 'updated_at';
+  return { field, ascending: !desc };
+}
+
+// ─── Entity factory ──────────────────────────────────────────────────────────
+function createEntity(tableName) {
+  return {
+    /** list(sortField?, limit?) → array */
+    async list(sortField, limit) {
+      let query = supabase.from(tableName).select('*');
+      const sort = parseSortField(sortField);
+      if (sort) query = query.order(sort.field, { ascending: sort.ascending });
+      if (limit) query = query.limit(limit);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data || []).map(mapDates);
+    },
+
+    /** filter(filterObj, sortField?, limit?) → array */
+    async filter(filterObj, sortField, limit) {
+      let query = supabase.from(tableName).select('*');
+      for (const [key, val] of Object.entries(filterObj ?? {})) {
+        if (val !== undefined && val !== null) query = query.eq(key, val);
+      }
+      const sort = parseSortField(sortField);
+      if (sort) query = query.order(sort.field, { ascending: sort.ascending });
+      if (limit) query = query.limit(limit);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data || []).map(mapDates);
+    },
+
+    /** get(id) → single record */
+    async get(id) {
+      const { data, error } = await supabase.from(tableName).select('*').eq('id', id).single();
+      if (error) throw error;
+      return mapDates(data);
+    },
+
+    /** create(record) → created record */
+    async create(record) {
+      const { data, error } = await supabase.from(tableName).insert(cleanForWrite(record)).select().single();
+      if (error) throw error;
+      return mapDates(data);
+    },
+
+    /** update(id, record) → updated record */
+    async update(id, record) {
+      const { data, error } = await supabase.from(tableName).update(cleanForWrite(record)).eq('id', id).select().single();
+      if (error) throw error;
+      return mapDates(data);
+    },
+
+    /** delete(id) */
+    async delete(id) {
+      const { error } = await supabase.from(tableName).delete().eq('id', id);
+      if (error) throw error;
+    },
+
+    /**
+     * subscribe(callback) → unsubscribe function
+     * Fires callback whenever any row in the table changes.
+     */
+    subscribe(callback) {
+      const channel = supabase
+        .channel(`${tableName}-${Date.now()}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: tableName }, callback)
+        .subscribe();
+      return () => supabase.removeChannel(channel);
+    },
+  };
+}
+
+// ─── Build entities map ──────────────────────────────────────────────────────
+const entities = Object.fromEntries(
+  Object.entries(TABLE_MAP).map(([name, table]) => [name, createEntity(table)])
+);
+
+// ─── Auth ────────────────────────────────────────────────────────────────────
+const auth = {
+  /** Returns the current user object shaped like Base44's user */
+  async me() {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error || !user) {
+      const err = new Error('Not authenticated');
+      err.status = 401;
+      throw err;
+    }
+    return {
+      id:        user.id,
+      email:     user.email,
+      full_name: user.user_metadata?.full_name || user.email,
+      role:      user.user_metadata?.role || 'user',
+      ...user.user_metadata,
+    };
+  },
+
+  /** Sign out and optionally redirect */
+  async logout(redirectUrl) {
+    await supabase.auth.signOut();
+    window.location.href = redirectUrl || '/login';
+  },
+
+  /** Redirect to the login page */
+  redirectToLogin() {
+    window.location.href = '/login';
+  },
+};
+
+// ─── Functions (Supabase Edge Functions) ─────────────────────────────────────
+const functions = {
+  async invoke(functionName, args = {}) {
+    const { data, error } = await supabase.functions.invoke(functionName, { body: args });
+    if (error) throw error;
+    return { data };
+  },
+};
+
+// ─── Integrations (file uploads via Supabase Storage) ────────────────────────
+const STORAGE_BUCKET = 'attachments';
+
+const integrations = {
+  Core: {
+    async UploadFile({ file }) {
+      const ext = file.name.split('.').pop();
+      const path = `uploads/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { data, error } = await supabase.storage.from(STORAGE_BUCKET).upload(path, file, {
+        cacheControl: '3600',
+        upsert: false,
+      });
+      if (error) throw error;
+      const { data: { publicUrl } } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(data.path);
+      return { file_url: publicUrl };
+    },
+  },
+};
+
+// ─── Main export ─────────────────────────────────────────────────────────────
+export const base44 = {
+  entities,
+  auth,
+  functions,
+  integrations,
+};
+
+// Named entity exports — lets components do:
+//   import { Project, Client } from '@/api/base44Client'
+export const {
+  Project,
+  Client,
+  Lead,
+  LeadFollowUp,
+  ContactHistory,
+  Task,
+  TodoItem,
+  Employee,
+  CompanyProfile,
+  Estimate,
+  EstimateVersion,
+  EstimateTemplate,
+  LineItem,
+  Invoice,
+  Payment,
+  Draw,
+  ChangeOrder,
+  JobCostBreakdown,
+  ProjectSheet,
+  ProjectSheetTemplate,
+  Material,
+  SelectionAllowance,
+  SiteVisit,
+  PermitUpdate,
+  PermitInspectionTask,
+  ProjectPhoto,
+  Municipality,
+  Subcontractor,
+  Reminder,
+  CalendarEvent,
+  Document,
+  Attachment,
+  Comment,
+  Notification,
+  ChatMessage,
+} = entities;

@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import AccuLynxSyncButton from "@/components/acculynx/AccuLynxSyncButton";
 
 const STATUS_STYLES = {
   draft:    { label: "Draft",    className: "bg-slate-100 text-slate-600",   icon: Clock },
@@ -33,7 +32,7 @@ export default function Estimates() {
       base44.entities.Estimate.list("-created_date"),
       base44.entities.Client.list(),
     ]);
-    setEstimates(estData.filter((estimate) => !estimate.acculynx_estimate_id));
+    setEstimates(estData);
     setClients(clientData);
     setLoading(false);
   };
@@ -60,8 +59,7 @@ export default function Estimates() {
           <p className="text-slate-500 mt-1">{estimates.length} total estimates</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <AccuLynxSyncButton onSynced={loadData} label="Sync from AccuLynx" className="border-amber-300 text-amber-700 hover:bg-amber-50" />
-          <Button
+<Button
             onClick={() => navigate(createPageUrl("EstimateDetail?new=true"))}
             className="bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-orange-500/25"
           >
