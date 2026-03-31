@@ -412,36 +412,47 @@ function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary }) {
 
 // ─── Trade / Material Section ─────────────────────────────────────────────────
 
-function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, materials, onAddToLibrary, sectionType = "trade" }) {
+function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onDeleteSection, materials, onAddToLibrary, sectionType = "trade" }) {
   const [collapsed, setCollapsed] = useState(false);
   const tradeItems = items.filter(it => it.trade === trade);
   const { totalCost, totalSell } = summaryTotals(tradeItems);
   const hasValues = totalSell > 0;
   const isMaterial = sectionType === "material";
+  const isEmpty = tradeItems.length === 0;
 
   return (
     <div className={cn("bg-white rounded-xl border overflow-hidden mb-3", isMaterial ? "border-sky-200" : "border-slate-200")}>
       {/* Section header */}
       <div
-        className={cn("flex items-center justify-between px-4 py-3 cursor-pointer select-none border-b transition-colors",
+        className={cn("flex items-center justify-between px-4 py-3 select-none border-b transition-colors",
           isMaterial
             ? "bg-sky-50 border-sky-200 hover:bg-sky-100"
             : "bg-slate-50 border-slate-200 hover:bg-slate-100"
         )}
-        onClick={() => setCollapsed(c => !c)}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-1 cursor-pointer" onClick={() => setCollapsed(c => !c)}>
           {collapsed ? <ChevronRight className={cn("w-4 h-4", isMaterial ? "text-sky-400" : "text-slate-400")} /> : <ChevronDown className={cn("w-4 h-4", isMaterial ? "text-sky-400" : "text-slate-400")} />}
           <span className={cn("text-sm font-semibold", isMaterial ? "text-sky-800" : "text-slate-800")}>{trade}</span>
           {isMaterial && <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-sky-200 text-sky-700">Material</span>}
           <span className="text-xs text-slate-400">({tradeItems.length} item{tradeItems.length !== 1 ? "s" : ""})</span>
         </div>
-        {hasValues && (
-          <div className="flex items-center gap-4 text-xs text-slate-500">
-            <span>Cost: <strong className="text-slate-700">{fmt(totalCost)}</strong></span>
-            <span>Sell: <strong className={isMaterial ? "text-sky-700" : "text-amber-700"}>{fmt(totalSell)}</strong></span>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {hasValues && (
+            <div className="flex items-center gap-4 text-xs text-slate-500">
+              <span>Cost: <strong className="text-slate-700">{fmt(totalCost)}</strong></span>
+              <span>Sell: <strong className={isMaterial ? "text-sky-700" : "text-amber-700"}>{fmt(totalSell)}</strong></span>
+            </div>
+          )}
+          {isEmpty && (
+            <button
+              onClick={() => onDeleteSection(trade, sectionType)}
+              title="Delete section"
+              className="p-1 rounded hover:bg-rose-100 text-slate-300 hover:text-rose-500 transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {!collapsed && (
@@ -1270,6 +1281,16 @@ export default function EstimateDetail() {
     setSaved(false);
   };
 
+  const handleDeleteSection = (name, sectionType) => {
+    if (sectionType === "material") {
+      setActiveMaterialSections(prev => prev.filter(s => s !== name));
+    } else {
+      setActiveTrades(prev => prev.filter(t => t !== name));
+    }
+    setItems(prev => prev.filter(it => it.trade !== name));
+    setSaved(false);
+  };
+
   const handleAddCustomCategory = async (name) => {
     const updated = [...customMaterialCategories, name];
     setCustomMaterialCategories(updated);
@@ -1437,20 +1458,7 @@ export default function EstimateDetail() {
             </div>
           )}
 
-          {activeTrades.map(trade => (
-            <TradeSection
-              key={trade}
-              trade={trade}
-              items={items}
-              onChangeItem={handleChangeItem}
-              onDeleteItem={handleDeleteItem}
-              onAddItem={handleAddItem}
-              materials={materials}
-              onAddToLibrary={handleAddToLibrary}
-              sectionType="trade"
-            />
-          ))}
-
+          {/* Material sections — top */}
           {activeMaterialSections.map(sec => (
             <TradeSection
               key={sec}
@@ -1459,9 +1467,42 @@ export default function EstimateDetail() {
               onChangeItem={handleChangeItem}
               onDeleteItem={handleDeleteItem}
               onAddItem={handleAddItem}
+              onDeleteSection={handleDeleteSection}
               materials={materials}
               onAddToLibrary={handleAddToLibrary}
               sectionType="material"
+            />
+          ))}
+
+          {/* Non-labor trade sections — middle */}
+          {activeTrades.filter(t => !TRADE_GROUPS["Labor"]?.includes(t)).map(trade => (
+            <TradeSection
+              key={trade}
+              trade={trade}
+              items={items}
+              onChangeItem={handleChangeItem}
+              onDeleteItem={handleDeleteItem}
+              onAddItem={handleAddItem}
+              onDeleteSection={handleDeleteSection}
+              materials={materials}
+              onAddToLibrary={handleAddToLibrary}
+              sectionType="trade"
+            />
+          ))}
+
+          {/* Labor sections — bottom */}
+          {activeTrades.filter(t => TRADE_GROUPS["Labor"]?.includes(t)).map(trade => (
+            <TradeSection
+              key={trade}
+              trade={trade}
+              items={items}
+              onChangeItem={handleChangeItem}
+              onDeleteItem={handleDeleteItem}
+              onAddItem={handleAddItem}
+              onDeleteSection={handleDeleteSection}
+              materials={materials}
+              onAddToLibrary={handleAddToLibrary}
+              sectionType="trade"
             />
           ))}
 
