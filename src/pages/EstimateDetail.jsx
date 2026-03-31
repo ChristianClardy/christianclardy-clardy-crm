@@ -609,6 +609,7 @@ export default function EstimateDetail() {
   const [showAddTrade, setShowAddTrade] = useState(false);
   const [saving, setSaving]           = useState(false);
   const [saved, setSaved]             = useState(false);
+  const [saveError, setSaveError]     = useState("");
   const [clients, setClients]         = useState([]);
 
   const [estimate, setEstimate] = useState({
@@ -686,10 +687,14 @@ export default function EstimateDetail() {
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveError("");
     try {
       const { totalSell, margin } = summaryTotals(items);
       const payload = {
         ...estimate,
+        // Convert empty strings to null for FK / nullable fields
+        client_id:      estimate.client_id  || null,
+        project_id:     estimate.project_id || null,
         line_items:     items,
         total:          totalSell,
         margin_percent: margin,
@@ -704,6 +709,7 @@ export default function EstimateDetail() {
       setTimeout(() => setSaved(false), 2500);
     } catch (err) {
       console.error("Save failed:", err);
+      setSaveError(err?.message || "Save failed. Check console for details.");
     } finally {
       setSaving(false);
     }
@@ -785,6 +791,13 @@ export default function EstimateDetail() {
           </Button>
         </div>
       </div>
+      {saveError && (
+        <div className="max-w-screen-xl mx-auto px-4 lg:px-6 mt-2">
+          <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-4 py-2">
+            {saveError}
+          </div>
+        </div>
+      )}
 
       {/* Main content */}
       <div className="max-w-screen-xl mx-auto px-4 lg:px-6 py-6 flex gap-6 items-start">
