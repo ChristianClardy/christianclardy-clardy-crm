@@ -646,25 +646,51 @@ function SummaryPanel({ items, estimate, onEstimateChange }) {
 
 // ─── PDF Export ───────────────────────────────────────────────────────────────
 
-function exportPDF(estimate, clientName, items) {
+async function loadImageAsDataUrl(src) {
+  try {
+    const res = await fetch(src);
+    const blob = await res.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function exportPDF(estimate, clientName, items) {
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const W = 612, ML = 50, MR = 562, TW = MR - ML;
   let y = 50;
 
+  // Load logo
+  const logoDataUrl = await loadImageAsDataUrl("/company-logo.png");
+
   // Header
   doc.setFillColor(61, 53, 48); // #3d3530
-  doc.rect(0, 0, W, 80, "F");
+  doc.rect(0, 0, W, 90, "F");
+
+  if (logoDataUrl) {
+    // Draw logo on left, constrained to 70pt tall
+    doc.addImage(logoDataUrl, "PNG", ML, 10, 0, 70);
+  }
+
+  // Company name + label to the right of the logo
+  const textX = logoDataUrl ? ML + 120 : ML;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(22);
+  doc.setFontSize(18);
   doc.setTextColor(245, 240, 235);
-  doc.text("Siteline", ML, 45);
+  doc.text("Edwards Design and Construction", textX, 40);
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(181, 150, 90); // gold
-  doc.text("Construction Estimate", ML, 62);
+  doc.text("Construction Estimate", textX, 58);
 
   // Estimate meta
-  y = 100;
+  y = 110;
   doc.setTextColor(61, 53, 48);
   doc.setFontSize(16);
   doc.setFont("helvetica", "bold");
@@ -936,9 +962,17 @@ function ClientEstimateModal({ estimate, client, items, company, onClose }) {
           {/* Header */}
           <div className="p-8" style={{ backgroundColor: "#3d3530" }}>
             <div className="flex justify-between items-start">
-              <div>
-                <h1 className="text-2xl font-bold tracking-wide" style={{ color: accentHex }}>{companyName}</h1>
-                <p className="text-slate-400 text-sm mt-1 uppercase tracking-widest">Construction Estimate</p>
+              <div className="flex items-center gap-4">
+                <img
+                  src="/company-logo.png"
+                  alt="Company Logo"
+                  className="h-16 w-auto object-contain"
+                  onError={e => { e.target.style.display = "none"; }}
+                />
+                <div>
+                  <h1 className="text-2xl font-bold tracking-wide" style={{ color: accentHex }}>{companyName}</h1>
+                  <p className="text-slate-400 text-sm mt-1 uppercase tracking-widest">Construction Estimate</p>
+                </div>
               </div>
               <div className="text-right text-sm text-slate-300 space-y-1">
                 {estimate.estimate_number && (
@@ -1421,7 +1455,7 @@ export default function EstimateDetail() {
 
           <Button
             variant="outline" size="sm"
-            onClick={() => exportPDF(estimate, clientName, items)}
+            onClick={() => exportPDF(estimate, clientName, items).catch(console.error)}
             className="gap-1.5"
           >
             <Download className="w-4 h-4" /> PDF
