@@ -844,12 +844,35 @@ function ClientEstimateModal({ estimate, client, items, company, onClose }) {
     style.id = "__est_print__";
     style.textContent = `
       @media print {
+        body, html { margin: 0 !important; padding: 0 !important; background: white !important; }
         body > * { visibility: hidden !important; }
-        #est-client-root { visibility: visible !important; position: fixed; inset: 0; background: white !important; display: flex !important; }
-        #est-client-root * { visibility: visible !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        #est-client-root {
+          visibility: visible !important;
+          position: static !important;
+          display: block !important;
+          width: 100% !important;
+          background: white !important;
+        }
+        #est-client-root * {
+          visibility: visible !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
         .print-sidebar { display: none !important; }
-        #est-client-scroll { overflow: visible !important; height: auto !important; background: white !important; padding: 0 !important; }
-        #est-client-paper { box-shadow: none !important; max-width: none !important; width: 100% !important; }
+        #est-client-scroll {
+          display: block !important;
+          overflow: visible !important;
+          height: auto !important;
+          background: white !important;
+          padding: 0 !important;
+          width: 100% !important;
+        }
+        #est-client-paper {
+          box-shadow: none !important;
+          border-radius: 0 !important;
+          max-width: none !important;
+          width: 100% !important;
+        }
       }
     `;
     document.head.appendChild(style);
