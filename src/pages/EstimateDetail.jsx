@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { base44 } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -843,12 +844,12 @@ function ClientEstimateModal({ estimate, client, items, company, onClose }) {
     style.id = "__est_print__";
     style.textContent = `
       @media print {
-        body > * { display: none !important; }
-        #est-client-root { display: flex !important; position: fixed; inset: 0; background: white; }
-        #est-client-root * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        body > * { visibility: hidden !important; }
+        #est-client-root { visibility: visible !important; position: fixed; inset: 0; background: white !important; display: flex !important; }
+        #est-client-root * { visibility: visible !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         .print-sidebar { display: none !important; }
         #est-client-scroll { overflow: visible !important; height: auto !important; background: white !important; padding: 0 !important; }
-        #est-client-paper { box-shadow: none !important; max-width: none !important; }
+        #est-client-paper { box-shadow: none !important; max-width: none !important; width: 100% !important; }
       }
     `;
     document.head.appendChild(style);
@@ -917,7 +918,7 @@ function ClientEstimateModal({ estimate, client, items, company, onClose }) {
     </table>
   );
 
-  return (
+  return createPortal(
     <div id="est-client-root" className="fixed inset-0 z-50 flex bg-black/60">
       {/* Settings sidebar */}
       <div className="print-sidebar w-56 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col">
@@ -1070,7 +1071,8 @@ function ClientEstimateModal({ estimate, client, items, company, onClose }) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
