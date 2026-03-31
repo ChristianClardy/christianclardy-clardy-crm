@@ -118,3 +118,17 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Dark mode: force readable text + background on all form inputs */
+.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+.dark textarea,
+.dark select {
+  background-color: hsl(var(--input)) !important;
+  color: hsl(var(--foreground)) !important;
+  border-color: hsl(var(--border));
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: hsl(var(--muted-foreground)) !important;
+}
