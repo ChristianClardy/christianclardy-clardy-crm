@@ -1003,8 +1003,27 @@ export default function EstimateDetail() {
   }, []);
 
   const handleAddToLibrary = useCallback(async (matData) => {
-    const created = await base44.entities.Material.create(matData);
-    setMaterials(prev => [...prev, created].sort((a, b) => (a.name || "").localeCompare(b.name || "")));
+    setMaterials(prev => {
+      const existing = prev.find(m => m.name?.toLowerCase() === matData.name?.trim().toLowerCase());
+      if (existing) {
+        // Update existing record with better data (non-zero cost, non-empty unit)
+        const merged = {
+          ...existing,
+          description: existing.description || matData.description || "",
+          unit:         existing.unit        || matData.unit        || "EA",
+          unit_cost:    existing.unit_cost > 0 ? existing.unit_cost : (matData.unit_cost || 0),
+          material_cost: existing.material_cost > 0 ? existing.material_cost : (matData.material_cost || 0),
+        };
+        base44.entities.Material.update(existing.id, merged).catch(console.error);
+        return prev.map(m => m.id === existing.id ? merged : m);
+      }
+      // Create new
+      base44.entities.Material.create(matData).then(created => {
+        setMaterials(all => [...all.filter(m => m.id !== created.id), created]
+          .sort((a, b) => (a.name || "").localeCompare(b.name || "")));
+      }).catch(console.error);
+      return prev;
+    });
   }, []);
 
   // Load existing estimate

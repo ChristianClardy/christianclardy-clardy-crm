@@ -172,7 +172,48 @@ export default function MaterialImportDialog({ open, onOpenChange, onImported })
   const handleImport = async () => {
     if (!preview || errors.length > 0) return;
     setImporting(true);
-    await base44.entities.Material.bulkCreate(preview);
+
+    // 1. Load existing materials to avoid duplicates
+    const existing = await base44.entities.Material.list();
+    const existingByName = {};
+    for (const m of existing) {
+      const key = (m.name || "").trim().toLowerCase();
+      if (key) existingByName[key] = m;
+    }
+
+    // 2. Deduplicate within the import file itself (keep last occurrence per name)
+    const dedupedMap = {};
+    for (const m of preview) {
+      const key = (m.name || "").trim().toLowerCase();
+      if (key) dedupedMap[key] = m;
+    }
+    const deduped = Object.values(dedupedMap);
+
+    // 3. For each row: update if exists, create if new
+    for (const m of deduped) {
+      const key = (m.name || "").trim().toLowerCase();
+      const match = existingByName[key];
+      if (match) {
+        // Merge: keep best of each field
+        const merged = {
+          name:          m.name || match.name,
+          description:   m.description || match.description || "",
+          category:      m.category    || match.category    || "Other",
+          unit:          m.unit        || match.unit        || "EA",
+          material_cost: m.material_cost > 0 ? m.material_cost : (match.material_cost || 0),
+          labor_cost:    m.labor_cost   > 0 ? m.labor_cost   : (match.labor_cost   || 0),
+          sub_cost:      m.sub_cost     > 0 ? m.sub_cost     : (match.sub_cost     || 0),
+          unit_cost:     m.unit_cost    > 0 ? m.unit_cost    : (match.unit_cost    || 0),
+          supplier:      m.supplier    || match.supplier    || "",
+          sku:           m.sku         || match.sku         || "",
+          notes:         m.notes       || match.notes       || "",
+        };
+        await base44.entities.Material.update(match.id, merged);
+      } else {
+        await base44.entities.Material.create(m);
+      }
+    }
+
     setImporting(false);
     setDone(true);
     onImported();

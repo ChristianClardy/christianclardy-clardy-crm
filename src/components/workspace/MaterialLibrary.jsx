@@ -23,6 +23,38 @@ const MARKUP_TYPES = [
   { value: "overhead_profit", label: "Overhead / Profit Split" },
 ];
 
+// Merge multiple material records: keep first non-empty / non-zero value per field
+function mergeMaterial(...mats) {
+  const pick = (key, numeric = false) => {
+    for (const m of mats) {
+      const v = m[key];
+      if (numeric ? (v && Number(v) > 0) : (v !== "" && v !== null && v !== undefined))
+        return v;
+    }
+    return numeric ? 0 : "";
+  };
+  const matCost = pick("material_cost", true);
+  const labCost = pick("labor_cost", true);
+  const subCost = pick("sub_cost", true);
+  return {
+    name:             pick("name"),
+    description:      pick("description"),
+    category:         pick("category"),
+    unit:             pick("unit"),
+    material_cost:    matCost,
+    labor_cost:       labCost,
+    sub_cost:         subCost,
+    unit_cost:        matCost + labCost + subCost || pick("unit_cost", true),
+    markup_type:      pick("markup_type"),
+    markup_value:     pick("markup_value", true),
+    overhead_percent: pick("overhead_percent", true),
+    profit_percent:   pick("profit_percent", true),
+    supplier:         pick("supplier"),
+    sku:              pick("sku"),
+    notes:            pick("notes"),
+  };
+}
+
 const emptyForm = {
   name: "", description: "", category: "Other", unit: "EA",
   material_cost: "", labor_cost: "", sub_cost: "",
@@ -80,14 +112,48 @@ export default function MaterialLibrary() {
       overhead_percent: n(form.overhead_percent),
       profit_percent: n(form.profit_percent),
     };
-    if (editing) await base44.entities.Material.update(editing.id, data);
-    else await base44.entities.Material.create(data);
+    if (editing) {
+      await base44.entities.Material.update(editing.id, data);
+    } else {
+      // Check for duplicate name — update existing instead of creating
+      const existing = materials.find(m => m.name?.toLowerCase() === form.name?.trim().toLowerCase());
+      if (existing) {
+        await base44.entities.Material.update(existing.id, mergeMaterial(existing, data));
+      } else {
+        await base44.entities.Material.create(data);
+      }
+    }
     setDialogOpen(false);
     load();
   };
 
   const handleDelete = async (id) => {
     if (confirm("Delete this material?")) { await base44.entities.Material.delete(id); load(); }
+  };
+
+  const handleDedup = async () => {
+    if (!confirm("This will merge all duplicate materials (same name), keeping the most complete record. Continue?")) return;
+    // Group by normalised name
+    const groups = {};
+    for (const m of materials) {
+      const key = (m.name || "").trim().toLowerCase();
+      if (!key) continue;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(m);
+    }
+    for (const group of Object.values(groups)) {
+      if (group.length < 2) continue;
+      // Score: count non-zero / non-empty fields
+      const score = (m) => [m.description, m.unit, m.unit_cost, m.material_cost, m.category, m.supplier]
+        .filter(v => v !== "" && v !== null && v !== undefined && v !== 0).length;
+      group.sort((a, b) => score(b) - score(a));
+      const [keep, ...dupes] = group;
+      // Merge best values into keeper
+      const merged = mergeMaterial(keep, ...dupes);
+      await base44.entities.Material.update(keep.id, merged);
+      for (const d of dupes) await base44.entities.Material.delete(d.id);
+    }
+    load();
   };
 
   const categories = ["All", ...CATEGORIES];
@@ -104,7 +170,10 @@ export default function MaterialLibrary() {
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-900">Material Library</h2>
         <div className="flex flex-wrap gap-2 items-start">
-<Button variant="outline" size="sm" onClick={() => setImportOpen(true)} className="gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50">
+          <Button variant="outline" size="sm" onClick={handleDedup} className="gap-1.5 text-slate-600 border-slate-200 hover:bg-slate-50">
+            Clean Duplicates
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} className="gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50">
             <Upload className="w-4 h-4" /> Import
           </Button>
           <Button onClick={openNew} size="sm" className="bg-gradient-to-r from-amber-500 to-orange-500">
