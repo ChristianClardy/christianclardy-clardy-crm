@@ -234,8 +234,15 @@ export default function Municipalities() {
   useEffect(() => { loadData(); }, []);
 
   const loadData = async () => {
-    const data = await base44.entities.Municipality.list("-created_date", 500);
-    setRows(data);
+    const data = await base44.entities.Municipality.list("-created_date");
+    // Deduplicate by id in case of double-render (React StrictMode)
+    const seen = new Set();
+    const unique = data.filter(r => {
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    });
+    setRows(unique);
     setLoading(false);
   };
 
@@ -263,7 +270,7 @@ export default function Municipalities() {
 
   const addRow = async () => {
     const created = await base44.entities.Municipality.create({ city: "New City" });
-    setRows(prev => [created, ...prev]);
+    setRows(prev => prev.some(r => r.id === created.id) ? prev : [created, ...prev]);
   };
 
   const deleteRow = async (id) => {
