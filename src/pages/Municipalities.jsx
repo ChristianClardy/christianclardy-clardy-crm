@@ -280,6 +280,37 @@ export default function Municipalities() {
     delete pendingUpdates.current[id];
   };
 
+  const cleanDuplicates = async () => {
+    if (!confirm("Merge duplicate rows with the same city name, keeping the most complete data?")) return;
+    setSaving(true);
+    // Group rows by lowercase city name
+    const groups = {};
+    for (const r of rows) {
+      const key = (r.city || "").toLowerCase().trim() || r.id;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(r);
+    }
+    const toDelete = [];
+    const toUpdate = [];
+    for (const group of Object.values(groups)) {
+      if (group.length < 2) continue;
+      // Keep the oldest row (last in -created_date sort = oldest), merge best values
+      const keeper = group[group.length - 1];
+      const merged = { ...keeper };
+      for (const r of group) {
+        for (const col of columns) {
+          if (!merged[col.key] && r[col.key]) merged[col.key] = r[col.key];
+        }
+      }
+      toUpdate.push(merged);
+      for (const r of group.slice(0, -1)) toDelete.push(r.id);
+    }
+    await Promise.all(toUpdate.map(r => base44.entities.Municipality.update(r.id, r)));
+    await Promise.all(toDelete.map(id => base44.entities.Municipality.delete(id)));
+    await loadData();
+    setSaving(false);
+  };
+
   const addColumn = () => {
     const key = newColKey();
     setColumns(prev => [...prev, { key, label: "New Column", width: 150 }]);
@@ -505,6 +536,15 @@ export default function Municipalities() {
               <><Save className="w-3.5 h-3.5 text-emerald-500" />Autosaved</>
             )}
           </div>
+          <button
+            onClick={cleanDuplicates}
+            className="flex items-center gap-2 px-4 py-2.5 rounded text-sm font-semibold tracking-wide transition-all duration-200 border"
+            style={{ borderColor: "#b5965a", color: "#b5965a", backgroundColor: "transparent" }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#b5965a"; e.currentTarget.style.color = "#f5f0eb"; }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#b5965a"; }}
+          >
+            Clean Duplicates
+          </button>
           <button
             onClick={addRow}
             className="flex items-center gap-2 px-5 py-2.5 rounded text-sm font-semibold tracking-wide transition-all duration-200"
