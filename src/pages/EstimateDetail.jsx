@@ -29,11 +29,17 @@ const TRADE_GROUPS = {
     "Electrical", "Plumbing", "Drainage", "Masonry", "Demo/Site Prep",
     "Painting", "Insulation", "Permits & Fees",
   ],
+  "Labor": [
+    "Framing", "Electrician", "Plumber", "Masonry", "Concrete/Foundation",
+    "Roofing", "Flooring", "Wall Tile", "Sheetrock", "Cleanup",
+    "Finish Carpentry",
+  ],
 };
 
 const ALL_TRADES = Array.from(new Set([
   ...TRADE_GROUPS["Pool"],
   ...TRADE_GROUPS["GC / Outdoor Living"],
+  ...TRADE_GROUPS["Labor"],
 ]));
 
 // ─── Templates ────────────────────────────────────────────────────────────────
@@ -680,24 +686,27 @@ export default function EstimateDetail() {
 
   const handleSave = async () => {
     setSaving(true);
-    const { totalCost, totalSell, profit, margin } = summaryTotals(items);
-    const payload = {
-      ...estimate,
-      line_items:    items,
-      total:         totalSell,
-      total_cost:    totalCost,
-      gross_profit:  profit,
-      margin_percent: margin,
-    };
-    if (existingId) {
-      await base44.entities.Estimate.update(existingId, payload);
-    } else {
-      const created = await base44.entities.Estimate.create(payload);
-      window.history.replaceState({}, "", createPageUrl(`EstimateDetail?id=${created.id}`));
+    try {
+      const { totalSell, margin } = summaryTotals(items);
+      const payload = {
+        ...estimate,
+        line_items:     items,
+        total:          totalSell,
+        margin_percent: margin,
+      };
+      if (existingId) {
+        await base44.entities.Estimate.update(existingId, payload);
+      } else {
+        const created = await base44.entities.Estimate.create(payload);
+        window.history.replaceState({}, "", createPageUrl(`EstimateDetail?id=${created.id}`));
+      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      console.error("Save failed:", err);
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
   };
 
   const clientName = clients.find(c => c.id === estimate.client_id)?.name || "";
