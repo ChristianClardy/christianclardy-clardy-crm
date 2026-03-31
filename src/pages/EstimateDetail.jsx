@@ -210,9 +210,102 @@ function TemplatePicker({ onSelect }) {
   );
 }
 
+// ─── Description Autocomplete Cell ───────────────────────────────────────────
+
+function DescriptionCell({ item, onChange, materials, onAddToLibrary }) {
+  const [open, setOpen]     = useState(false);
+  const [adding, setAdding] = useState(false);
+  const ref = useRef(null);
+
+  const query = item.description || "";
+  const matches = query.trim().length >= 1
+    ? materials.filter(m => m.name?.toLowerCase().includes(query.toLowerCase())).slice(0, 8)
+    : [];
+
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const handleSelect = (mat) => {
+    const unitCost = (mat.material_cost || 0) + (mat.labor_cost || 0) + (mat.sub_cost || 0) || mat.unit_cost || 0;
+    onChange({
+      ...item,
+      description:   mat.name,
+      unit:          mat.unit || item.unit,
+      cost_per_unit: unitCost > 0 ? String(unitCost) : item.cost_per_unit,
+    });
+    setOpen(false);
+  };
+
+  const handleAddNew = async () => {
+    setAdding(true);
+    try {
+      await onAddToLibrary({
+        name:      query,
+        unit:      item.unit || "EA",
+        unit_cost: Number(item.cost_per_unit) || 0,
+        material_cost: Number(item.cost_per_unit) || 0,
+      });
+    } finally {
+      setAdding(false);
+      setOpen(false);
+    }
+  };
+
+  const showDropdown = open && (matches.length > 0 || query.trim().length >= 1);
+
+  return (
+    <div ref={ref} className="relative">
+      <input
+        type="text"
+        value={query}
+        onChange={e => { onChange({ ...item, description: e.target.value }); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        placeholder="Description…"
+        className="w-full bg-transparent text-sm text-slate-800 border-b border-transparent focus:border-amber-400 outline-none py-0.5 placeholder:text-slate-300"
+      />
+      {showDropdown && (
+        <div className="absolute left-0 top-full mt-1 z-50 bg-white rounded-lg shadow-xl border border-slate-200 w-72 max-h-60 overflow-y-auto">
+          {matches.map(mat => {
+            const cost = (mat.material_cost || 0) + (mat.labor_cost || 0) + (mat.sub_cost || 0) || mat.unit_cost || 0;
+            return (
+              <button
+                key={mat.id}
+                onMouseDown={e => { e.preventDefault(); handleSelect(mat); }}
+                className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-amber-50 text-sm"
+              >
+                <span className="text-slate-800 truncate">{mat.name}</span>
+                <span className="text-xs text-slate-400 ml-2 flex-shrink-0">
+                  {mat.unit} · {cost > 0 ? `$${cost.toFixed(2)}` : "—"}
+                </span>
+              </button>
+            );
+          })}
+          {matches.length === 0 && query.trim() && (
+            <div className="px-3 py-2 text-xs text-slate-400 italic">No matches in library</div>
+          )}
+          {query.trim().length >= 1 && (
+            <button
+              onMouseDown={e => { e.preventDefault(); handleAddNew(); }}
+              disabled={adding}
+              className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border-t border-slate-100"
+            >
+              <Plus className="w-3.5 h-3.5 flex-shrink-0" />
+              {adding ? "Saving…" : `Add "${query}" to library`}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Line Item Row ────────────────────────────────────────────────────────────
 
-function LineItemRow({ item, onChange, onDelete }) {
+function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary }) {
   const { sell_per_unit, total_cost, total_sell } = itemTotals(item);
   const hasCost = Number(item.cost_per_unit) > 0;
 
@@ -220,12 +313,11 @@ function LineItemRow({ item, onChange, onDelete }) {
     <tr className="border-b border-slate-100 hover:bg-amber-50/20 group">
       <td className="pl-3 pr-1 py-2 w-6 text-slate-300 cursor-grab"><GripVertical className="w-3.5 h-3.5" /></td>
       <td className="px-2 py-1.5 min-w-[200px]">
-        <input
-          type="text"
-          value={item.description}
-          onChange={e => onChange({ ...item, description: e.target.value })}
-          placeholder="Description…"
-          className="w-full bg-transparent text-sm text-slate-800 border-b border-transparent focus:border-amber-400 outline-none py-0.5 placeholder:text-slate-300"
+        <DescriptionCell
+          item={item}
+          onChange={onChange}
+          materials={materials}
+          onAddToLibrary={onAddToLibrary}
         />
       </td>
       <td className="px-2 py-1.5 w-32">
@@ -292,7 +384,7 @@ function LineItemRow({ item, onChange, onDelete }) {
 
 // ─── Trade Section ────────────────────────────────────────────────────────────
 
-function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem }) {
+function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, materials, onAddToLibrary }) {
   const [collapsed, setCollapsed] = useState(false);
   const tradeItems = items.filter(it => it.trade === trade);
   const { totalCost, totalSell } = summaryTotals(tradeItems);
@@ -347,6 +439,8 @@ function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem }) {
                       item={item}
                       onChange={onChangeItem}
                       onDelete={onDeleteItem}
+                      materials={materials}
+                      onAddToLibrary={onAddToLibrary}
                     />
                   ))
                 )}
@@ -611,6 +705,7 @@ export default function EstimateDetail() {
   const [saved, setSaved]             = useState(false);
   const [saveError, setSaveError]     = useState("");
   const [clients, setClients]         = useState([]);
+  const [materials, setMaterials]     = useState([]);
 
   const [estimate, setEstimate] = useState({
     title: "",
@@ -631,9 +726,15 @@ export default function EstimateDetail() {
     });
   }, [items]);
 
-  // Load clients
+  // Load clients + materials
   useEffect(() => {
     base44.entities.Client.list("name").then(setClients);
+    base44.entities.Material.list("name").then(setMaterials);
+  }, []);
+
+  const handleAddToLibrary = useCallback(async (matData) => {
+    const created = await base44.entities.Material.create(matData);
+    setMaterials(prev => [...prev, created].sort((a, b) => (a.name || "").localeCompare(b.name || "")));
   }, []);
 
   // Load existing estimate
@@ -819,6 +920,8 @@ export default function EstimateDetail() {
               onChangeItem={handleChangeItem}
               onDeleteItem={handleDeleteItem}
               onAddItem={handleAddItem}
+              materials={materials}
+              onAddToLibrary={handleAddToLibrary}
             />
           ))}
 
