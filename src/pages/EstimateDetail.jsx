@@ -1140,9 +1140,24 @@ function AddMaterialSectionDialog({ activeSections, onAdd, onClose, customCatego
 
 // ─── Add Trade Dialog ─────────────────────────────────────────────────────────
 
-function AddTradeDialog({ activeTrades, onAdd, onClose }) {
+function AddTradeDialog({ activeTrades, onAdd, onClose, customCategories = [], onAddCustomCategory }) {
   const [group, setGroup] = useState("GC / Outdoor Living");
-  const available = TRADE_GROUPS[group].filter(t => !activeTrades.includes(t));
+  const [newName, setNewName] = useState("");
+
+  const allInGroup = group === "Custom"
+    ? customCategories
+    : (TRADE_GROUPS[group] || []);
+  const available = allInGroup.filter(t => !activeTrades.includes(t));
+
+  const groups = [...Object.keys(TRADE_GROUPS), "Custom"];
+
+  const handleAddCustom = () => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    onAddCustomCategory(trimmed);
+    onAdd(trimmed);
+    onClose();
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -1152,26 +1167,47 @@ function AddTradeDialog({ activeTrades, onAdd, onClose }) {
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><span className="text-xl leading-none">×</span></button>
         </div>
         <div className="p-4 space-y-3">
-          <div className="flex gap-2">
-            {Object.keys(TRADE_GROUPS).map(g => (
+          <div className="flex flex-wrap gap-2">
+            {groups.map(g => (
               <button key={g} onClick={() => setGroup(g)}
-                className={cn("flex-1 text-xs font-semibold py-1.5 rounded-lg border transition-all",
+                className={cn("text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all",
                   group === g ? "bg-amber-500 text-white border-amber-500" : "border-slate-200 text-slate-600 hover:border-amber-300"
                 )}>{g}</button>
             ))}
           </div>
-          {available.length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-4">All trades in this group are already added.</p>
-          ) : (
-            <div className="space-y-1">
-              {available.map(t => (
+          <div className="max-h-64 overflow-y-auto space-y-1">
+            {available.length === 0 && group !== "Custom" ? (
+              <p className="text-sm text-slate-400 text-center py-4">All trades in this group are already added.</p>
+            ) : (
+              available.map(t => (
                 <button key={t} onClick={() => { onAdd(t); onClose(); }}
                   className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-amber-50 hover:text-amber-700 text-slate-700 transition-colors">
                   {t}
                 </button>
-              ))}
-            </div>
-          )}
+              ))
+            )}
+          </div>
+        </div>
+        <div className="p-4 border-t border-slate-100 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Add Custom Category</p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleAddCustom()}
+              placeholder="e.g. Waterproofing, Stucco…"
+              className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-amber-300"
+            />
+            <button
+              onClick={handleAddCustom}
+              disabled={!newName.trim()}
+              className="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-sm font-medium disabled:opacity-40 hover:bg-amber-600 transition-colors"
+            >
+              Add
+            </button>
+          </div>
+          <p className="text-[11px] text-slate-400">Custom categories are saved for future estimates.</p>
         </div>
       </div>
     </div>
@@ -1210,6 +1246,7 @@ export default function EstimateDetail() {
   const [activeTrades, setActiveTrades]           = useState([]);
   const [activeMaterialSections, setActiveMaterialSections] = useState([]);
   const [customMaterialCategories, setCustomMaterialCategories] = useState([]);
+  const [customTradeCategories, setCustomTradeCategories]     = useState([]);
 
   // Sync sections from items
   useEffect(() => {
@@ -1227,6 +1264,7 @@ export default function EstimateDetail() {
       if (rows.length) {
         setCompany(rows[0]);
         setCustomMaterialCategories(rows[0]?.settings?.custom_material_categories || []);
+        setCustomTradeCategories(rows[0]?.settings?.custom_trade_categories || []);
       }
     });
   }, []);
@@ -1337,6 +1375,16 @@ export default function EstimateDetail() {
     }
   };
 
+  const handleAddCustomTradeCategory = async (name) => {
+    const updated = [...customTradeCategories, name];
+    setCustomTradeCategories(updated);
+    if (company?.id) {
+      const newSettings = { ...(company.settings || {}), custom_trade_categories: updated };
+      await base44.entities.CompanyProfile.update(company.id, { settings: newSettings });
+      setCompany(c => ({ ...c, settings: newSettings }));
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setSaveError("");
@@ -1392,6 +1440,8 @@ export default function EstimateDetail() {
           activeTrades={activeTrades}
           onAdd={handleAddTrade}
           onClose={() => setShowAddTrade(false)}
+          customCategories={customTradeCategories}
+          onAddCustomCategory={handleAddCustomTradeCategory}
         />
       )}
       {showAddMaterial && (
