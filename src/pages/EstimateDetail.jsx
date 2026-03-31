@@ -844,17 +844,15 @@ function ClientEstimateModal({ estimate, client, items, company, onClose }) {
     style.id = "__est_print__";
     style.textContent = `
       @media print {
-        body, html { margin: 0 !important; padding: 0 !important; background: white !important; }
-        body > * { visibility: hidden !important; }
+        html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
+        body > * { display: none !important; }
         #est-client-root {
-          visibility: visible !important;
-          position: static !important;
           display: block !important;
+          position: static !important;
           width: 100% !important;
           background: white !important;
         }
         #est-client-root * {
-          visibility: visible !important;
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }
@@ -868,6 +866,7 @@ function ClientEstimateModal({ estimate, client, items, company, onClose }) {
           width: 100% !important;
         }
         #est-client-paper {
+          display: block !important;
           box-shadow: none !important;
           border-radius: 0 !important;
           max-width: none !important;
