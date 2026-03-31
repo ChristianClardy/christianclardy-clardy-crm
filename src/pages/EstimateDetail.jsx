@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
   ArrowLeft, Save, Download, Plus, Trash2, ChevronDown, ChevronRight,
-  Package, FileText, Loader2, Check, GripVertical
+  Package, FileText, Loader2, Check, GripVertical, Eye, Mail, X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +49,7 @@ function blankItem(trade, description = "", unit = "SF", qty = 1) {
     id: Math.random().toString(36).slice(2, 10),
     trade,
     description,
+    notes: "",
     unit,
     quantity: qty,
     cost_per_unit: "",
@@ -234,6 +235,7 @@ function DescriptionCell({ item, onChange, materials, onAddToLibrary }) {
     onChange({
       ...item,
       description:   mat.name,
+      notes:         mat.description || item.notes || "",
       unit:          mat.unit || item.unit,
       cost_per_unit: unitCost > 0 ? String(unitCost) : item.cost_per_unit,
     });
@@ -266,6 +268,13 @@ function DescriptionCell({ item, onChange, materials, onAddToLibrary }) {
         onFocus={() => setOpen(true)}
         placeholder="Description…"
         className="w-full bg-transparent text-sm text-slate-800 border-b border-transparent focus:border-amber-400 outline-none py-0.5 placeholder:text-slate-300"
+      />
+      <input
+        type="text"
+        value={item.notes || ""}
+        onChange={e => onChange({ ...item, notes: e.target.value })}
+        placeholder="Notes / details…"
+        className="w-full bg-transparent text-xs italic text-slate-400 border-b border-transparent focus:border-amber-300 outline-none py-0.5 placeholder:text-slate-200"
       />
       {showDropdown && (
         <div className="absolute left-0 top-full mt-1 z-50 bg-white rounded-lg shadow-xl border border-slate-200 w-72 max-h-60 overflow-y-auto">
@@ -651,6 +660,264 @@ function exportPDF(estimate, clientName, items) {
   doc.save(`Estimate - ${estimate.title || "draft"}.pdf`);
 }
 
+// ─── Client Estimate Preview ──────────────────────────────────────────────────
+
+const DEFAULT_PREVIEW_OPTS = {
+  showLineItems:    true,
+  showItemNotes:    true,
+  showQty:          true,
+  showUnitPrice:    false,
+  showTradeHeaders: true,
+  showNotes:        true,
+  showExpiry:       true,
+};
+
+function PreviewToggle({ label, checked, onChange }) {
+  return (
+    <label className="flex items-center gap-2 cursor-pointer select-none py-0.5">
+      <button
+        type="button"
+        onClick={onChange}
+        className={cn("w-8 h-4 rounded-full relative transition-colors flex-shrink-0",
+          checked ? "bg-amber-500" : "bg-slate-200"
+        )}
+      >
+        <span className={cn("absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform",
+          checked ? "translate-x-4" : "translate-x-0.5"
+        )} />
+      </button>
+      <span className="text-sm text-slate-700">{label}</span>
+    </label>
+  );
+}
+
+function ClientEstimateModal({ estimate, client, items, company, onClose }) {
+  const [opts, setOpts] = useState(DEFAULT_PREVIEW_OPTS);
+  const tog = (key) => setOpts(o => ({ ...o, [key]: !o[key] }));
+
+  // Inject print CSS so only the preview prints
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.id = "__est_print__";
+    style.textContent = `
+      @media print {
+        body > * { display: none !important; }
+        #est-client-root { display: flex !important; position: fixed; inset: 0; background: white; }
+        #est-client-root * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        .print-sidebar { display: none !important; }
+        #est-client-scroll { overflow: visible !important; height: auto !important; background: white !important; padding: 0 !important; }
+        #est-client-paper { box-shadow: none !important; max-width: none !important; }
+      }
+    `;
+    document.head.appendChild(style);
+    return () => { document.getElementById("__est_print__")?.remove(); };
+  }, []);
+
+  const handleEmail = () => {
+    const subject = `Estimate: ${estimate.title || "Your Estimate"}`;
+    const total = fmt(summaryTotals(items).totalSell);
+    const body = [
+      `Hi ${client?.name || ""},`,
+      "",
+      `Please find your estimate for "${estimate.title}" attached.`,
+      "",
+      `Estimate Total: ${total}`,
+      estimate.issue_date ? `Date: ${estimate.issue_date}` : "",
+      opts.showExpiry && estimate.expiry_date ? `Valid Until: ${estimate.expiry_date}` : "",
+      "",
+      "Thank you for your business!",
+    ].filter(l => l !== null).join("\n");
+    window.open(`mailto:${client?.email || ""}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+  };
+
+  const { totalSell } = summaryTotals(items);
+  const trades = [...new Set(items.map(i => i.trade).filter(Boolean))];
+  const companyName = company?.invoice_company_name || company?.name || "Siteline";
+  const accentHex = company?.invoice_accent_color || company?.color || "#b5965a";
+
+  const colSpanTotal = 1 + (opts.showQty ? 1 : 0) + (opts.showUnitPrice ? 1 : 0);
+
+  const ItemsTable = ({ tradeItems }) => (
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200">
+          <th className="px-4 py-2 text-left">Description</th>
+          {opts.showQty && <th className="px-4 py-2 text-center w-28">Qty / Unit</th>}
+          {opts.showUnitPrice && <th className="px-4 py-2 text-right w-28">Unit Price</th>}
+          <th className="px-4 py-2 text-right w-28">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {tradeItems.map(item => {
+          const { sell_per_unit, total_sell } = itemTotals(item);
+          const hasCost = Number(item.cost_per_unit) > 0;
+          return (
+            <tr key={item.id} className="border-b border-slate-100">
+              <td className="px-4 py-2.5">
+                <p className="text-slate-800 font-medium">{item.description || <span className="italic text-slate-300">—</span>}</p>
+                {opts.showItemNotes && item.notes && (
+                  <p className="text-xs text-slate-400 mt-0.5 italic">{item.notes}</p>
+                )}
+              </td>
+              {opts.showQty && <td className="px-4 py-2.5 text-center text-slate-500 text-xs">{item.quantity} {item.unit}</td>}
+              {opts.showUnitPrice && <td className="px-4 py-2.5 text-right text-slate-600">{hasCost ? fmt(sell_per_unit) : "—"}</td>}
+              <td className="px-4 py-2.5 text-right font-semibold text-slate-800">{hasCost ? fmt(total_sell) : "—"}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+
+  return (
+    <div id="est-client-root" className="fixed inset-0 z-50 flex bg-black/60">
+      {/* Settings sidebar */}
+      <div className="print-sidebar w-56 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col">
+        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-slate-900 text-sm">Client Preview</h3>
+            <p className="text-xs text-slate-400 mt-0.5">What the client will see</p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100 text-slate-400"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-4 flex-1 overflow-y-auto space-y-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 pb-1">Display Options</p>
+          <PreviewToggle label="Show line items"    checked={opts.showLineItems}    onChange={() => tog("showLineItems")} />
+          <PreviewToggle label="Show item notes"    checked={opts.showItemNotes}    onChange={() => tog("showItemNotes")} />
+          <PreviewToggle label="Show quantities"    checked={opts.showQty}          onChange={() => tog("showQty")} />
+          <PreviewToggle label="Show unit prices"   checked={opts.showUnitPrice}    onChange={() => tog("showUnitPrice")} />
+          <PreviewToggle label="Show trade headers" checked={opts.showTradeHeaders} onChange={() => tog("showTradeHeaders")} />
+          <PreviewToggle label="Show notes section" checked={opts.showNotes}        onChange={() => tog("showNotes")} />
+          <PreviewToggle label="Show expiry date"   checked={opts.showExpiry}       onChange={() => tog("showExpiry")} />
+        </div>
+        <div className="p-4 border-t border-slate-100 space-y-2">
+          <button
+            onClick={handleEmail}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+          >
+            <Mail className="w-4 h-4" /> Email Client
+          </button>
+          <button
+            onClick={() => window.print()}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm text-white font-medium transition-colors"
+            style={{ background: "linear-gradient(to right, #f59e0b, #f97316)" }}
+          >
+            <Download className="w-4 h-4" /> Save as PDF
+          </button>
+        </div>
+      </div>
+
+      {/* Preview scroll area */}
+      <div id="est-client-scroll" className="flex-1 overflow-y-auto bg-slate-300 p-8">
+        <div id="est-client-paper" className="bg-white max-w-3xl mx-auto shadow-2xl rounded overflow-hidden">
+
+          {/* Header */}
+          <div className="p-8" style={{ backgroundColor: "#3d3530" }}>
+            <div className="flex justify-between items-start">
+              <div>
+                <h1 className="text-2xl font-bold tracking-wide" style={{ color: accentHex }}>{companyName}</h1>
+                <p className="text-slate-400 text-sm mt-1 uppercase tracking-widest">Construction Estimate</p>
+              </div>
+              <div className="text-right text-sm text-slate-300 space-y-1">
+                {estimate.estimate_number && (
+                  <p className="font-mono font-bold text-white text-base">{estimate.estimate_number}</p>
+                )}
+                {estimate.issue_date && <p>Date: {estimate.issue_date}</p>}
+                {opts.showExpiry && estimate.expiry_date && <p>Expires: {estimate.expiry_date}</p>}
+              </div>
+            </div>
+          </div>
+
+          {/* Client + project info */}
+          <div className="px-8 py-6 border-b border-slate-200 flex gap-8 justify-between">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Prepared For</p>
+              {client ? (
+                <div className="space-y-0.5">
+                  <p className="font-semibold text-slate-900">{client.name}</p>
+                  {client.email   && <p className="text-sm text-slate-500">{client.email}</p>}
+                  {client.phone   && <p className="text-sm text-slate-500">{client.phone}</p>}
+                  {client.address && <p className="text-sm text-slate-500">{client.address}</p>}
+                </div>
+              ) : (
+                <p className="text-slate-400 italic text-sm">No client selected</p>
+              )}
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Project</p>
+              <p className="font-semibold text-slate-900">{estimate.title || "Estimate"}</p>
+              <p className="text-sm text-slate-500 capitalize mt-0.5">{estimate.status || "draft"}</p>
+            </div>
+          </div>
+
+          {/* Line items */}
+          <div className="px-8 py-6 space-y-5">
+            {opts.showTradeHeaders ? (
+              trades.map(trade => {
+                const tradeItems = items.filter(i => i.trade === trade);
+                const tradeSell = tradeItems.reduce((s, it) => s + itemTotals(it).total_sell, 0);
+                return (
+                  <div key={trade} className="rounded overflow-hidden border border-slate-200">
+                    <div className="px-4 py-2.5 text-sm font-bold uppercase tracking-wide text-white" style={{ backgroundColor: "#3d3530" }}>
+                      {trade}
+                    </div>
+                    {opts.showLineItems ? (
+                      <>
+                        <ItemsTable tradeItems={tradeItems} />
+                        <div className="border-t-2 border-slate-200 bg-slate-50 px-4 py-2 flex justify-between text-sm">
+                          <span className="font-semibold text-slate-500 uppercase tracking-wide text-xs">Subtotal</span>
+                          <span className="font-bold text-slate-800">{fmt(tradeSell)}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="px-4 py-3 flex justify-between text-sm">
+                        <span className="text-slate-600">{trade}</span>
+                        <span className="font-semibold text-slate-800">{fmt(tradeSell)}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            ) : (
+              <div className="rounded overflow-hidden border border-slate-200">
+                <ItemsTable tradeItems={items} />
+              </div>
+            )}
+
+            {/* Total */}
+            <div className="flex justify-end pt-2">
+              <div className="rounded-lg overflow-hidden border-2 border-slate-800 min-w-[220px]">
+                <div className="px-5 py-3 flex items-center justify-between gap-6" style={{ backgroundColor: "#3d3530" }}>
+                  <span className="text-sm font-bold uppercase tracking-wide text-slate-300">Estimate Total</span>
+                  <span className="text-xl font-bold" style={{ color: accentHex }}>{fmt(totalSell)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Notes */}
+          {opts.showNotes && estimate.notes && (
+            <div className="px-8 py-6 border-t border-slate-200">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Notes & Scope</p>
+              <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">{estimate.notes}</p>
+            </div>
+          )}
+
+          {/* Footer */}
+          <div className="px-8 py-4 bg-slate-50 border-t border-slate-200">
+            <p className="text-xs text-slate-400 text-center">
+              {opts.showExpiry && estimate.expiry_date
+                ? `This estimate is valid until ${estimate.expiry_date}`
+                : "This estimate is valid for 30 days from the issue date"}
+              {" · "}{companyName}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Add Trade Dialog ─────────────────────────────────────────────────────────
 
 function AddTradeDialog({ activeTrades, onAdd, onClose }) {
@@ -699,13 +966,15 @@ export default function EstimateDetail() {
   const existingId = params.get("id");
   const isNew    = params.get("new") === "true" || !existingId;
 
-  const [showPicker, setShowPicker]   = useState(isNew);
+  const [showPicker, setShowPicker]     = useState(isNew);
   const [showAddTrade, setShowAddTrade] = useState(false);
-  const [saving, setSaving]           = useState(false);
-  const [saved, setSaved]             = useState(false);
-  const [saveError, setSaveError]     = useState("");
-  const [clients, setClients]         = useState([]);
-  const [materials, setMaterials]     = useState([]);
+  const [showPreview, setShowPreview]   = useState(false);
+  const [saving, setSaving]             = useState(false);
+  const [saved, setSaved]               = useState(false);
+  const [saveError, setSaveError]       = useState("");
+  const [clients, setClients]           = useState([]);
+  const [materials, setMaterials]       = useState([]);
+  const [company, setCompany]           = useState(null);
 
   const [estimate, setEstimate] = useState({
     title: "",
@@ -726,10 +995,11 @@ export default function EstimateDetail() {
     });
   }, [items]);
 
-  // Load clients + materials
+  // Load clients, materials, company profile
   useEffect(() => {
     base44.entities.Client.list("name").then(setClients);
     base44.entities.Material.list("name").then(setMaterials);
+    base44.entities.CompanyProfile.list().then(rows => { if (rows.length) setCompany(rows[0]); });
   }, []);
 
   const handleAddToLibrary = useCallback(async (matData) => {
@@ -816,11 +1086,22 @@ export default function EstimateDetail() {
     }
   };
 
-  const clientName = clients.find(c => c.id === estimate.client_id)?.name || "";
+  const clientName = clientObj?.name || "";
   const { totalCost, totalSell } = summaryTotals(items);
+
+  const clientObj = clients.find(c => c.id === estimate.client_id) || null;
 
   return (
     <div className="min-h-screen bg-slate-50">
+      {showPreview && (
+        <ClientEstimateModal
+          estimate={estimate}
+          client={clientObj}
+          items={items}
+          company={company}
+          onClose={() => setShowPreview(false)}
+        />
+      )}
       {showPicker && <TemplatePicker onSelect={handleTemplatePick} />}
       {showAddTrade && (
         <AddTradeDialog
@@ -872,6 +1153,14 @@ export default function EstimateDetail() {
             onChange={e => { setEstimate(est => ({ ...est, issue_date: e.target.value })); setSaved(false); }}
             className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-amber-300"
           />
+
+          <Button
+            variant="outline" size="sm"
+            onClick={() => setShowPreview(true)}
+            className="gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50"
+          >
+            <Eye className="w-4 h-4" /> Preview / Send
+          </Button>
 
           <Button
             variant="outline" size="sm"
