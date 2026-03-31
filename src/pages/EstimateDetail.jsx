@@ -903,7 +903,7 @@ function ClientEstimateModal({ estimate, client, items, company, onClose }) {
   const previewCalcTotal = previewCost > 0 ? previewCost / (1 - previewMarginPct / 100) : 0;
   const totalSell = estimate.total_override != null ? Number(estimate.total_override) : previewCalcTotal;
   const trades = [...new Set(items.map(i => i.trade).filter(Boolean))];
-  const companyName = company?.invoice_company_name || company?.name || "Siteline";
+  const companyName = company?.invoice_company_name || company?.name || "Clardy.io";
   const accentHex = company?.invoice_accent_color || company?.color || "#b5965a";
 
   const colSpanTotal = 1 + (opts.showQty ? 1 : 0) + (opts.showUnitPrice ? 1 : 0);

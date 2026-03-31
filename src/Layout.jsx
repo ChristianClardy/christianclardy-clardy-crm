@@ -63,7 +63,7 @@ export default function Layout({ children, currentPageName }) {
             <div className="w-8 h-8 rounded flex items-center justify-center" style={{ backgroundColor: "var(--brand-gold)" }}>
               <HardHat className="w-4 h-4" style={{ color: "#f5f0eb" }} />
             </div>
-            <span className="text-sm font-bold" style={{ color: "#f5f0eb", letterSpacing: "0.08em" }}>Siteline</span>
+            <span className="text-sm font-bold" style={{ color: "#f5f0eb", letterSpacing: "0.08em" }}>Clardy.io</span>
           </div>
         </div>
         {showCloseButton && (
@@ -104,7 +104,7 @@ export default function Layout({ children, currentPageName }) {
       <div className="p-4" style={{ borderTop: "1px solid var(--brand-sidebar-border)" }}>
         <div className="px-4 py-2 flex items-center justify-between rounded" style={{ backgroundColor: "var(--brand-sidebar-footer)" }}>
           <div>
-            <p className="text-xs tracking-widest uppercase" style={{ color: "var(--brand-gold)", letterSpacing: "0.12em" }}>Construction Manager</p>
+            <p className="text-xs tracking-widest uppercase" style={{ color: "var(--brand-gold)", letterSpacing: "0.12em" }}>Clardy.io</p>
             <p className="text-xs mt-0.5" style={{ color: "var(--brand-charcoal-light)" }}>v1.0</p>
           </div>
           <div className="flex items-center gap-2">
@@ -168,7 +168,7 @@ export default function Layout({ children, currentPageName }) {
             <div className="w-7 h-7 rounded flex items-center justify-center" style={{ backgroundColor: "var(--brand-gold)" }}>
               <HardHat className="w-4 h-4" style={{ color: "#f5f0eb" }} />
             </div>
-            <span className="font-bold tracking-widest uppercase text-sm" style={{ color: "#f5f0eb" }}>Siteline</span>
+            <span className="font-bold tracking-widest uppercase text-sm" style={{ color: "#f5f0eb" }}>Clardy.io</span>
           </div>
           <div className="flex items-center gap-2">
             <button

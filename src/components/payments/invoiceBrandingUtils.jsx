@@ -1,5 +1,5 @@
 export const defaultInvoiceBranding = {
-  company_name: "Clarity Construction",
+  company_name: "Clardy.io",
   logo_url: "",
   header_title: "Invoice",
   accent_color: "#b5965a",
