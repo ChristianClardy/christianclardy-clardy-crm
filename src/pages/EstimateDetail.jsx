@@ -42,12 +42,31 @@ const ALL_TRADES = Array.from(new Set([
   ...TRADE_GROUPS["Labor"],
 ]));
 
+const DEFAULT_MATERIAL_CATEGORIES = [
+  "Lumber & Framing",
+  "Concrete & Masonry",
+  "Roofing Materials",
+  "Flooring Materials",
+  "Plumbing Supplies",
+  "Electrical Supplies",
+  "Insulation",
+  "Drywall & Sheetrock",
+  "Paint & Finishes",
+  "Hardware & Fasteners",
+  "Windows & Doors",
+  "Tile & Stone",
+  "Cabinets & Millwork",
+  "Landscaping Materials",
+  "Equipment & Rentals",
+];
+
 // ─── Templates ────────────────────────────────────────────────────────────────
 
-function blankItem(trade, description = "", unit = "SF", qty = 1) {
+function blankItem(sectionName, description = "", unit = "SF", qty = 1, sectionType = "trade") {
   return {
     id: Math.random().toString(36).slice(2, 10),
-    trade,
+    trade: sectionName,
+    sectionType,
     description,
     notes: "",
     unit,
@@ -391,30 +410,36 @@ function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary }) {
   );
 }
 
-// ─── Trade Section ────────────────────────────────────────────────────────────
+// ─── Trade / Material Section ─────────────────────────────────────────────────
 
-function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, materials, onAddToLibrary }) {
+function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, materials, onAddToLibrary, sectionType = "trade" }) {
   const [collapsed, setCollapsed] = useState(false);
   const tradeItems = items.filter(it => it.trade === trade);
   const { totalCost, totalSell } = summaryTotals(tradeItems);
   const hasValues = totalSell > 0;
+  const isMaterial = sectionType === "material";
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-3">
+    <div className={cn("bg-white rounded-xl border overflow-hidden mb-3", isMaterial ? "border-sky-200" : "border-slate-200")}>
       {/* Section header */}
       <div
-        className="flex items-center justify-between px-4 py-3 cursor-pointer select-none bg-slate-50 border-b border-slate-200 hover:bg-slate-100 transition-colors"
+        className={cn("flex items-center justify-between px-4 py-3 cursor-pointer select-none border-b transition-colors",
+          isMaterial
+            ? "bg-sky-50 border-sky-200 hover:bg-sky-100"
+            : "bg-slate-50 border-slate-200 hover:bg-slate-100"
+        )}
         onClick={() => setCollapsed(c => !c)}
       >
         <div className="flex items-center gap-2">
-          {collapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-          <span className="text-sm font-semibold text-slate-800">{trade}</span>
+          {collapsed ? <ChevronRight className={cn("w-4 h-4", isMaterial ? "text-sky-400" : "text-slate-400")} /> : <ChevronDown className={cn("w-4 h-4", isMaterial ? "text-sky-400" : "text-slate-400")} />}
+          <span className={cn("text-sm font-semibold", isMaterial ? "text-sky-800" : "text-slate-800")}>{trade}</span>
+          {isMaterial && <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-sky-200 text-sky-700">Material</span>}
           <span className="text-xs text-slate-400">({tradeItems.length} item{tradeItems.length !== 1 ? "s" : ""})</span>
         </div>
         {hasValues && (
           <div className="flex items-center gap-4 text-xs text-slate-500">
             <span>Cost: <strong className="text-slate-700">{fmt(totalCost)}</strong></span>
-            <span>Sell: <strong className="text-amber-700">{fmt(totalSell)}</strong></span>
+            <span>Sell: <strong className={isMaterial ? "text-sky-700" : "text-amber-700"}>{fmt(totalSell)}</strong></span>
           </div>
         )}
       </div>
@@ -458,8 +483,8 @@ function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, mat
           </div>
           <div className="px-4 py-2 border-t border-slate-100">
             <button
-              onClick={() => onAddItem(trade)}
-              className="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-700 font-medium"
+              onClick={() => onAddItem(trade, sectionType)}
+              className={cn("flex items-center gap-1.5 text-xs font-medium", isMaterial ? "text-sky-600 hover:text-sky-700" : "text-amber-600 hover:text-amber-700")}
             >
               <Plus className="w-3.5 h-3.5" /> Add line item
             </button>
@@ -472,58 +497,138 @@ function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, mat
 
 // ─── Summary Panel ────────────────────────────────────────────────────────────
 
-function SummaryPanel({ items }) {
-  const { totalCost, totalSell, profit, margin } = summaryTotals(items);
+function SummaryPanel({ items, estimate, onEstimateChange }) {
+  const { totalCost } = summaryTotals(items);
+
+  // Effective margin % (0–95)
+  const marginPct = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
+  // Total from margin formula
+  const calcTotal  = totalCost > 0 ? totalCost / (1 - marginPct / 100) : 0;
+  // Final display total (manual override wins)
+  const hasOverride   = estimate.total_override != null && estimate.total_override !== "";
+  const displayTotal  = hasOverride ? Number(estimate.total_override) : calcTotal;
+  const displayProfit = displayTotal - totalCost;
+  const displayMargin = displayTotal > 0 ? (displayProfit / displayTotal) * 100 : 0;
+
+  const setMargin = (val) => {
+    const clamped = Math.min(95, Math.max(0, Number(val) || 0));
+    onEstimateChange({ margin_override: clamped, total_override: null });
+  };
+  const setTotal = (val) => {
+    onEstimateChange({ total_override: val === "" ? null : Number(val), margin_override: null });
+  };
+  const resetOverride = () => onEstimateChange({ total_override: null, margin_override: null });
+
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3 sticky top-6">
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4 sticky top-6">
       <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Summary</h3>
-      <div className="space-y-2">
-        <div className="flex justify-between text-sm">
-          <span className="text-slate-500">Total Cost</span>
-          <span className="font-medium text-slate-700">{fmt(totalCost)}</span>
+
+      {/* Cost */}
+      <div className="flex justify-between text-sm">
+        <span className="text-slate-500">Total Cost</span>
+        <span className="font-medium text-slate-700">{fmt(totalCost)}</span>
+      </div>
+
+      {/* Margin control */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Margin</span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setMargin(marginPct - 1)}
+              className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold flex items-center justify-center"
+            >−</button>
+            <div className="relative">
+              <input
+                type="number"
+                min={0} max={95}
+                value={marginPct}
+                onChange={e => setMargin(e.target.value)}
+                className="w-14 text-center text-sm font-bold border border-slate-200 rounded px-1 py-0.5 outline-none focus:ring-2 focus:ring-amber-300"
+              />
+              <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none">%</span>
+            </div>
+            <button
+              onClick={() => setMargin(marginPct + 1)}
+              className="w-5 h-5 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold flex items-center justify-center"
+            >+</button>
+          </div>
         </div>
+        <input
+          type="range" min={0} max={80} step={1}
+          value={Math.min(marginPct, 80)}
+          onChange={e => setMargin(e.target.value)}
+          className="w-full accent-amber-500"
+        />
+      </div>
+
+      {/* Manual total override */}
+      <div className="space-y-1">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Final Price</span>
+          {hasOverride && (
+            <button onClick={resetOverride} className="text-[10px] text-slate-400 hover:text-rose-500 underline">Reset</button>
+          )}
+        </div>
+        <div className="relative">
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
+          <input
+            type="number"
+            min={0}
+            step={100}
+            value={hasOverride ? estimate.total_override : ""}
+            onChange={e => setTotal(e.target.value)}
+            placeholder={calcTotal > 0 ? Number(calcTotal.toFixed(2)).toString() : "0.00"}
+            className={cn(
+              "w-full pl-6 pr-2 py-1.5 text-sm font-semibold border rounded-lg outline-none focus:ring-2 focus:ring-amber-300",
+              hasOverride ? "border-amber-400 bg-amber-50 text-amber-900" : "border-slate-200 text-slate-700"
+            )}
+          />
+        </div>
+        {hasOverride && (
+          <p className="text-[10px] text-amber-600">Manual override active</p>
+        )}
+      </div>
+
+      {/* Totals */}
+      <div className="border-t border-slate-100 pt-3 space-y-2">
         <div className="flex justify-between text-sm">
           <span className="text-slate-500">Total Sell</span>
-          <span className="font-semibold text-slate-900">{fmt(totalSell)}</span>
-        </div>
-        <div className="border-t border-slate-100 pt-2 flex justify-between text-sm">
-          <span className="text-slate-500">Gross Profit</span>
-          <span className={cn("font-semibold", profit >= 0 ? "text-emerald-600" : "text-rose-600")}>{fmt(profit)}</span>
+          <span className="font-bold text-slate-900">{fmt(displayTotal)}</span>
         </div>
         <div className="flex justify-between text-sm">
-          <span className="text-slate-500">Margin</span>
-          <span className={cn("font-bold text-base", margin >= 38 ? "text-emerald-600" : margin >= 30 ? "text-amber-600" : "text-rose-600")}>
-            {fmtp(margin)}
+          <span className="text-slate-500">Gross Profit</span>
+          <span className={cn("font-semibold", displayProfit >= 0 ? "text-emerald-600" : "text-rose-600")}>{fmt(displayProfit)}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-slate-500">Effective Margin</span>
+          <span className={cn("font-bold text-base", displayMargin >= 38 ? "text-emerald-600" : displayMargin >= 30 ? "text-amber-600" : "text-rose-600")}>
+            {fmtp(displayMargin)}
           </span>
         </div>
       </div>
 
-      {/* Per-trade breakdown */}
+      {/* Per-section breakdown */}
       {items.length > 0 && (() => {
-        const byTrade = {};
+        const bySection = {};
         for (const it of items) {
           const t = itemTotals(it);
-          byTrade[it.trade] = (byTrade[it.trade] || 0) + t.total_sell;
+          bySection[it.trade] = (bySection[it.trade] || 0) + t.total_sell;
         }
-        const sorted = Object.entries(byTrade).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
+        const sorted = Object.entries(bySection).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
         if (!sorted.length) return null;
         return (
           <div className="border-t border-slate-100 pt-3 space-y-1.5">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">By Trade</p>
-            {sorted.map(([trade, sell]) => (
-              <div key={trade} className="flex justify-between text-xs">
-                <span className="text-slate-500 truncate max-w-[120px]">{trade}</span>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">By Section</p>
+            {sorted.map(([sec, sell]) => (
+              <div key={sec} className="flex justify-between text-xs">
+                <span className="text-slate-500 truncate max-w-[120px]">{sec}</span>
                 <span className="font-medium text-slate-700">{fmt(sell)}</span>
               </div>
             ))}
           </div>
         );
       })()}
-
-      <div className="border-t border-slate-100 pt-3">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Formula</div>
-        <div className="text-xs text-slate-400">Sell = Cost ÷ 0.60 (40% margin)</div>
-      </div>
     </div>
   );
 }
@@ -715,7 +820,10 @@ function ClientEstimateModal({ estimate, client, items, company, onClose }) {
 
   const handleEmail = () => {
     const subject = `Estimate: ${estimate.title || "Your Estimate"}`;
-    const total = fmt(summaryTotals(items).totalSell);
+    const { totalCost: ec } = summaryTotals(items);
+    const em = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
+    const et = estimate.total_override != null ? Number(estimate.total_override) : (ec > 0 ? ec / (1 - em / 100) : 0);
+    const total = fmt(et);
     const body = [
       `Hi ${client?.name || ""},`,
       "",
@@ -730,7 +838,10 @@ function ClientEstimateModal({ estimate, client, items, company, onClose }) {
     window.open(`mailto:${client?.email || ""}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
   };
 
-  const { totalSell } = summaryTotals(items);
+  const { totalCost: previewCost } = summaryTotals(items);
+  const previewMarginPct = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
+  const previewCalcTotal = previewCost > 0 ? previewCost / (1 - previewMarginPct / 100) : 0;
+  const totalSell = estimate.total_override != null ? Number(estimate.total_override) : previewCalcTotal;
   const trades = [...new Set(items.map(i => i.trade).filter(Boolean))];
   const companyName = company?.invoice_company_name || company?.name || "Siteline";
   const accentHex = company?.invoice_accent_color || company?.color || "#b5965a";
@@ -918,6 +1029,68 @@ function ClientEstimateModal({ estimate, client, items, company, onClose }) {
   );
 }
 
+// ─── Add Material Section Dialog ─────────────────────────────────────────────
+
+function AddMaterialSectionDialog({ activeSections, onAdd, onClose, customCategories, onAddCustomCategory }) {
+  const [newName, setNewName] = useState("");
+  const allCategories = [...DEFAULT_MATERIAL_CATEGORIES, ...customCategories];
+  const available = allCategories.filter(c => !activeSections.includes(c));
+
+  const handleAddCustom = () => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    onAddCustomCategory(trimmed);
+    onAdd(trimmed);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="font-bold text-slate-900">Add Material Section</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl leading-none">×</button>
+        </div>
+        <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto">
+          {available.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-2">All categories already added.</p>
+          ) : (
+            <div className="space-y-1">
+              {available.map(cat => (
+                <button key={cat} onClick={() => { onAdd(cat); onClose(); }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-sky-50 hover:text-sky-700 text-slate-700 transition-colors">
+                  {cat}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="p-4 border-t border-slate-100 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Add Custom Category</p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && handleAddCustom()}
+              placeholder="e.g. Pool Equipment, Millwork…"
+              className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-sky-300"
+            />
+            <button
+              onClick={handleAddCustom}
+              disabled={!newName.trim()}
+              className="px-3 py-1.5 rounded-lg bg-sky-500 text-white text-sm font-medium disabled:opacity-40 hover:bg-sky-600 transition-colors"
+            >
+              Add
+            </button>
+          </div>
+          <p className="text-[11px] text-slate-400">Custom categories are saved for future estimates.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Add Trade Dialog ─────────────────────────────────────────────────────────
 
 function AddTradeDialog({ activeTrades, onAdd, onClose }) {
@@ -966,9 +1139,10 @@ export default function EstimateDetail() {
   const existingId = params.get("id");
   const isNew    = params.get("new") === "true" || !existingId;
 
-  const [showPicker, setShowPicker]     = useState(isNew);
-  const [showAddTrade, setShowAddTrade] = useState(false);
-  const [showPreview, setShowPreview]   = useState(false);
+  const [showPicker, setShowPicker]           = useState(isNew);
+  const [showAddTrade, setShowAddTrade]       = useState(false);
+  const [showAddMaterial, setShowAddMaterial] = useState(false);
+  const [showPreview, setShowPreview]         = useState(false);
   const [saving, setSaving]             = useState(false);
   const [saved, setSaved]               = useState(false);
   const [saveError, setSaveError]       = useState("");
@@ -982,24 +1156,32 @@ export default function EstimateDetail() {
     status: "draft",
     issue_date: new Date().toISOString().slice(0, 10),
     notes: "",
+    margin_override: null,
+    total_override: null,
   });
-  const [items, setItems] = useState([]);
-  const [activeTrades, setActiveTrades] = useState([]);
+  const [items, setItems]                         = useState([]);
+  const [activeTrades, setActiveTrades]           = useState([]);
+  const [activeMaterialSections, setActiveMaterialSections] = useState([]);
+  const [customMaterialCategories, setCustomMaterialCategories] = useState([]);
 
-  // Sync activeTrades from items
+  // Sync sections from items
   useEffect(() => {
-    const trades = [...new Set(items.map(i => i.trade))];
-    setActiveTrades(prev => {
-      const merged = [...new Set([...prev, ...trades])];
-      return merged;
-    });
+    const trades   = [...new Set(items.filter(i => i.sectionType !== "material").map(i => i.trade))];
+    const matSecs  = [...new Set(items.filter(i => i.sectionType === "material").map(i => i.trade))];
+    setActiveTrades(prev => [...new Set([...prev, ...trades])]);
+    setActiveMaterialSections(prev => [...new Set([...prev, ...matSecs])]);
   }, [items]);
 
-  // Load clients, materials, company profile
+  // Load clients, materials, company profile + custom material categories
   useEffect(() => {
     base44.entities.Client.list("name").then(setClients);
     base44.entities.Material.list("name").then(setMaterials);
-    base44.entities.CompanyProfile.list().then(rows => { if (rows.length) setCompany(rows[0]); });
+    base44.entities.CompanyProfile.list().then(rows => {
+      if (rows.length) {
+        setCompany(rows[0]);
+        setCustomMaterialCategories(rows[0]?.settings?.custom_material_categories || []);
+      }
+    });
   }, []);
 
   const handleAddToLibrary = useCallback(async (matData) => {
@@ -1033,15 +1215,18 @@ export default function EstimateDetail() {
       const est = await base44.entities.Estimate.get(existingId);
       if (!est) return;
       setEstimate({
-        title:      est.title      || "",
-        client_id:  est.client_id  || "",
-        status:     est.status     || "draft",
-        issue_date: est.issue_date || new Date().toISOString().slice(0, 10),
-        notes:      est.notes      || "",
+        title:           est.title      || "",
+        client_id:       est.client_id  || "",
+        status:          est.status     || "draft",
+        issue_date:      est.issue_date || new Date().toISOString().slice(0, 10),
+        notes:           est.notes      || "",
+        margin_override: est.margin_override ?? null,
+        total_override:  est.total_override  ?? null,
       });
       const savedItems = Array.isArray(est.line_items) ? est.line_items : [];
       setItems(savedItems);
-      setActiveTrades([...new Set(savedItems.map(i => i.trade))]);
+      setActiveTrades([...new Set(savedItems.filter(i => i.sectionType !== "material").map(i => i.trade))]);
+      setActiveMaterialSections([...new Set(savedItems.filter(i => i.sectionType === "material").map(i => i.trade))]);
       setShowPicker(false);
     })();
   }, [existingId]);
@@ -1065,8 +1250,13 @@ export default function EstimateDetail() {
     setSaved(false);
   }, []);
 
-  const handleAddItem = useCallback((trade) => {
-    setItems(prev => [...prev, blankItem(trade)]);
+  const handleAddItem = useCallback((sectionName, sectionType = "trade") => {
+    setItems(prev => [...prev, blankItem(sectionName, "", "SF", 1, sectionType)]);
+    setSaved(false);
+  }, []);
+
+  const handleEstimateChange = useCallback((patch) => {
+    setEstimate(e => ({ ...e, ...patch }));
     setSaved(false);
   }, []);
 
@@ -1075,19 +1265,38 @@ export default function EstimateDetail() {
     setSaved(false);
   };
 
+  const handleAddMaterialSection = (name) => {
+    setActiveMaterialSections(prev => [...prev, name]);
+    setSaved(false);
+  };
+
+  const handleAddCustomCategory = async (name) => {
+    const updated = [...customMaterialCategories, name];
+    setCustomMaterialCategories(updated);
+    if (company?.id) {
+      const newSettings = { ...(company.settings || {}), custom_material_categories: updated };
+      await base44.entities.CompanyProfile.update(company.id, { settings: newSettings });
+      setCompany(c => ({ ...c, settings: newSettings }));
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setSaveError("");
     try {
-      const { totalSell, margin } = summaryTotals(items);
+      const { totalCost } = summaryTotals(items);
+      const marginPct = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
+      const calcTotal = totalCost > 0 ? totalCost / (1 - marginPct / 100) : 0;
+      const effectiveTotal  = estimate.total_override != null ? Number(estimate.total_override) : calcTotal;
+      const effectiveMargin = effectiveTotal > 0 ? ((effectiveTotal - totalCost) / effectiveTotal) * 100 : marginPct;
       const payload = {
         ...estimate,
         // Convert empty strings to null for FK / nullable fields
         client_id:      estimate.client_id  || null,
         project_id:     estimate.project_id || null,
         line_items:     items,
-        total:          totalSell,
-        margin_percent: margin,
+        total:          effectiveTotal,
+        margin_percent: effectiveMargin,
       };
       if (existingId) {
         await base44.entities.Estimate.update(existingId, payload);
@@ -1126,6 +1335,15 @@ export default function EstimateDetail() {
           activeTrades={activeTrades}
           onAdd={handleAddTrade}
           onClose={() => setShowAddTrade(false)}
+        />
+      )}
+      {showAddMaterial && (
+        <AddMaterialSectionDialog
+          activeSections={activeMaterialSections}
+          onAdd={handleAddMaterialSection}
+          onClose={() => setShowAddMaterial(false)}
+          customCategories={customMaterialCategories}
+          onAddCustomCategory={handleAddCustomCategory}
         />
       )}
 
@@ -1209,13 +1427,13 @@ export default function EstimateDetail() {
 
       {/* Main content */}
       <div className="max-w-screen-xl mx-auto px-4 lg:px-6 py-6 flex gap-6 items-start">
-        {/* Left — trade sections */}
+        {/* Left — trade + material sections */}
         <div className="flex-1 min-w-0 space-y-1">
-          {activeTrades.length === 0 && (
+          {activeTrades.length === 0 && activeMaterialSections.length === 0 && (
             <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-16 text-center">
               <FileText className="w-10 h-10 text-slate-200 mx-auto mb-3" />
-              <p className="text-slate-500 font-medium">No trade sections yet</p>
-              <p className="text-slate-400 text-sm mt-1">Add a trade section or start from a template.</p>
+              <p className="text-slate-500 font-medium">No sections yet</p>
+              <p className="text-slate-400 text-sm mt-1">Add a trade or material section, or start from a template.</p>
             </div>
           )}
 
@@ -1229,15 +1447,36 @@ export default function EstimateDetail() {
               onAddItem={handleAddItem}
               materials={materials}
               onAddToLibrary={handleAddToLibrary}
+              sectionType="trade"
             />
           ))}
 
-          <div className="flex gap-2 pt-2">
+          {activeMaterialSections.map(sec => (
+            <TradeSection
+              key={sec}
+              trade={sec}
+              items={items}
+              onChangeItem={handleChangeItem}
+              onDeleteItem={handleDeleteItem}
+              onAddItem={handleAddItem}
+              materials={materials}
+              onAddToLibrary={handleAddToLibrary}
+              sectionType="material"
+            />
+          ))}
+
+          <div className="flex flex-wrap gap-2 pt-2">
             <button
               onClick={() => setShowAddTrade(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-slate-300 text-sm text-slate-500 hover:border-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-all"
             >
               <Plus className="w-4 h-4" /> Add Trade Section
+            </button>
+            <button
+              onClick={() => setShowAddMaterial(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-sky-200 text-sm text-slate-500 hover:border-sky-400 hover:text-sky-600 hover:bg-sky-50 transition-all"
+            >
+              <Plus className="w-4 h-4" /> Add Material Section
             </button>
             <button
               onClick={() => setShowPicker(true)}
@@ -1262,7 +1501,7 @@ export default function EstimateDetail() {
 
         {/* Right — summary */}
         <div className="w-64 flex-shrink-0">
-          <SummaryPanel items={items} />
+          <SummaryPanel items={items} estimate={estimate} onEstimateChange={handleEstimateChange} />
         </div>
       </div>
     </div>
