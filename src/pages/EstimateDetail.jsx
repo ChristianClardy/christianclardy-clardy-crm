@@ -1086,10 +1086,9 @@ export default function EstimateDetail() {
     }
   };
 
+  const clientObj  = clients.find(c => c.id === estimate.client_id) || null;
   const clientName = clientObj?.name || "";
   const { totalCost, totalSell } = summaryTotals(items);
-
-  const clientObj = clients.find(c => c.id === estimate.client_id) || null;
 
   return (
     <div className="min-h-screen bg-slate-50">
