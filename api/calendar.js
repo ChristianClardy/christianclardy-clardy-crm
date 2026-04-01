@@ -10,11 +10,11 @@ module.exports = async function handler(req, res) {
       return;
     }
 
-    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
     const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceKey) {
-      res.status(500).send('Missing Supabase credentials in environment variables');
+      res.status(500).send(`Missing env vars — URL: ${!!supabaseUrl}, KEY: ${!!serviceKey}`);
       return;
     }
 
