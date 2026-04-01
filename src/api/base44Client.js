@@ -80,6 +80,16 @@ function parseSortField(sortField) {
   return { field, ascending: !desc };
 }
 
+// ─── Centralised error reporter ──────────────────────────────────────────────
+// Shows a visible alert so save failures are never silent.
+function reportError(op, table, error) {
+  const msg = `${op} failed on "${table}": ${error?.message || error}`;
+  console.error('[base44]', msg, error);
+  // Use a brief timeout so React's render cycle isn't interrupted mid-update
+  setTimeout(() => alert(msg), 0);
+  throw error;
+}
+
 // ─── Entity factory ──────────────────────────────────────────────────────────
 function createEntity(tableName) {
   return {
@@ -90,7 +100,7 @@ function createEntity(tableName) {
       if (sort) query = query.order(sort.field, { ascending: sort.ascending });
       if (limit) query = query.limit(limit);
       const { data, error } = await query;
-      if (error) throw error;
+      if (error) reportError('list', tableName, error);
       return (data || []).map(mapDates);
     },
 
@@ -104,35 +114,35 @@ function createEntity(tableName) {
       if (sort) query = query.order(sort.field, { ascending: sort.ascending });
       if (limit) query = query.limit(limit);
       const { data, error } = await query;
-      if (error) throw error;
+      if (error) reportError('filter', tableName, error);
       return (data || []).map(mapDates);
     },
 
     /** get(id) → single record */
     async get(id) {
       const { data, error } = await supabase.from(tableName).select('*').eq('id', id).single();
-      if (error) throw error;
+      if (error) reportError('get', tableName, error);
       return mapDates(data);
     },
 
     /** create(record) → created record */
     async create(record) {
       const { data, error } = await supabase.from(tableName).insert(cleanForWrite(record)).select().single();
-      if (error) throw error;
+      if (error) reportError('create', tableName, error);
       return mapDates(data);
     },
 
     /** update(id, record) → updated record */
     async update(id, record) {
       const { data, error } = await supabase.from(tableName).update(cleanForWrite(record)).eq('id', id).select().single();
-      if (error) throw error;
+      if (error) reportError('update', tableName, error);
       return mapDates(data);
     },
 
     /** delete(id) */
     async delete(id) {
       const { error } = await supabase.from(tableName).delete().eq('id', id);
-      if (error) throw error;
+      if (error) reportError('delete', tableName, error);
     },
 
     /**
