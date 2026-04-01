@@ -9,13 +9,22 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { cn } from "@/lib/utils";
 import MaterialImportDialog from "./MaterialImportDialog";
 
-const CATEGORIES = [
+const MATERIAL_CATEGORIES = [
   "Concrete & Masonry", "Framing & Lumber", "Roofing", "Insulation",
   "Drywall", "Flooring", "Plumbing", "Electrical", "HVAC",
   "Windows & Doors", "Finish & Trim", "Landscaping", "Equipment", "Other"
 ];
 
-const UNITS = ["EA", "LF", "SF", "CY", "CF", "LB", "TON", "HR", "DAY", "GAL", "BAG", "ROLL", "SHEET"];
+const LABOR_CATEGORIES = [
+  "Framing Labor", "Masonry Labor", "Roofing Labor", "Electrical Labor",
+  "Plumbing Labor", "HVAC Labor", "Finish Labor", "Demo Labor",
+  "General Labor", "Subcontractor", "Other Labor"
+];
+
+// All category values that are "labor" — used to split the two libraries
+const LABOR_CATEGORY_SET = new Set(LABOR_CATEGORIES);
+
+const UNITS = ["EA", "LF", "SF", "CY", "CF", "LB", "TON", "HR", "DAY", "GAL", "BAG", "ROLL", "SHEET", "LS"];
 
 const MARKUP_TYPES = [
   { value: "markup_percent", label: "Markup %" },
@@ -55,14 +64,22 @@ function mergeMaterial(...mats) {
   };
 }
 
-const emptyForm = {
+const emptyMaterialForm = {
   name: "", description: "", category: "Other", unit: "EA",
   material_cost: "", labor_cost: "", sub_cost: "",
   markup_type: "markup_percent", markup_value: "", overhead_percent: "", profit_percent: "",
   supplier: "", sku: "", notes: ""
 };
 
+const emptyLaborForm = {
+  name: "", description: "", category: "General Labor", unit: "LS",
+  material_cost: "", labor_cost: "", sub_cost: "",
+  markup_type: "markup_percent", markup_value: "", overhead_percent: "", profit_percent: "",
+  supplier: "", sku: "", notes: ""
+};
+
 export default function MaterialLibrary() {
+  const [libType, setLibType] = useState("material"); // "material" | "labor"
   const [materials, setMaterials] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -70,7 +87,11 @@ export default function MaterialLibrary() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(emptyMaterialForm);
+
+  const isLabor = libType === "labor";
+  const CATEGORIES = isLabor ? LABOR_CATEGORIES : MATERIAL_CATEGORIES;
+  const emptyForm = isLabor ? emptyLaborForm : emptyMaterialForm;
 
   useEffect(() => { load(); }, []);
 
@@ -81,6 +102,9 @@ export default function MaterialLibrary() {
   };
 
   const openNew = () => { setEditing(null); setForm(emptyForm); setDialogOpen(true); };
+
+  // Reset category filter when switching library type
+  const switchLib = (type) => { setLibType(type); setCategoryFilter("All"); setSearch(""); };;
 
   const openEdit = (m) => {
     setEditing(m);
@@ -131,16 +155,17 @@ export default function MaterialLibrary() {
     if (confirm("Delete this material?")) { await base44.entities.Material.delete(id); load(); }
   };
 
-  // Count duplicate groups for the badge
+  // Count duplicate groups scoped to the active library type
   const dupCount = useMemo(() => {
+    const scoped = materials.filter(m => isLabor ? LABOR_CATEGORY_SET.has(m.category) : !LABOR_CATEGORY_SET.has(m.category));
     const groups = {};
-    for (const m of materials) {
+    for (const m of scoped) {
       const key = (m.name || "").trim().toLowerCase();
       if (!key) continue;
       groups[key] = (groups[key] || 0) + 1;
     }
     return Object.values(groups).filter(c => c > 1).length;
-  }, [materials]);
+  }, [materials, isLabor]);
 
   const handleDedup = async () => {
     if (!confirm(`Found ${dupCount} duplicate name${dupCount !== 1 ? "s" : ""}. This will merge them, always keeping the record with pricing. Continue?`)) return;
@@ -175,17 +200,28 @@ export default function MaterialLibrary() {
 
   const categories = ["All", ...CATEGORIES];
   const filtered = materials.filter(m => {
-    const matchSearch = m.name.toLowerCase().includes(search.toLowerCase()) || (m.supplier || "").toLowerCase().includes(search.toLowerCase());
+    const inThisLib = isLabor ? LABOR_CATEGORY_SET.has(m.category) : !LABOR_CATEGORY_SET.has(m.category);
+    const matchSearch = (m.name || "").toLowerCase().includes(search.toLowerCase()) || (m.supplier || "").toLowerCase().includes(search.toLowerCase());
     const matchCat = categoryFilter === "All" || m.category === categoryFilter;
-    return matchSearch && matchCat;
+    return inThisLib && matchSearch && matchCat;
   });
 
   const totalCost = (m) => (m.material_cost || 0) + (m.labor_cost || 0) + (m.sub_cost || 0) || m.unit_cost || 0;
 
   return (
     <div className="space-y-4">
+      {/* Library type switcher */}
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+        {[{ key: "material", label: "Material Library" }, { key: "labor", label: "Labor Library" }].map(t => (
+          <button key={t.key} onClick={() => switchLib(t.key)}
+            className={cn("text-sm px-4 py-2 rounded-lg font-medium transition-all", libType === t.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-900">Material Library</h2>
+        <h2 className="text-lg font-semibold text-slate-900">{isLabor ? "Labor Library" : "Material Library"}</h2>
         <div className="flex flex-wrap gap-2 items-start">
           <Button variant="outline" size="sm" onClick={handleDedup} className="gap-1.5 text-slate-600 border-slate-200 hover:bg-slate-50 relative">
             <Sparkles className="w-4 h-4" /> Clean Duplicates
@@ -284,7 +320,7 @@ export default function MaterialLibrary() {
       {/* Add / Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editing ? "Edit Material" : "Add Material"}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editing ? `Edit ${isLabor ? "Labor" : "Material"}` : `Add ${isLabor ? "Labor" : "Material"}`}</DialogTitle></DialogHeader>
           <form onSubmit={handleSave} className="space-y-3">
             <div><Label className="text-xs">Name *</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required className="mt-1 h-9 text-sm" /></div>
             <div><Label className="text-xs">Description</Label><Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="mt-1 h-9 text-sm" /></div>
@@ -352,7 +388,7 @@ export default function MaterialLibrary() {
 
             <div className="flex justify-end gap-3 pt-2 border-t border-slate-200">
               <Button type="button" variant="outline" size="sm" onClick={() => setDialogOpen(false)}>Cancel</Button>
-              <Button type="submit" size="sm" className="bg-gradient-to-r from-amber-500 to-orange-500">{editing ? "Update" : "Add"} Material</Button>
+              <Button type="submit" size="sm" className="bg-gradient-to-r from-amber-500 to-orange-500">{editing ? "Update" : "Add"} {isLabor ? "Labor" : "Material"}</Button>
             </div>
           </form>
         </DialogContent>
