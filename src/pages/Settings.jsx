@@ -382,8 +382,13 @@ function InviteTab() {
     setError("");
     setSuccess(false);
     try {
-      const { error: invErr } = await supabase.auth.admin?.inviteUserByEmail?.(inviteEmail) || {};
-      if (invErr) throw invErr;
+      const res = await fetch("/api/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: inviteEmail, full_name: inviteFullName }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Invite failed.");
       if (createEmployee) {
         const existing = await base44.entities.Employee.filter({ email: inviteEmail });
         if (existing.length === 0) {
@@ -398,8 +403,8 @@ function InviteTab() {
       setSuccess(true);
       setInviteEmail("");
       setInviteFullName("");
-    } catch {
-      setError("Invite could not be sent automatically. Add the user directly in Supabase → Authentication → Users → Invite User.");
+    } catch (err) {
+      setError(err.message || "Invite could not be sent.");
     }
     setInviting(false);
   };
