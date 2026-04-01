@@ -10,11 +10,13 @@ module.exports = async function handler(req, res) {
       return;
     }
 
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-    const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseUrl = process.env.SUPABASE_URL
+      || process.env.VITE_SUPABASE_URL
+      || 'https://fneasddxtejasvsojgcu.supabase.co';
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    if (!supabaseUrl || !serviceKey) {
-      res.status(500).send(`Missing env vars — URL: ${!!supabaseUrl}, KEY: ${!!serviceKey}`);
+    if (!serviceKey) {
+      res.status(500).send('Missing SUPABASE_SERVICE_ROLE_KEY environment variable');
       return;
     }
 
