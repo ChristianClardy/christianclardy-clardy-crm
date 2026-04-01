@@ -2,51 +2,26 @@
 // No imports needed — avoids all ESM/CJS module issues.
 
 const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
-
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 module.exports = async function handler(req, res) {
   try {
-    const { uid } = req.query;
-
     if (!SERVICE_KEY) {
       res.status(500).send('Missing SUPABASE_SERVICE_ROLE_KEY');
       return;
     }
 
-    // Look up user email from uid
-    let userEmail = null;
-    if (uid) {
-      const userRes = await fetch(
-        `${SUPABASE_URL}/auth/v1/admin/users/${uid}`,
-        {
-          headers: {
-            apikey: SERVICE_KEY,
-            Authorization: `Bearer ${SERVICE_KEY}`,
-          },
-        }
-      );
-      if (!userRes.ok) {
-        res.status(404).send(`User not found (${userRes.status})`);
-        return;
+    // Fetch all calendar events
+    const eventsRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/calendar_events?select=*&order=start_datetime.asc`,
+      {
+        headers: {
+          apikey: SERVICE_KEY,
+          Authorization: `Bearer ${SERVICE_KEY}`,
+          Accept: 'application/json',
+        },
       }
-      const userData = await userRes.json();
-      userEmail = userData.email;
-    }
-
-    // Fetch calendar events
-    let url = `${SUPABASE_URL}/rest/v1/calendar_events?select=*&order=start_datetime.asc`;
-    if (userEmail) {
-      url += `&assigned_to=eq.${encodeURIComponent(userEmail)}`;
-    }
-
-    const eventsRes = await fetch(url, {
-      headers: {
-        apikey: SERVICE_KEY,
-        Authorization: `Bearer ${SERVICE_KEY}`,
-        Accept: 'application/json',
-      },
-    });
+    );
 
     if (!eventsRes.ok) {
       res.status(500).send(`DB error: ${eventsRes.status} ${await eventsRes.text()}`);
@@ -57,7 +32,7 @@ module.exports = async function handler(req, res) {
 
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.send(generateICS(events || [], userEmail));
+    res.send(generateICS(events || []));
 
   } catch (err) {
     res.status(500).send(`Error: ${err.message}`);
@@ -66,9 +41,12 @@ module.exports = async function handler(req, res) {
 
 function toICSDate(dateStr, allDay) {
   if (!dateStr) return null;
-  const d = new Date(dateStr);
-  if (allDay) return d.toISOString().slice(0, 10).replace(/-/g, '');
-  return d.toISOString().replace(/[-:.]/g, '').slice(0, 15) + 'Z';
+  // Times are stored as local (timestamp without time zone).
+  // Use floating format (no Z) so Apple/Google Calendar treats them as local.
+  const s = String(dateStr).replace(' ', 'T').slice(0, 19);
+  const [datePart, timePart = '00:00:00'] = s.split('T');
+  if (allDay) return datePart.replace(/-/g, '');
+  return datePart.replace(/-/g, '') + 'T' + timePart.replace(/:/g, '');
 }
 
 function esc(str) {
@@ -80,8 +58,7 @@ function esc(str) {
     .replace(/\r?\n/g, '\\n');
 }
 
-function generateICS(events, userEmail) {
-  const calName = userEmail ? `Clardy.io - ${userEmail}` : 'Clardy.io';
+function generateICS(events) {
   const stamp = toICSDate(new Date().toISOString(), false);
   const lines = [
     'BEGIN:VCALENDAR',
@@ -89,7 +66,7 @@ function generateICS(events, userEmail) {
     'PRODID:-//Clardy.io//Calendar//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
-    `X-WR-CALNAME:${calName}`,
+    'X-WR-CALNAME:Clardy.io',
     'X-WR-TIMEZONE:UTC',
     'REFRESH-INTERVAL;VALUE=DURATION:PT5M',
     'X-PUBLISHED-TTL:PT5M',
@@ -111,6 +88,7 @@ function generateICS(events, userEmail) {
     }
     lines.push(`SUMMARY:${esc(ev.title)}`);
     if (ev.description) lines.push(`DESCRIPTION:${esc(ev.description)}`);
+    if (ev.location)    lines.push(`LOCATION:${esc(ev.location)}`);
     if (ev.event_type)  lines.push(`CATEGORIES:${esc(ev.event_type)}`);
     lines.push('END:VEVENT');
   }
