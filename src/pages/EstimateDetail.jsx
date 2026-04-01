@@ -1341,6 +1341,7 @@ export default function EstimateDetail() {
       setEstimate({
         title:           est.title      || "",
         client_id:       est.client_id  || "",
+        client_name:     est.client_name || "",
         status:          est.status     || "draft",
         issue_date:      est.issue_date || new Date().toISOString().slice(0, 10),
         notes:           est.notes      || "",
@@ -1459,7 +1460,9 @@ export default function EstimateDetail() {
   };
 
   const clientObj  = clients.find(c => c.id === estimate.client_id) || null;
-  const clientName = clientObj?.name || "";
+  // Fall back to the stored name in case the lookup hasn't resolved yet (e.g. leads loading)
+  const clientName = clientObj?.name || estimate.client_name || "";
+  const previewClient = clientObj || (clientName ? { name: clientName, email: "", phone: "", address: "" } : null);
   const effectiveMarginPct = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
   const { totalCost, totalSell } = summaryTotals(items, effectiveMarginPct);
 
@@ -1468,7 +1471,7 @@ export default function EstimateDetail() {
       {showPreview && (
         <ClientEstimateModal
           estimate={estimate}
-          client={clientObj}
+          client={previewClient}
           items={items}
           company={company}
           onClose={() => setShowPreview(false)}
@@ -1511,7 +1514,15 @@ export default function EstimateDetail() {
 
           <select
             value={estimate.client_id}
-            onChange={e => { setEstimate(est => ({ ...est, client_id: e.target.value })); setSaved(false); }}
+            onChange={e => {
+              const selected = clients.find(c => c.id === e.target.value);
+              setEstimate(est => ({
+                ...est,
+                client_id:   e.target.value,
+                client_name: selected?.name || "",
+              }));
+              setSaved(false);
+            }}
             className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-amber-300 min-w-[180px]"
           >
             <option value="">— Select client —</option>
