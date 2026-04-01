@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Plus, Search, FileText, Send, CheckCircle, XCircle, Clock, RefreshCw } from "lucide-react";
+import { Plus, Search, FileText, Send, CheckCircle, XCircle, Clock, RefreshCw, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -37,6 +37,17 @@ export default function Estimates() {
   };
 
   const clientMap = clients.reduce((acc, c) => ({ ...acc, [c.id]: c }), {});
+
+  const handleDuplicate = async (e, est) => {
+    e.stopPropagation(); // don't navigate to the estimate
+    const { id, created_at, updated_at, created_date, updated_date, estimate_number, ...rest } = est;
+    const copy = await base44.entities.Estimate.create({
+      ...rest,
+      title: `${est.title || "Estimate"} (Copy)`,
+      status: "draft",
+    });
+    navigate(createPageUrl(`EstimateDetail?id=${copy.id}`));
+  };
 
   const filtered = estimates.filter(e =>
     e.title?.toLowerCase().includes(search.toLowerCase()) ||
@@ -98,6 +109,7 @@ export default function Estimates() {
                 <th className="px-5 py-3 text-left">Issue Date</th>
                 <th className="px-5 py-3 text-right">Total</th>
                 <th className="px-5 py-3 text-center">Status</th>
+                <th className="px-5 py-3 w-12"></th>
               </tr>
             </thead>
             <tbody>
@@ -123,6 +135,15 @@ export default function Estimates() {
                       <span className={cn("inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full", st.className)}>
                         <Icon className="w-3 h-3" /> {st.label}
                       </span>
+                    </td>
+                    <td className="px-5 py-3 text-center">
+                      <button
+                        onClick={(e) => handleDuplicate(e, est)}
+                        title="Duplicate estimate"
+                        className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
                     </td>
                   </tr>
                 );
