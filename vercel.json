@@ -1,6 +1,6 @@
 {
   "functions": {
-    "api/calendar.cjs": {
+    "api/calendar.js": {
       "runtime": "nodejs20.x"
     }
   },
