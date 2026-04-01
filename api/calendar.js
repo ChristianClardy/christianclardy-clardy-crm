@@ -1,9 +1,7 @@
 // Uses native fetch (Node 18+) to call Supabase REST API directly.
 // No imports needed — avoids all ESM/CJS module issues.
 
-const SUPABASE_URL = process.env.SUPABASE_URL
-  || process.env.VITE_SUPABASE_URL
-  || 'https://fneasddxtejasvsojgcu.supabase.co';
+const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
 
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
