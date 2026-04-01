@@ -1,62 +1,68 @@
-const { createClient } = require('@supabase/supabase-js');
+// Uses native fetch (Node 18+) to call Supabase REST API directly.
+// No imports needed — avoids all ESM/CJS module issues.
+
+const SUPABASE_URL = process.env.SUPABASE_URL
+  || process.env.VITE_SUPABASE_URL
+  || 'https://fneasddxtejasvsojgcu.supabase.co';
+
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 module.exports = async function handler(req, res) {
   try {
     const { uid } = req.query;
 
-    const calToken = process.env.CALENDAR_TOKEN;
-    if (!uid && calToken && req.query.token !== calToken) {
-      res.status(401).send('Unauthorized');
+    if (!SERVICE_KEY) {
+      res.status(500).send('Missing SUPABASE_SERVICE_ROLE_KEY');
       return;
     }
 
-    const supabaseUrl = process.env.SUPABASE_URL
-      || process.env.VITE_SUPABASE_URL
-      || 'https://fneasddxtejasvsojgcu.supabase.co';
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!serviceKey) {
-      res.status(500).send('Missing SUPABASE_SERVICE_ROLE_KEY environment variable');
-      return;
-    }
-
-    const supabase = createClient(supabaseUrl, serviceKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-
+    // Look up user email from uid
     let userEmail = null;
-
     if (uid) {
-      const { data, error } = await supabase.auth.admin.getUserById(uid);
-      if (error || !data?.user) {
-        res.status(404).send(`User not found: ${error?.message || 'unknown'}`);
+      const userRes = await fetch(
+        `${SUPABASE_URL}/auth/v1/admin/users/${uid}`,
+        {
+          headers: {
+            apikey: SERVICE_KEY,
+            Authorization: `Bearer ${SERVICE_KEY}`,
+          },
+        }
+      );
+      if (!userRes.ok) {
+        res.status(404).send(`User not found (${userRes.status})`);
         return;
       }
-      userEmail = data.user.email;
+      const userData = await userRes.json();
+      userEmail = userData.email;
     }
 
-    let query = supabase
-      .from('calendar_events')
-      .select('*')
-      .order('start_datetime', { ascending: true });
-
+    // Fetch calendar events
+    let url = `${SUPABASE_URL}/rest/v1/calendar_events?select=*&order=start_datetime.asc`;
     if (userEmail) {
-      query = query.eq('assigned_to', userEmail);
+      url += `&assigned_to=eq.${encodeURIComponent(userEmail)}`;
     }
 
-    const { data: events, error: eventsError } = await query;
+    const eventsRes = await fetch(url, {
+      headers: {
+        apikey: SERVICE_KEY,
+        Authorization: `Bearer ${SERVICE_KEY}`,
+        Accept: 'application/json',
+      },
+    });
 
-    if (eventsError) {
-      res.status(500).send(`DB error: ${eventsError.message}`);
+    if (!eventsRes.ok) {
+      res.status(500).send(`DB error: ${eventsRes.status} ${await eventsRes.text()}`);
       return;
     }
+
+    const events = await eventsRes.json();
 
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.send(generateICS(events || [], userEmail));
 
   } catch (err) {
-    res.status(500).send(`Crash: ${err.message}`);
+    res.status(500).send(`Error: ${err.message}`);
   }
 };
 
@@ -77,7 +83,7 @@ function esc(str) {
 }
 
 function generateICS(events, userEmail) {
-  const calName = userEmail ? `Clardy.io – ${userEmail}` : 'Clardy.io';
+  const calName = userEmail ? `Clardy.io - ${userEmail}` : 'Clardy.io';
   const stamp = toICSDate(new Date().toISOString(), false);
   const lines = [
     'BEGIN:VCALENDAR',
