@@ -7,6 +7,7 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { ThemeProvider } from '@/lib/ThemeContext';
 import Login from './pages/Login';
+import SetPassword from './pages/SetPassword';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import CRM from './pages/CRM';
 import Payments from './pages/Payments';
@@ -29,8 +30,21 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   <Layout currentPageName={currentPageName}>{children}</Layout>
   : <>{children}</>;
 
+// Detect invite link synchronously before Supabase clears the hash
+const isInviteFlow = (() => {
+  try {
+    const params = new URLSearchParams(window.location.hash.slice(1));
+    return params.get('type') === 'invite';
+  } catch {
+    return false;
+  }
+})();
+
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, authError, navigateToLogin } = useAuth();
+
+  // Invite link clicked — show password-set screen regardless of auth state
+  if (isInviteFlow) return <SetPassword />;
 
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
