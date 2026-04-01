@@ -1510,10 +1510,9 @@ export default function EstimateDetail() {
             className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-amber-300 min-w-[180px]"
           >
             <option value="">— Select client —</option>
-            {clients.filter(c => !c._isLead).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            {clients.some(c => c._isLead) && <optgroup label="── Leads ──">
-              {clients.filter(c => c._isLead).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </optgroup>}
+            {[...clients].sort((a, b) => (a.name || "").localeCompare(b.name || "")).map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
           </select>
 
           <select
