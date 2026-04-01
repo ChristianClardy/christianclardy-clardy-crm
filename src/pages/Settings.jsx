@@ -392,11 +392,8 @@ function CalendarFeedTab() {
     });
   }, []);
 
-  const token = import.meta.env.VITE_CALENDAR_TOKEN || "";
   const base = typeof window !== "undefined" ? window.location.origin : "https://clardy.io";
-  const feedUrl = userId
-    ? `${base}/api/calendar?token=${token}&uid=${userId}`
-    : null;
+  const feedUrl = userId ? `${base}/api/calendar?uid=${userId}` : null;
 
   const copy = () => {
     if (!feedUrl) return;

@@ -1,9 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
-  // Shared secret token check
+  const { uid } = req.query;
+
+  // If a uid is provided, the UUID itself is sufficient security (unguessable).
+  // Token is only required for the all-events feed (no uid).
   const calToken = process.env.CALENDAR_TOKEN;
-  if (calToken && req.query.token !== calToken) {
+  if (!uid && calToken && req.query.token !== calToken) {
     res.status(401).send('Unauthorized');
     return;
   }
@@ -12,8 +15,6 @@ export default async function handler(req, res) {
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
   );
-
-  const { uid } = req.query;
 
   let userEmail = null;
 
