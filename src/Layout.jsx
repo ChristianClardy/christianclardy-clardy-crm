@@ -45,7 +45,6 @@ export default function Layout({ children, currentPageName }) {
     { name: "WIP Report", href: createPageUrl("WIPReport"), icon: FileBarChart2 },
     { name: "Reports", href: createPageUrl("Reports"), icon: FileText },
     { name: "Workspace Items", href: createPageUrl("WorkplaceItems"), icon: Wrench },
-    { name: "Company", href: createPageUrl("Company"), icon: Building2 },
     { name: "Settings", href: createPageUrl("Settings"), icon: ShieldCheck },
   ];
 

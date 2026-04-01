@@ -3,17 +3,18 @@ import { base44 } from "@/api/base44Client";
 import { supabase } from "@/lib/supabase";
 import {
   Users, ShieldCheck, Plus, Edit2, Trash2, Search,
-  Save, Check, X, ChevronDown, CalendarDays, Copy, CheckCheck
+  Save, Check, X, CalendarDays, Copy, CheckCheck,
+  Building2, UserPlus, Mail, Phone, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import CompanyManager from "@/components/company/CompanyManager";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -100,25 +101,20 @@ function TeamTab() {
   const handleSave = async (e) => {
     e.preventDefault();
     setDupError("");
-
     const normName  = form.full_name.trim().toLowerCase();
     const normEmail = form.email?.trim().toLowerCase();
-
     const dup = employees.find((emp) =>
       emp.id !== editing?.id && (
         emp.full_name.trim().toLowerCase() === normName ||
         (normEmail && emp.email?.trim().toLowerCase() === normEmail)
       )
     );
-
     if (dup) {
-      const reason = dup.full_name.trim().toLowerCase() === normName
+      setDupError(dup.full_name.trim().toLowerCase() === normName
         ? `A team member named "${dup.full_name}" already exists.`
-        : `A team member with email "${dup.email}" already exists.`;
-      setDupError(reason);
+        : `A team member with email "${dup.email}" already exists.`);
       return;
     }
-
     if (editing) await base44.entities.Employee.update(editing.id, form);
     else         await base44.entities.Employee.create(form);
     setDialogOpen(false);
@@ -207,7 +203,6 @@ function TeamTab() {
         </div>
       )}
 
-      {/* Add / Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>{editing ? "Edit Team Member" : "Add Team Member"}</DialogTitle></DialogHeader>
@@ -216,7 +211,6 @@ function TeamTab() {
               <Input value={form.full_name} onChange={e => { setDupError(""); setForm(f => ({ ...f, full_name: e.target.value })); }} required className="mt-1 h-9 text-sm" />
               {dupError && !dupError.includes("email") && <p className="text-xs text-rose-600 mt-1">{dupError}</p>}
             </div>
-
             <div className="grid grid-cols-2 gap-3">
               <div><Label className="text-xs">Email</Label>
                 <Input type="email" value={form.email} onChange={e => { setDupError(""); setForm(f => ({ ...f, email: e.target.value })); }} className="mt-1 h-9 text-sm" />
@@ -225,7 +219,6 @@ function TeamTab() {
               <div><Label className="text-xs">Phone</Label>
                 <Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="mt-1 h-9 text-sm" /></div>
             </div>
-
             <div className="grid grid-cols-2 gap-3">
               <div><Label className="text-xs">Role</Label>
                 <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
@@ -241,13 +234,10 @@ function TeamTab() {
                 </select>
               </div>
             </div>
-
             <div><Label className="text-xs">Department</Label>
               <Input value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))} className="mt-1 h-9 text-sm" placeholder="e.g. Field, Office, Sales" /></div>
-
             <div><Label className="text-xs">Notes</Label>
               <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="mt-1 text-sm" rows={2} /></div>
-
             <div className="flex justify-end gap-3 pt-2 border-t border-slate-200">
               <Button type="button" variant="outline" size="sm" onClick={() => setDialogOpen(false)}>Cancel</Button>
               <Button type="submit" size="sm" className="bg-gradient-to-r from-amber-500 to-orange-500">
@@ -273,7 +263,6 @@ function PermissionsTab() {
     (async () => {
       const { data } = await supabase.from('company_profiles').select('id, settings').limit(1).single();
       if (data?.settings?.role_permissions) {
-        // Merge saved permissions over defaults so new roles/modules get defaults
         const merged = {};
         for (const role of ROLES) {
           merged[role.key] = { ...DEFAULT_PERMISSIONS[role.key], ...data.settings.role_permissions[role.key] };
@@ -285,7 +274,7 @@ function PermissionsTab() {
   }, []);
 
   const toggle = (roleKey, moduleKey) => {
-    if (roleKey === "admin") return; // admin is always full access
+    if (roleKey === "admin") return;
     setPermissions(prev => ({
       ...prev,
       [roleKey]: { ...prev[roleKey], [moduleKey]: !prev[roleKey][moduleKey] },
@@ -322,7 +311,6 @@ function PermissionsTab() {
           {saved ? <><Check className="w-4 h-4 mr-1" /> Saved</> : saving ? "Saving…" : <><Save className="w-4 h-4 mr-1" /> Save Changes</>}
         </Button>
       </div>
-
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -351,14 +339,11 @@ function PermissionsTab() {
                         <button
                           onClick={() => toggle(role.key, mod.key)}
                           disabled={isAdmin}
-                          title={isAdmin ? "Admin always has full access" : allowed ? "Click to revoke" : "Click to grant"}
                           className={cn(
                             "w-6 h-6 rounded-full border-2 flex items-center justify-center mx-auto transition-all",
-                            isAdmin
-                              ? "bg-rose-500 border-rose-500 cursor-default"
-                              : allowed
-                                ? "bg-amber-500 border-amber-500 hover:bg-amber-600 cursor-pointer"
-                                : "bg-white border-slate-300 hover:border-amber-400 cursor-pointer"
+                            isAdmin ? "bg-rose-500 border-rose-500 cursor-default"
+                              : allowed ? "bg-amber-500 border-amber-500 hover:bg-amber-600 cursor-pointer"
+                              : "bg-white border-slate-300 hover:border-amber-400 cursor-pointer"
                           )}
                         >
                           {(isAdmin || allowed) && <Check className="w-3 h-3 text-white" />}
@@ -372,10 +357,116 @@ function PermissionsTab() {
           </table>
         </div>
       </div>
-
       <p className="text-xs text-slate-400">
         These permissions control UI visibility. Supabase Row Level Security provides additional server-side enforcement.
       </p>
+    </div>
+  );
+}
+
+// ─── Invite & Logins tab ─────────────────────────────────────────────────────
+
+function InviteTab() {
+  const [inviteEmail, setInviteEmail]               = useState("");
+  const [inviteFullName, setInviteFullName]         = useState("");
+  const [inviteRole, setInviteRole]                 = useState("user");
+  const [inviteEmployeeRole, setInviteEmployeeRole] = useState("laborer");
+  const [createEmployee, setCreateEmployee]         = useState(true);
+  const [inviting, setInviting]                     = useState(false);
+  const [success, setSuccess]                       = useState(false);
+  const [error, setError]                           = useState("");
+
+  const handleInvite = async (e) => {
+    e.preventDefault();
+    setInviting(true);
+    setError("");
+    setSuccess(false);
+    try {
+      const { error: invErr } = await supabase.auth.admin?.inviteUserByEmail?.(inviteEmail) || {};
+      if (invErr) throw invErr;
+      if (createEmployee) {
+        const existing = await base44.entities.Employee.filter({ email: inviteEmail });
+        if (existing.length === 0) {
+          await base44.entities.Employee.create({
+            full_name: inviteFullName || inviteEmail.split("@")[0],
+            email: inviteEmail,
+            role: inviteEmployeeRole,
+            status: "active",
+          });
+        }
+      }
+      setSuccess(true);
+      setInviteEmail("");
+      setInviteFullName("");
+    } catch {
+      setError("Invite could not be sent automatically. Add the user directly in Supabase → Authentication → Users → Invite User.");
+    }
+    setInviting(false);
+  };
+
+  return (
+    <div className="space-y-6 max-w-lg">
+      <div className="bg-white rounded-2xl border border-slate-200 p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-amber-500">
+            <ShieldCheck className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <p className="font-semibold text-slate-900">Invite to App</p>
+            <p className="text-xs text-slate-500">Send a login invitation by email</p>
+          </div>
+        </div>
+        <form onSubmit={handleInvite} className="space-y-4">
+          <div>
+            <Label className="text-xs uppercase tracking-wide text-slate-500 mb-1.5 block">Full Name</Label>
+            <Input value={inviteFullName} onChange={e => setInviteFullName(e.target.value)} placeholder="Jane Smith" />
+          </div>
+          <div>
+            <Label className="text-xs uppercase tracking-wide text-slate-500 mb-1.5 block">Email Address</Label>
+            <Input type="email" required value={inviteEmail} onChange={e => { setInviteEmail(e.target.value); setSuccess(false); setError(""); }} placeholder="colleague@example.com" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs uppercase tracking-wide text-slate-500 mb-1.5 block">App Role</Label>
+              <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} className="w-full h-9 text-sm border border-slate-200 rounded-md px-2 outline-none focus:ring-1 focus:ring-amber-400">
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs uppercase tracking-wide text-slate-500 mb-1.5 block">Employee Role</Label>
+              <select value={inviteEmployeeRole} onChange={e => setInviteEmployeeRole(e.target.value)} className="w-full h-9 text-sm border border-slate-200 rounded-md px-2 outline-none focus:ring-1 focus:ring-amber-400">
+                {ROLES.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
+              </select>
+            </div>
+          </div>
+          <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 cursor-pointer">
+            <input type="checkbox" checked={createEmployee} onChange={e => setCreateEmployee(e.target.checked)} />
+            Also add as employee
+          </label>
+          {success && (
+            <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-sm">
+              <Check className="w-4 h-4" /> Invitation sent!
+            </div>
+          )}
+          {error && (
+            <div className="text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2 text-sm">
+              {error}
+            </div>
+          )}
+          <Button type="submit" disabled={inviting} className="w-full bg-slate-900 hover:bg-slate-800 text-white">
+            {inviting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Mail className="w-4 h-4 mr-2" />}
+            {inviting ? "Sending…" : "Send Invitation"}
+          </Button>
+        </form>
+      </div>
+
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+        <p className="font-semibold mb-1">Tip</p>
+        <p className="text-xs leading-relaxed">
+          You can also invite users directly in <strong>Supabase → Authentication → Users → Invite User</strong>. After they sign in, add them as an employee here to assign them to projects.
+        </p>
+      </div>
     </div>
   );
 }
@@ -392,11 +483,9 @@ function CalendarFeedTab() {
     });
   }, []);
 
-  const base = typeof window !== "undefined" ? window.location.origin : "https://clardy.io";
-  const feedUrl = userId ? `${base}/api/calendar?uid=${userId}` : null;
+  const feedUrl = `${typeof window !== "undefined" ? window.location.origin : "https://clardy.io"}/api/calendar`;
 
   const copy = () => {
-    if (!feedUrl) return;
     navigator.clipboard.writeText(feedUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -405,40 +494,31 @@ function CalendarFeedTab() {
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 max-w-2xl space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900">Your Personal Calendar Feed</h2>
+        <h2 className="text-lg font-semibold text-slate-900">Apple / Google Calendar Feed</h2>
         <p className="text-sm text-slate-500 mt-1">
-          Subscribe to this URL in Apple Calendar (or any calendar app) to see your events automatically.
-          It only shows events assigned to you.
+          Subscribe to this URL in any calendar app to see all Clardy.io events automatically sync.
         </p>
       </div>
-
-      {feedUrl ? (
-        <>
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center gap-3">
-            <code className="text-xs text-slate-700 flex-1 break-all">{feedUrl}</code>
-            <button
-              onClick={copy}
-              className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors"
-            >
-              {copied ? <><CheckCheck className="w-3.5 h-3.5" /> Copied!</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
-            </button>
-          </div>
-
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2 text-sm text-amber-800">
-            <p className="font-semibold">How to subscribe in Apple Calendar (Mac):</p>
-            <ol className="list-decimal list-inside space-y-1 text-xs">
-              <li>Copy the URL above</li>
-              <li>Open <strong>Calendar</strong> → <strong>File → New Calendar Subscription</strong></li>
-              <li>Paste the URL and click Subscribe</li>
-              <li>Set <strong>Auto-refresh: Every 5 minutes</strong></li>
-              <li>Click OK</li>
-            </ol>
-            <p className="text-xs mt-2">On iPhone: <strong>Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar</strong></p>
-          </div>
-        </>
-      ) : (
-        <div className="text-sm text-slate-400">Loading your calendar link…</div>
-      )}
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center gap-3">
+        <code className="text-xs text-slate-700 flex-1 break-all">{feedUrl}</code>
+        <button
+          onClick={copy}
+          className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors"
+        >
+          {copied ? <><CheckCheck className="w-3.5 h-3.5" /> Copied!</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
+        </button>
+      </div>
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2 text-sm text-amber-800">
+        <p className="font-semibold">How to subscribe in Apple Calendar (Mac):</p>
+        <ol className="list-decimal list-inside space-y-1 text-xs">
+          <li>Copy the URL above</li>
+          <li>Open <strong>Calendar → File → New Calendar Subscription</strong></li>
+          <li>Paste the URL and click Subscribe</li>
+          <li>Set <strong>Auto-refresh: Every 5 minutes</strong></li>
+          <li>Click OK</li>
+        </ol>
+        <p className="text-xs mt-2">On iPhone: <strong>Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar</strong></p>
+      </div>
     </div>
   );
 }
@@ -446,9 +526,11 @@ function CalendarFeedTab() {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { key: "team",        label: "Team Members",       icon: Users },
+  { key: "team",        label: "Team Members",        icon: Users },
   { key: "permissions", label: "Roles & Permissions", icon: ShieldCheck },
-  { key: "calendar",    label: "Calendar Feed",       icon: CalendarDays },
+  { key: "companies",   label: "Companies",           icon: Building2 },
+  { key: "invite",      label: "Invite & Logins",     icon: UserPlus },
+  { key: "calendar",    label: "Calendar Feed",        icon: CalendarDays },
 ];
 
 export default function Settings() {
@@ -456,12 +538,11 @@ export default function Settings() {
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-      {/* Header */}
       <div className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">Settings</p>
-          <h1 className="mt-1 text-3xl font-bold text-slate-900">Team & Permissions</h1>
-          <p className="mt-1 text-sm text-slate-500">Manage your team members and control what each role can access.</p>
+          <h1 className="mt-1 text-3xl font-bold text-slate-900">Settings</h1>
+          <p className="mt-1 text-sm text-slate-500">Manage your team, companies, roles, and app access.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {TABS.map(({ key, label, icon: Icon }) => (
@@ -484,6 +565,8 @@ export default function Settings() {
 
       {activeTab === "team"        && <TeamTab />}
       {activeTab === "permissions" && <PermissionsTab />}
+      {activeTab === "companies"   && <CompanyManager />}
+      {activeTab === "invite"      && <InviteTab />}
       {activeTab === "calendar"    && <CalendarFeedTab />}
     </div>
   );
