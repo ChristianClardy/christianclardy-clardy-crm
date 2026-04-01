@@ -27,12 +27,18 @@ export default function Estimates() {
   }, []);
 
   const loadData = async () => {
-    const [estData, clientData] = await Promise.all([
+    const [estData, clientData, leadData] = await Promise.all([
       base44.entities.Estimate.list("-created_date"),
       base44.entities.Client.list(),
+      base44.entities.Lead.list(),
     ]);
     setEstimates(estData);
-    setClients(clientData);
+    // Merge leads into clients so lead-attached estimates show the name
+    const leadsAsClients = leadData.map(l => ({
+      id:   l.id,
+      name: l.full_name || l.name || l.email || "Unnamed Lead",
+    }));
+    setClients([...clientData, ...leadsAsClients]);
     setLoading(false);
   };
 
