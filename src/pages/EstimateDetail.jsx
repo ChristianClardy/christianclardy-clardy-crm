@@ -1278,9 +1278,22 @@ export default function EstimateDetail() {
     setActiveMaterialSections(prev => [...new Set([...prev, ...matSecs])]);
   }, [items]);
 
-  // Load clients, materials, company profile + custom material categories
+  // Load clients + leads, materials, company profile + custom material categories
   useEffect(() => {
-    base44.entities.Client.list("name").then(setClients);
+    Promise.all([
+      base44.entities.Client.list("name"),
+      base44.entities.Lead.list("full_name"),
+    ]).then(([clientData, leadData]) => {
+      // Merge leads into clients list with a type tag so the dropdown can group them
+      const leadsAsClients = leadData.map(l => ({
+        id:    l.id,
+        name:  l.full_name || l.name || l.email || "Unnamed Lead",
+        email: l.email,
+        phone: l.phone,
+        _isLead: true,
+      }));
+      setClients([...clientData, ...leadsAsClients]);
+    });
     base44.entities.Material.list("name").then(setMaterials);
     base44.entities.CompanyProfile.list().then(rows => {
       if (rows.length) {
@@ -1497,7 +1510,10 @@ export default function EstimateDetail() {
             className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-amber-300 min-w-[180px]"
           >
             <option value="">— Select client —</option>
-            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {clients.filter(c => !c._isLead).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {clients.some(c => c._isLead) && <optgroup label="── Leads ──">
+              {clients.filter(c => c._isLead).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </optgroup>}
           </select>
 
           <select
