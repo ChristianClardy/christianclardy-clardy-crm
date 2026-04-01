@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { supabase } from "@/lib/supabase";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -143,23 +144,27 @@ export default function CalendarEventDialog({ open, onOpenChange, event, initial
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const { data: { user: authUser } } = await import("@/lib/supabase").then(m => m.supabase.auth.getUser());
-    const payload = {
-      ...form,
-      linked_client_id: form.linked_client_id || null,
-      linked_project_id: form.linked_project_id || null,
-      recurrence_until: form.recurrence_until || null,
-      created_by: authUser?.email || null,
-    };
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      const payload = {
+        ...form,
+        linked_client_id: form.linked_client_id || null,
+        linked_project_id: form.linked_project_id || null,
+        recurrence_until: form.recurrence_until || null,
+        created_by: authUser?.email || null,
+      };
 
-    if (event?.source_event_id || event?.id) {
-      await base44.entities.CalendarEvent.update(event.source_event_id || event.id, payload);
-    } else {
-      await base44.entities.CalendarEvent.create(payload);
+      if (event?.source_event_id || event?.id) {
+        await base44.entities.CalendarEvent.update(event.source_event_id || event.id, payload);
+      } else {
+        await base44.entities.CalendarEvent.create(payload);
+      }
+
+      onOpenChange(false);
+      await onSaved?.();
+    } catch (err) {
+      alert(`Save failed: ${err.message}`);
     }
-
-    onOpenChange(false);
-    await onSaved?.();
   };
 
   const handleDelete = async () => {
