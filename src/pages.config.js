@@ -50,7 +50,6 @@
 import CRM from './pages/CRM';
 import ClientDetail from './pages/ClientDetail';
 import Clients from './pages/Clients';
-import Company from './pages/Company';
 import Dashboard from './pages/Dashboard';
 import Documents from './pages/Documents';
 import EstimateDetail from './pages/EstimateDetail';
@@ -77,7 +76,6 @@ export const PAGES = {
     "CRM": CRM,
     "ClientDetail": ClientDetail,
     "Clients": Clients,
-    "Company": Company,
     "Dashboard": Dashboard,
     "Documents": Documents,
     "EstimateDetail": EstimateDetail,
