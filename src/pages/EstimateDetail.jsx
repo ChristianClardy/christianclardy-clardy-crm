@@ -162,12 +162,15 @@ const TEMPLATES = [
 
 // ─── Pricing helpers ──────────────────────────────────────────────────────────
 
-const sellFromCost = (cost) => (cost > 0 ? cost / (1 - MARGIN) : 0);
+function sellFromCost(cost, marginPct = 40) {
+  const m = Math.min(Math.max(Number(marginPct) || 40, 0), 99.9) / 100;
+  return cost > 0 ? cost / (1 - m) : 0;
+}
 
-function itemTotals(item) {
+function itemTotals(item, marginPct = 40) {
   const qty  = Number(item.quantity)     || 0;
   const cost = Number(item.cost_per_unit) || 0;
-  const sell = sellFromCost(cost);
+  const sell = sellFromCost(cost, marginPct);
   return {
     sell_per_unit: sell,
     total_cost:    qty * cost,
@@ -176,10 +179,10 @@ function itemTotals(item) {
   };
 }
 
-function summaryTotals(items) {
+function summaryTotals(items, marginPct = 40) {
   let totalCost = 0, totalSell = 0;
   for (const it of items) {
-    const t = itemTotals(it);
+    const t = itemTotals(it, marginPct);
     totalCost += t.total_cost;
     totalSell += t.total_sell;
   }
@@ -334,8 +337,8 @@ function DescriptionCell({ item, onChange, materials, onAddToLibrary }) {
 
 // ─── Line Item Row ────────────────────────────────────────────────────────────
 
-function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary }) {
-  const { sell_per_unit, total_cost, total_sell } = itemTotals(item);
+function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, marginPct = 40 }) {
+  const { sell_per_unit, total_cost, total_sell } = itemTotals(item, marginPct);
   const hasCost = Number(item.cost_per_unit) > 0;
 
   return (
@@ -413,10 +416,10 @@ function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary }) {
 
 // ─── Trade / Material Section ─────────────────────────────────────────────────
 
-function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onDeleteSection, materials, onAddToLibrary, sectionType = "trade" }) {
+function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onDeleteSection, materials, onAddToLibrary, sectionType = "trade", marginPct = 40 }) {
   const [collapsed, setCollapsed] = useState(false);
   const tradeItems = items.filter(it => it.trade === trade);
-  const { totalCost, totalSell } = summaryTotals(tradeItems);
+  const { totalCost, totalSell } = summaryTotals(tradeItems, marginPct);
   const hasValues = totalSell > 0;
   const isMaterial = sectionType === "material";
   const isEmpty = tradeItems.length === 0;
@@ -487,6 +490,7 @@ function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onD
                       onDelete={onDeleteItem}
                       materials={materials}
                       onAddToLibrary={onAddToLibrary}
+                      marginPct={marginPct}
                     />
                   ))
                 )}
@@ -1456,7 +1460,8 @@ export default function EstimateDetail() {
 
   const clientObj  = clients.find(c => c.id === estimate.client_id) || null;
   const clientName = clientObj?.name || "";
-  const { totalCost, totalSell } = summaryTotals(items);
+  const effectiveMarginPct = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
+  const { totalCost, totalSell } = summaryTotals(items, effectiveMarginPct);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -1594,6 +1599,7 @@ export default function EstimateDetail() {
               materials={materials}
               onAddToLibrary={handleAddToLibrary}
               sectionType="material"
+              marginPct={effectiveMarginPct}
             />
           ))}
 
@@ -1610,6 +1616,7 @@ export default function EstimateDetail() {
               materials={materials}
               onAddToLibrary={handleAddToLibrary}
               sectionType="trade"
+              marginPct={effectiveMarginPct}
             />
           ))}
 
@@ -1626,6 +1633,7 @@ export default function EstimateDetail() {
               materials={materials}
               onAddToLibrary={handleAddToLibrary}
               sectionType="trade"
+              marginPct={effectiveMarginPct}
             />
           ))}
 
