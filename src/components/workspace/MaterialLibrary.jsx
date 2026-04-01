@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
-import { Plus, Edit2, Trash2, Search, Package, Upload } from "lucide-react";
+import { Plus, Edit2, Trash2, Search, Package, Upload, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -131,9 +131,19 @@ export default function MaterialLibrary() {
     if (confirm("Delete this material?")) { await base44.entities.Material.delete(id); load(); }
   };
 
+  // Count duplicate groups for the badge
+  const dupCount = useMemo(() => {
+    const groups = {};
+    for (const m of materials) {
+      const key = (m.name || "").trim().toLowerCase();
+      if (!key) continue;
+      groups[key] = (groups[key] || 0) + 1;
+    }
+    return Object.values(groups).filter(c => c > 1).length;
+  }, [materials]);
+
   const handleDedup = async () => {
-    if (!confirm("This will merge all duplicate materials (same name), keeping the most complete record. Continue?")) return;
-    // Group by normalised name
+    if (!confirm(`Found ${dupCount} duplicate name${dupCount !== 1 ? "s" : ""}. This will merge them, always keeping the record with pricing. Continue?`)) return;
     const groups = {};
     for (const m of materials) {
       const key = (m.name || "").trim().toLowerCase();
@@ -141,18 +151,25 @@ export default function MaterialLibrary() {
       if (!groups[key]) groups[key] = [];
       groups[key].push(m);
     }
+    let cleaned = 0;
     for (const group of Object.values(groups)) {
       if (group.length < 2) continue;
-      // Score: count non-zero / non-empty fields
-      const score = (m) => [m.description, m.unit, m.unit_cost, m.material_cost, m.category, m.supplier]
-        .filter(v => v !== "" && v !== null && v !== undefined && v !== 0).length;
+      // Pricing presence is the top priority; then completeness of other fields
+      const hasCost = (m) => (m.material_cost || 0) + (m.labor_cost || 0) + (m.sub_cost || 0) > 0;
+      const score = (m) => {
+        let s = hasCost(m) ? 100 : 0;
+        s += [m.description, m.unit, m.category, m.supplier, m.sku]
+          .filter(v => v !== "" && v !== null && v !== undefined).length;
+        return s;
+      };
       group.sort((a, b) => score(b) - score(a));
       const [keep, ...dupes] = group;
-      // Merge best values into keeper
       const merged = mergeMaterial(keep, ...dupes);
       await base44.entities.Material.update(keep.id, merged);
       for (const d of dupes) await base44.entities.Material.delete(d.id);
+      cleaned += dupes.length;
     }
+    alert(`Done — removed ${cleaned} duplicate${cleaned !== 1 ? "s" : ""}, pricing preserved.`);
     load();
   };
 
@@ -170,8 +187,13 @@ export default function MaterialLibrary() {
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-900">Material Library</h2>
         <div className="flex flex-wrap gap-2 items-start">
-          <Button variant="outline" size="sm" onClick={handleDedup} className="gap-1.5 text-slate-600 border-slate-200 hover:bg-slate-50">
-            Clean Duplicates
+          <Button variant="outline" size="sm" onClick={handleDedup} className="gap-1.5 text-slate-600 border-slate-200 hover:bg-slate-50 relative">
+            <Sparkles className="w-4 h-4" /> Clean Duplicates
+            {dupCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                {dupCount}
+              </span>
+            )}
           </Button>
           <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} className="gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50">
             <Upload className="w-4 h-4" /> Import
