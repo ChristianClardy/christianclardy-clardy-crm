@@ -169,17 +169,16 @@ export default function MaterialLibrary() {
 
   const handleDedup = async () => {
     if (!confirm(`Found ${dupCount} duplicate name${dupCount !== 1 ? "s" : ""}. This will merge them, always keeping the record with pricing. Continue?`)) return;
-    const groups = {};
-    for (const m of materials) {
-      const key = (m.name || "").trim().toLowerCase();
-      if (!key) continue;
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(m);
-    }
-    let cleaned = 0;
-    for (const group of Object.values(groups)) {
-      if (group.length < 2) continue;
-      // Pricing presence is the top priority; then completeness of other fields
+    try {
+      // Only dedup within the current library type
+      const scoped = materials.filter(m => isLabor ? LABOR_CATEGORY_SET.has(m.category) : !LABOR_CATEGORY_SET.has(m.category));
+      const groups = {};
+      for (const m of scoped) {
+        const key = (m.name || "").trim().toLowerCase();
+        if (!key) continue;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(m);
+      }
       const hasCost = (m) => (m.material_cost || 0) + (m.labor_cost || 0) + (m.sub_cost || 0) > 0;
       const score = (m) => {
         let s = hasCost(m) ? 100 : 0;
@@ -187,15 +186,20 @@ export default function MaterialLibrary() {
           .filter(v => v !== "" && v !== null && v !== undefined).length;
         return s;
       };
-      group.sort((a, b) => score(b) - score(a));
-      const [keep, ...dupes] = group;
-      const merged = mergeMaterial(keep, ...dupes);
-      await base44.entities.Material.update(keep.id, merged);
-      for (const d of dupes) await base44.entities.Material.delete(d.id);
-      cleaned += dupes.length;
+      let cleaned = 0;
+      for (const group of Object.values(groups)) {
+        if (group.length < 2) continue;
+        group.sort((a, b) => score(b) - score(a));
+        const [keep, ...dupes] = group;
+        await base44.entities.Material.update(keep.id, mergeMaterial(keep, ...dupes));
+        for (const d of dupes) await base44.entities.Material.delete(d.id);
+        cleaned += dupes.length;
+      }
+      alert(`Done — removed ${cleaned} duplicate${cleaned !== 1 ? "s" : ""}, pricing preserved.`);
+      load();
+    } catch (err) {
+      alert(`Clean duplicates failed: ${err.message}`);
     }
-    alert(`Done — removed ${cleaned} duplicate${cleaned !== 1 ? "s" : ""}, pricing preserved.`);
-    load();
   };
 
   const categories = ["All", ...CATEGORIES];
