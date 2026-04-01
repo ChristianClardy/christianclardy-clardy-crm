@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { addDays, format, startOfDay } from "date-fns";
+import { addDays, format, parseISO, startOfDay } from "date-fns";
 import { ChevronLeft, ChevronRight, CalendarDays, HardHat, Plus, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
@@ -361,7 +361,7 @@ export default function Calendar() {
         viewMode === "month" ? (
           <CalendarMonthView currentDate={currentDate} entries={visibleCalendarEvents} entryClassName="bg-blue-500 text-white hover:bg-blue-600" getEntryLabel={(entry) => entry.title} onEntryClick={openExistingEvent} onCreateRange={openNewEvent} />
         ) : viewMode === "agenda" ? (
-          <CalendarAgendaView entries={visibleCalendarEvents} onEntryClick={openExistingEvent} renderMeta={(entry) => `${format(new Date(entry.start_datetime), "h:mm a")} · ${entry.project_name || entry.location || entry.visibility}`} />
+          <CalendarAgendaView entries={visibleCalendarEvents} onEntryClick={openExistingEvent} renderMeta={(entry) => `${format(parseISO(entry.start_datetime), "h:mm a")} · ${entry.project_name || entry.location || entry.visibility}`} />
         ) : (
           <CalendarTimeGrid dates={viewMode === "day" ? [startOfDay(currentDate)] : buildWeekDays(currentDate)} entries={visibleCalendarEvents} onEntryClick={openExistingEvent} onCreateRange={openNewEvent} onMoveEntry={handleMoveEvent} onResizeEntry={handleMoveEvent} getEventClassName={getEventClassName} getEventSubtitle={(entry) => entry.project_name || entry.location || entry.status?.replace("_", " ")} />
         )
