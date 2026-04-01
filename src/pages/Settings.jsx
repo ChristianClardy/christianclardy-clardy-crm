@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { supabase } from "@/lib/supabase";
 import {
   Users, ShieldCheck, Plus, Edit2, Trash2, Search,
-  Save, Check, X, ChevronDown
+  Save, Check, X, ChevronDown, CalendarDays, Copy, CheckCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -380,11 +380,78 @@ function PermissionsTab() {
   );
 }
 
+// ─── Calendar Feed tab ───────────────────────────────────────────────────────
+
+function CalendarFeedTab() {
+  const [userId, setUserId] = useState(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) setUserId(user.id);
+    });
+  }, []);
+
+  const token = import.meta.env.VITE_CALENDAR_TOKEN || "";
+  const base = typeof window !== "undefined" ? window.location.origin : "https://clardy.io";
+  const feedUrl = userId
+    ? `${base}/api/calendar?token=${token}&uid=${userId}`
+    : null;
+
+  const copy = () => {
+    if (!feedUrl) return;
+    navigator.clipboard.writeText(feedUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 max-w-2xl space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold text-slate-900">Your Personal Calendar Feed</h2>
+        <p className="text-sm text-slate-500 mt-1">
+          Subscribe to this URL in Apple Calendar (or any calendar app) to see your events automatically.
+          It only shows events assigned to you.
+        </p>
+      </div>
+
+      {feedUrl ? (
+        <>
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center gap-3">
+            <code className="text-xs text-slate-700 flex-1 break-all">{feedUrl}</code>
+            <button
+              onClick={copy}
+              className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors"
+            >
+              {copied ? <><CheckCheck className="w-3.5 h-3.5" /> Copied!</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
+            </button>
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2 text-sm text-amber-800">
+            <p className="font-semibold">How to subscribe in Apple Calendar (Mac):</p>
+            <ol className="list-decimal list-inside space-y-1 text-xs">
+              <li>Copy the URL above</li>
+              <li>Open <strong>Calendar</strong> → <strong>File → New Calendar Subscription</strong></li>
+              <li>Paste the URL and click Subscribe</li>
+              <li>Set <strong>Auto-refresh: Every 5 minutes</strong></li>
+              <li>Click OK</li>
+            </ol>
+            <p className="text-xs mt-2">On iPhone: <strong>Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar</strong></p>
+          </div>
+        </>
+      ) : (
+        <div className="text-sm text-slate-400">Loading your calendar link…</div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 const TABS = [
   { key: "team",        label: "Team Members",       icon: Users },
   { key: "permissions", label: "Roles & Permissions", icon: ShieldCheck },
+  { key: "calendar",    label: "Calendar Feed",       icon: CalendarDays },
 ];
 
 export default function Settings() {
@@ -420,6 +487,7 @@ export default function Settings() {
 
       {activeTab === "team"        && <TeamTab />}
       {activeTab === "permissions" && <PermissionsTab />}
+      {activeTab === "calendar"    && <CalendarFeedTab />}
     </div>
   );
 }

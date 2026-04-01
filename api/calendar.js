@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
-  // Optional token protection — set CALENDAR_TOKEN in Vercel env vars
+  // Shared secret token check
   const calToken = process.env.CALENDAR_TOKEN;
   if (calToken && req.query.token !== calToken) {
     res.status(401).send('Unauthorized');
@@ -13,10 +13,31 @@ export default async function handler(req, res) {
     process.env.SUPABASE_SERVICE_ROLE_KEY
   );
 
-  const { data: events, error } = await supabase
+  const { uid } = req.query;
+
+  let userEmail = null;
+
+  // If a user ID is provided, look up their email to filter events
+  if (uid) {
+    const { data: { user }, error } = await supabase.auth.admin.getUserById(uid);
+    if (error || !user) {
+      res.status(404).send('User not found');
+      return;
+    }
+    userEmail = user.email;
+  }
+
+  let query = supabase
     .from('calendar_events')
     .select('*')
     .order('start_datetime', { ascending: true });
+
+  // Filter to only this user's events if uid was provided
+  if (userEmail) {
+    query = query.eq('assigned_to', userEmail);
+  }
+
+  const { data: events, error } = await query;
 
   if (error) {
     res.status(500).send('Error fetching calendar events');
@@ -25,7 +46,7 @@ export default async function handler(req, res) {
 
   res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.send(generateICS(events || []));
+  res.send(generateICS(events || [], userEmail));
 }
 
 function toICSDate(dateStr, allDay) {
@@ -46,7 +67,8 @@ function esc(str) {
     .replace(/\r?\n/g, '\\n');
 }
 
-function generateICS(events) {
+function generateICS(events, userEmail) {
+  const calName = userEmail ? `Clardy.io – ${userEmail}` : 'Clardy.io';
   const stamp = toICSDate(new Date().toISOString(), false);
   const lines = [
     'BEGIN:VCALENDAR',
@@ -54,7 +76,7 @@ function generateICS(events) {
     'PRODID:-//Clardy.io//Calendar//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
-    'X-WR-CALNAME:Clardy.io',
+    `X-WR-CALNAME:${calName}`,
     'X-WR-TIMEZONE:UTC',
     'REFRESH-INTERVAL;VALUE=DURATION:PT5M',
     'X-PUBLISHED-TTL:PT5M',
