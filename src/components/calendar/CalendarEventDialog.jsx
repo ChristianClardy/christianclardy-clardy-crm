@@ -143,11 +143,13 @@ export default function CalendarEventDialog({ open, onOpenChange, event, initial
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const { data: { user: authUser } } = await import("@/lib/supabase").then(m => m.supabase.auth.getUser());
     const payload = {
       ...form,
       linked_client_id: form.linked_client_id || null,
       linked_project_id: form.linked_project_id || null,
       recurrence_until: form.recurrence_until || null,
+      created_by: authUser?.email || null,
     };
 
     if (event?.source_event_id || event?.id) {

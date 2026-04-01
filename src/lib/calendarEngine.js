@@ -44,8 +44,8 @@ export function canUserSeeEvent(event, user, currentUserName) {
   const isAdmin = user?.role === "admin" || user?.role === "manager";
 
   if (visibility === "company") return true;
-  if (visibility === "team") return isOwner || isAssigned || isAdmin;
-  return isOwner || isAssigned || isAdmin;
+  if (visibility === "team") return true; // team events visible to all authenticated users
+  return isOwner || isAssigned || isAdmin; // private
 }
 
 function buildOccurrence(baseEvent, start, end) {
