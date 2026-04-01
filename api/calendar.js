@@ -1,10 +1,9 @@
-import { createClient } from '@supabase/supabase-js';
+const { createClient } = require('@supabase/supabase-js');
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   try {
     const { uid } = req.query;
 
-    // Token check only for all-events feed (no uid)
     const calToken = process.env.CALENDAR_TOKEN;
     if (!uid && calToken && req.query.token !== calToken) {
       res.status(401).send('Unauthorized');
@@ -15,7 +14,7 @@ export default async function handler(req, res) {
     const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceKey) {
-      res.status(500).send('Server misconfiguration: missing Supabase credentials');
+      res.status(500).send('Missing Supabase credentials in environment variables');
       return;
     }
 
@@ -28,7 +27,7 @@ export default async function handler(req, res) {
     if (uid) {
       const { data, error } = await supabase.auth.admin.getUserById(uid);
       if (error || !data?.user) {
-        res.status(404).send('User not found');
+        res.status(404).send(`User not found: ${error?.message || 'unknown'}`);
         return;
       }
       userEmail = data.user.email;
@@ -55,16 +54,14 @@ export default async function handler(req, res) {
     res.send(generateICS(events || [], userEmail));
 
   } catch (err) {
-    res.status(500).send(`Unexpected error: ${err.message}`);
+    res.status(500).send(`Crash: ${err.message}`);
   }
-}
+};
 
 function toICSDate(dateStr, allDay) {
   if (!dateStr) return null;
   const d = new Date(dateStr);
-  if (allDay) {
-    return d.toISOString().slice(0, 10).replace(/-/g, '');
-  }
+  if (allDay) return d.toISOString().slice(0, 10).replace(/-/g, '');
   return d.toISOString().replace(/[-:.]/g, '').slice(0, 15) + 'Z';
 }
 
@@ -96,11 +93,9 @@ function generateICS(events, userEmail) {
     const start = toICSDate(ev.start_datetime, ev.all_day);
     if (!start) continue;
     const end = toICSDate(ev.end_datetime || ev.start_datetime, ev.all_day);
-
     lines.push('BEGIN:VEVENT');
     lines.push(`UID:${ev.id}@clardy.io`);
     lines.push(`DTSTAMP:${stamp}`);
-
     if (ev.all_day) {
       lines.push(`DTSTART;VALUE=DATE:${start}`);
       lines.push(`DTEND;VALUE=DATE:${end}`);
@@ -108,7 +103,6 @@ function generateICS(events, userEmail) {
       lines.push(`DTSTART:${start}`);
       lines.push(`DTEND:${end}`);
     }
-
     lines.push(`SUMMARY:${esc(ev.title)}`);
     if (ev.description) lines.push(`DESCRIPTION:${esc(ev.description)}`);
     if (ev.event_type)  lines.push(`CATEGORIES:${esc(ev.event_type)}`);
