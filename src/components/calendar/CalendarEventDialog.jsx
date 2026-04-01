@@ -114,10 +114,14 @@ export default function CalendarEventDialog({ open, onOpenChange, event, initial
 
     const start = new Date();
     const end = new Date(start.getTime() + 60 * 60 * 1000);
+    const toLocal = (d) => {
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    };
     setForm({
       ...seedValues,
-      start_datetime: start.toISOString().slice(0, 16),
-      end_datetime: end.toISOString().slice(0, 16),
+      start_datetime: toLocal(start),
+      end_datetime: toLocal(end),
     });
   }, [currentUserName, defaultValues, event, initialRange, open]);
 
