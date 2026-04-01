@@ -24,6 +24,44 @@ const LABOR_CATEGORIES = [
 // All category values that are "labor" — used to split the two libraries
 const LABOR_CATEGORY_SET = new Set(LABOR_CATEGORIES);
 
+// ─── Auto-categorization ─────────────────────────────────────────────────────
+const MATERIAL_RULES = [
+  { category: "Framing & Lumber",  keywords: ["lumber","cedar","pine","oak","2x4","2x6","2x8","2x10","2x12","1x4","1x6","1x8","4x4","4x6","6x6","8x8","post","beam","joist","rafter","stud","lvl","versalam","osb","plywood","sheathing","hanger","simpson","strong tie","fascia","barge","ledger","blocking","header","ridge","purlin","board","t&g","tongue","groove","v4e","dimensional"] },
+  { category: "Roofing",           keywords: ["shingle","roofing","roof","underlayment","drip edge","flashing","soffit","fascia board","felt","ice barrier","ridge cap","nail","cap sheet","membrane","epdm","tpo","gutter","downspout","vent"] },
+  { category: "Concrete & Masonry",keywords: ["concrete","cement","brick","block","mortar","grout","masonry","stone","paver","rebar","wire mesh","aggregate","sand","base brick","cube of"] },
+  { category: "Insulation",        keywords: ["insulation","batt","foam","spray foam","rigid","vapor barrier","r-","r13","r19","r38"] },
+  { category: "Drywall",           keywords: ["drywall","gypsum","sheetrock","joint compound","mud","tape","corner bead"] },
+  { category: "Flooring",          keywords: ["flooring","floor","tile","hardwood","laminate","vinyl","lvp","carpet","subfloor","underlayment pad","grout"] },
+  { category: "Plumbing",          keywords: ["pipe","pvc","cpvc","pex","copper","fitting","valve","faucet","fixture","toilet","sink","drain","trap","shut off","water heater","plumbing"] },
+  { category: "Electrical",        keywords: ["wire","wiring","electrical","outlet","switch","breaker","panel","conduit","romex","receptacle","lighting","light","fan","fixture","can","recessed","downrod","junction"] },
+  { category: "HVAC",              keywords: ["hvac","duct","ductwork","vent","damper","register","air handler","furnace","ac","heat pump","mini split","thermostat"] },
+  { category: "Windows & Doors",   keywords: ["window","door","entry","sliding","garage door","casing","jamb","threshold","weatherstrip","screen"] },
+  { category: "Finish & Trim",     keywords: ["trim","molding","moulding","baseboard","casing","crown","stain","paint","primer","caulk","sealant","gallon","coat","finish","varnish","lacquer"] },
+  { category: "Landscaping",       keywords: ["landscaping","sod","seed","mulch","topsoil","plant","shrub","tree","irrigation","sprinkler","gravel","rock","retaining wall"] },
+  { category: "Equipment",         keywords: ["rental","equipment","scaffold","crane","lift","excavator","bobcat","compressor","generator","pump","tool"] },
+];
+
+const LABOR_RULES = [
+  { category: "Framing Labor",     keywords: ["framing","frame","structural","carpentry","rough"] },
+  { category: "Masonry Labor",     keywords: ["masonry","brick","stone","block","mortar","concrete labor","pour","flatwork"] },
+  { category: "Roofing Labor",     keywords: ["roofing labor","roof labor","shingle labor","install roof"] },
+  { category: "Electrical Labor",  keywords: ["electrical labor","electrical work","electric","wiring labor","panel labor"] },
+  { category: "Plumbing Labor",    keywords: ["plumbing labor","plumbing work","pipe labor"] },
+  { category: "HVAC Labor",        keywords: ["hvac labor","mechanical labor","duct labor"] },
+  { category: "Finish Labor",      keywords: ["finish labor","stain labor","paint labor","trim labor","final stain","final paint"] },
+  { category: "Demo Labor",        keywords: ["demo","demolition","tear","haul","removal","haul off"] },
+  { category: "Subcontractor",     keywords: ["subcontractor","sub labor","sub contract"] },
+];
+
+function guessCategory(name, description, isLabor) {
+  const text = `${name} ${description || ""}`.toLowerCase();
+  const rules = isLabor ? LABOR_RULES : MATERIAL_RULES;
+  for (const rule of rules) {
+    if (rule.keywords.some(kw => text.includes(kw))) return rule.category;
+  }
+  return isLabor ? "General Labor" : "Other";
+}
+
 const UNITS = ["EA", "LF", "SF", "CY", "CF", "LB", "TON", "HR", "DAY", "GAL", "BAG", "ROLL", "SHEET", "LS"];
 
 const MARKUP_TYPES = [
@@ -126,8 +164,14 @@ export default function MaterialLibrary() {
     const matCost = n(form.material_cost);
     const labCost = n(form.labor_cost);
     const subCost = n(form.sub_cost);
+    // Auto-categorize if still on the default category
+    const defaultCat = isLabor ? "General Labor" : "Other";
+    const category = form.category === defaultCat
+      ? guessCategory(form.name, form.description, isLabor)
+      : form.category;
     const data = {
       ...form,
+      category,
       material_cost: matCost,
       labor_cost: labCost,
       sub_cost: subCost,
@@ -153,6 +197,19 @@ export default function MaterialLibrary() {
 
   const handleDelete = async (id) => {
     if (confirm("Delete this material?")) { await base44.entities.Material.delete(id); load(); }
+  };
+
+  const handleAutoCategorize = async () => {
+    const scoped = materials.filter(m => isLabor ? LABOR_CATEGORY_SET.has(m.category) : !LABOR_CATEGORY_SET.has(m.category));
+    const toUpdate = scoped.map(m => ({
+      ...m,
+      category: guessCategory(m.name, m.description, isLabor),
+    })).filter((m, i) => m.category !== scoped[i].category);
+    if (toUpdate.length === 0) { alert("All items already have the best category — nothing to update."); return; }
+    if (!confirm(`This will re-categorize ${toUpdate.length} item${toUpdate.length !== 1 ? "s" : ""} based on their name. Continue?`)) return;
+    for (const m of toUpdate) await base44.entities.Material.update(m.id, { category: m.category });
+    alert(`Done — updated ${toUpdate.length} item${toUpdate.length !== 1 ? "s" : ""}.`);
+    load();
   };
 
   // Count duplicate groups scoped to the active library type
@@ -227,6 +284,9 @@ export default function MaterialLibrary() {
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-900">{isLabor ? "Labor Library" : "Material Library"}</h2>
         <div className="flex flex-wrap gap-2 items-start">
+          <Button variant="outline" size="sm" onClick={handleAutoCategorize} className="gap-1.5 text-violet-700 border-violet-200 hover:bg-violet-50">
+            <Sparkles className="w-4 h-4" /> Auto-categorize
+          </Button>
           <Button variant="outline" size="sm" onClick={handleDedup} className="gap-1.5 text-slate-600 border-slate-200 hover:bg-slate-50 relative">
             <Sparkles className="w-4 h-4" /> Clean Duplicates
             {dupCount > 0 && (
