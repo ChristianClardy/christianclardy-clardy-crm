@@ -56,7 +56,7 @@ export default function Calendar() {
   const quickClientId = urlParams.get("clientId") || "";
   const quickNewType = urlParams.get("new") || "";
   const [loading, setLoading] = useState(true);
-  const [mode, setMode] = useState("operations");
+  const [mode, setMode] = useState("calendar");
   const [viewMode, setViewMode] = useState("week");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [search, setSearch] = useState("");
