@@ -1449,6 +1449,35 @@ export default function EstimateDetail() {
         const created = await base44.entities.Estimate.create(payload);
         window.history.replaceState({}, "", createPageUrl(`EstimateDetail?id=${created.id}`));
       }
+
+      // Auto-save new items to the material/labor library
+      const LABOR_TRADES = new Set(["Framing Labor","Masonry Labor","Roofing Labor","Electrical Labor","Plumbing Labor","HVAC Labor","Finish Labor","Demo Labor","General Labor","Subcontractor","Other Labor","Labor"]);
+      for (const item of items) {
+        const name = (item.description || "").trim();
+        const cost = Number(item.cost_per_unit) || 0;
+        if (!name || cost === 0) continue; // skip blank or zero-cost items
+        const existing = materials.find(m => (m.name || "").trim().toLowerCase() === name.toLowerCase());
+        const isLaborItem = item.sectionType === "labor" || LABOR_TRADES.has(item.trade);
+        const matData = {
+          name,
+          unit: item.unit || "EA",
+          ...(isLaborItem
+            ? { labor_cost: cost, material_cost: 0 }
+            : { material_cost: cost, labor_cost: 0 }),
+        };
+        if (existing) {
+          // Only update if the library entry has no pricing yet
+          const hasCost = (existing.material_cost || 0) + (existing.labor_cost || 0) + (existing.sub_cost || 0) > 0;
+          if (!hasCost) {
+            await base44.entities.Material.update(existing.id, matData).catch(() => {});
+          }
+        } else {
+          await base44.entities.Material.create(matData).catch(() => {});
+        }
+      }
+      // Refresh materials list in background
+      base44.entities.Material.list("name").then(setMaterials).catch(() => {});
+
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (err) {
