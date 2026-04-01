@@ -1,53 +1,62 @@
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
-  const { uid } = req.query;
+  try {
+    const { uid } = req.query;
 
-  // If a uid is provided, the UUID itself is sufficient security (unguessable).
-  // Token is only required for the all-events feed (no uid).
-  const calToken = process.env.CALENDAR_TOKEN;
-  if (!uid && calToken && req.query.token !== calToken) {
-    res.status(401).send('Unauthorized');
-    return;
-  }
-
-  const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  );
-
-  let userEmail = null;
-
-  // If a user ID is provided, look up their email to filter events
-  if (uid) {
-    const { data: { user }, error } = await supabase.auth.admin.getUserById(uid);
-    if (error || !user) {
-      res.status(404).send('User not found');
+    // Token check only for all-events feed (no uid)
+    const calToken = process.env.CALENDAR_TOKEN;
+    if (!uid && calToken && req.query.token !== calToken) {
+      res.status(401).send('Unauthorized');
       return;
     }
-    userEmail = user.email;
+
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceKey) {
+      res.status(500).send('Server misconfiguration: missing Supabase credentials');
+      return;
+    }
+
+    const supabase = createClient(supabaseUrl, serviceKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    let userEmail = null;
+
+    if (uid) {
+      const { data, error } = await supabase.auth.admin.getUserById(uid);
+      if (error || !data?.user) {
+        res.status(404).send('User not found');
+        return;
+      }
+      userEmail = data.user.email;
+    }
+
+    let query = supabase
+      .from('calendar_events')
+      .select('*')
+      .order('start_datetime', { ascending: true });
+
+    if (userEmail) {
+      query = query.eq('assigned_to', userEmail);
+    }
+
+    const { data: events, error: eventsError } = await query;
+
+    if (eventsError) {
+      res.status(500).send(`DB error: ${eventsError.message}`);
+      return;
+    }
+
+    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.send(generateICS(events || [], userEmail));
+
+  } catch (err) {
+    res.status(500).send(`Unexpected error: ${err.message}`);
   }
-
-  let query = supabase
-    .from('calendar_events')
-    .select('*')
-    .order('start_datetime', { ascending: true });
-
-  // Filter to only this user's events if uid was provided
-  if (userEmail) {
-    query = query.eq('assigned_to', userEmail);
-  }
-
-  const { data: events, error } = await query;
-
-  if (error) {
-    res.status(500).send('Error fetching calendar events');
-    return;
-  }
-
-  res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.send(generateICS(events || [], userEmail));
 }
 
 function toICSDate(dateStr, allDay) {
@@ -86,7 +95,6 @@ function generateICS(events, userEmail) {
   for (const ev of events) {
     const start = toICSDate(ev.start_datetime, ev.all_day);
     if (!start) continue;
-
     const end = toICSDate(ev.end_datetime || ev.start_datetime, ev.all_day);
 
     lines.push('BEGIN:VEVENT');
