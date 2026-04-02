@@ -11,7 +11,13 @@ import {
   Edit2,
   Trash2,
   Plus,
-  FileBarChart2
+  FileBarChart2,
+  FileText,
+  Send,
+  CheckCircle,
+  XCircle,
+  Clock,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +50,14 @@ const statusStyles = {
   prospect: { label: "Prospect", class: "bg-blue-100 text-blue-700" },
 };
 
+const ESTIMATE_STATUS = {
+  draft:    { label: "Draft",    className: "bg-slate-100 text-slate-600",    icon: Clock },
+  sent:     { label: "Sent",     className: "bg-blue-100 text-blue-700",      icon: Send },
+  accepted: { label: "Accepted", className: "bg-emerald-100 text-emerald-700", icon: CheckCircle },
+  declined: { label: "Declined", className: "bg-rose-100 text-rose-700",     icon: XCircle },
+  revised:  { label: "Revised",  className: "bg-amber-100 text-amber-700",   icon: RefreshCw },
+};
+
 export default function ClientDetail() {
   const navigate = useNavigate();
   const urlParams = new URLSearchParams(window.location.search);
@@ -51,6 +65,7 @@ export default function ClientDetail() {
 
   const [client, setClient] = useState(null);
   const [projects, setProjects] = useState([]);
+  const [estimates, setEstimates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [formData, setFormData] = useState({});
@@ -70,13 +85,15 @@ export default function ClientDetail() {
 
   const loadData = async () => {
     try {
-      const [clientData, projectsData] = await Promise.all([
+      const [clientData, projectsData, estimatesData] = await Promise.all([
         base44.entities.Client.get(clientId),
         base44.entities.Project.filter({ client_id: clientId }, "-created_date"),
+        base44.entities.Estimate.filter({ client_id: clientId }, "-created_date"),
       ]);
       setClient(clientData);
       setFormData(clientData);
       setProjects(projectsData);
+      setEstimates(estimatesData);
     } catch (error) {
       console.error("Error loading client:", error);
       setClient(null);
@@ -282,6 +299,65 @@ export default function ClientDetail() {
         ) : (
           <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
             <p className="text-slate-500">No projects for this contact yet</p>
+          </div>
+        )}
+      </div>
+
+      {/* Estimates */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-slate-900">Estimates ({estimates.length})</h2>
+          <Button
+            size="sm"
+            onClick={() => navigate(createPageUrl(`EstimateDetail?new=true&client_id=${clientId}`))}
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            New Estimate
+          </Button>
+        </div>
+        {estimates.length > 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  <th className="px-5 py-2.5 text-left">Estimate #</th>
+                  <th className="px-5 py-2.5 text-left">Title</th>
+                  <th className="px-5 py-2.5 text-left">Issue Date</th>
+                  <th className="px-5 py-2.5 text-right">Total</th>
+                  <th className="px-5 py-2.5 text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {estimates.map(est => {
+                  const st = ESTIMATE_STATUS[est.status] || ESTIMATE_STATUS.draft;
+                  const Icon = st.icon;
+                  return (
+                    <tr
+                      key={est.id}
+                      className="border-b border-slate-100 last:border-0 hover:bg-amber-50/40 cursor-pointer transition-colors"
+                      onClick={() => navigate(createPageUrl(`EstimateDetail?id=${est.id}`))}
+                    >
+                      <td className="px-5 py-3 font-mono text-xs text-slate-500">{est.estimate_number || "—"}</td>
+                      <td className="px-5 py-3 font-medium text-slate-900">{est.title}</td>
+                      <td className="px-5 py-3 text-slate-500">{est.issue_date || "—"}</td>
+                      <td className="px-5 py-3 text-right font-semibold text-slate-900">
+                        ${Number(est.total || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="px-5 py-3 text-center">
+                        <span className={cn("inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full", st.className)}>
+                          <Icon className="w-3 h-3" /> {st.label}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center">
+            <FileText className="w-8 h-8 text-slate-200 mx-auto mb-3" />
+            <p className="text-slate-500 text-sm">No estimates for this contact yet</p>
           </div>
         )}
       </div>
