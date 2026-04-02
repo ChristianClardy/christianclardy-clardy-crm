@@ -62,11 +62,16 @@ function mapDates(record) {
   };
 }
 
-// Strip Base44-style date fields and undefined values before writing.
+// Strip Base44-style date fields, client-only UI fields, and undefined values before writing.
+// Add any column name here that exists in app state but NOT in the database schema.
+const CLIENT_ONLY_FIELDS = new Set(['client_name']);
+
 function cleanForWrite(record) {
   const { created_date, updated_date, created_at, updated_at, ...rest } = record;
-  // Remove undefined values so Supabase doesn't reject them
-  return Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
+  // Remove undefined values and UI-only fields that have no DB column
+  return Object.fromEntries(
+    Object.entries(rest).filter(([k, v]) => v !== undefined && !CLIENT_ONLY_FIELDS.has(k))
+  );
 }
 
 // Map Base44-style sort field (e.g. "-created_date") → Supabase order params
