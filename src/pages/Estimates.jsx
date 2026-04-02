@@ -20,6 +20,7 @@ export default function Estimates() {
   const [estimates, setEstimates] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
@@ -27,18 +28,24 @@ export default function Estimates() {
   }, []);
 
   const loadData = async () => {
-    const [estData, clientData, leadData] = await Promise.all([
-      base44.entities.Estimate.list("-created_date"),
-      base44.entities.Client.list(),
-      base44.entities.Lead.list(),
-    ]);
-    setEstimates(estData);
-    const leadsAsClients = leadData.map(l => ({
-      id:   l.id,
-      name: l.full_name || l.name || l.email || "Unnamed Lead",
-    }));
-    setClients([...clientData, ...leadsAsClients]);
-    setLoading(false);
+    try {
+      const [estData, clientData, leadData] = await Promise.all([
+        base44.entities.Estimate.list("-created_date"),
+        base44.entities.Client.list(),
+        base44.entities.Lead.list(),
+      ]);
+      setEstimates(Array.isArray(estData) ? estData : []);
+      const leadsAsClients = (leadData || []).map(l => ({
+        id:   l.id,
+        name: l.full_name || l.name || l.email || "Unnamed Lead",
+      }));
+      setClients([...(clientData || []), ...leadsAsClients]);
+    } catch (err) {
+      console.error("Estimates loadData error:", err);
+      setLoadError(err?.message || "Failed to load estimates.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const clientMap = clients.reduce((acc, c) => ({ ...acc, [c.id]: c }), {});
@@ -85,8 +92,17 @@ export default function Estimates() {
   }));
 
   if (loading) return (
-    <div className="flex items-center justify-center min-h-screen">
+    <div className="flex items-center justify-center min-h-screen bg-white">
       <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
+  if (loadError) return (
+    <div className="flex flex-col items-center justify-center min-h-screen gap-3 text-center p-8">
+      <FileText className="w-10 h-10 text-slate-300" />
+      <p className="text-slate-600 font-medium">Could not load estimates</p>
+      <p className="text-sm text-slate-400">{loadError}</p>
+      <Button onClick={loadData} variant="outline" className="mt-2">Retry</Button>
     </div>
   );
 
