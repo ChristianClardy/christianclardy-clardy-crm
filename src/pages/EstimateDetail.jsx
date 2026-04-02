@@ -198,13 +198,20 @@ const fmtp = (n) => `${Number(n || 0).toFixed(1)}%`;
 
 // ─── Template Selector Modal ──────────────────────────────────────────────────
 
-function TemplatePicker({ onSelect }) {
+function TemplatePicker({ onSelect, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
-        <div className="px-6 py-5 border-b border-slate-200">
-          <h2 className="text-xl font-bold text-slate-900">Start New Estimate</h2>
-          <p className="text-sm text-slate-500 mt-0.5">Choose a template or start from scratch.</p>
+        <div className="px-6 py-5 border-b border-slate-200 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-slate-900">Start New Estimate</h2>
+            <p className="text-sm text-slate-500 mt-0.5">Choose a template or start from scratch.</p>
+          </div>
+          {onClose && (
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors flex-shrink-0">
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
         <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
           <button
@@ -1255,6 +1262,11 @@ export default function EstimateDetail() {
   const [saving, setSaving]             = useState(false);
   const [saved, setSaved]               = useState(false);
   const [saveError, setSaveError]       = useState("");
+
+  // Track the live ID — starts as existingId, updated after first create
+  const currentIdRef = useRef(existingId);
+  // Ref so the auto-save effect always has the latest handleSave without stale closures
+  const handleSaveRef = useRef(null);
   const [clients, setClients]           = useState([]);
   const [materials, setMaterials]       = useState([]);
   const [company, setCompany]           = useState(null);
@@ -1443,10 +1455,11 @@ export default function EstimateDetail() {
         total:          effectiveTotal,
         margin_percent: effectiveMargin,
       };
-      if (existingId) {
-        await base44.entities.Estimate.update(existingId, payload);
+      if (currentIdRef.current) {
+        await base44.entities.Estimate.update(currentIdRef.current, payload);
       } else {
         const created = await base44.entities.Estimate.create(payload);
+        currentIdRef.current = created.id;
         window.history.replaceState({}, "", createPageUrl(`EstimateDetail?id=${created.id}`));
       }
 
@@ -1488,6 +1501,20 @@ export default function EstimateDetail() {
     }
   };
 
+  // Keep the ref current so the effect below never captures a stale handleSave
+  handleSaveRef.current = handleSave;
+
+  // Auto-save: 4 seconds after the last change, if there's a title or items
+  useEffect(() => {
+    if (saving) return;
+    if (!estimate.title && items.length === 0) return; // nothing worth saving yet
+    const timer = setTimeout(() => {
+      handleSaveRef.current();
+    }, 4000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estimate, items]);
+
   const clientObj  = clients.find(c => c.id === estimate.client_id) || null;
   const clientName = clientObj?.name || "";
   const previewClient = clientObj || null;
@@ -1505,7 +1532,7 @@ export default function EstimateDetail() {
           onClose={() => setShowPreview(false)}
         />
       )}
-      {showPicker && <TemplatePicker onSelect={handleTemplatePick} />}
+      {showPicker && <TemplatePicker onSelect={handleTemplatePick} onClose={() => navigate(createPageUrl("Estimates"))} />}
       {showAddTrade && (
         <AddTradeDialog
           activeTrades={activeTrades}
