@@ -1341,7 +1341,6 @@ export default function EstimateDetail() {
       setEstimate({
         title:           est.title      || "",
         client_id:       est.client_id  || "",
-        client_name:     est.client_name || "",
         status:          est.status     || "draft",
         issue_date:      est.issue_date || new Date().toISOString().slice(0, 10),
         notes:           est.notes      || "",
@@ -1434,8 +1433,9 @@ export default function EstimateDetail() {
       const calcTotal = totalCost > 0 ? totalCost / (1 - marginPct / 100) : 0;
       const effectiveTotal  = estimate.total_override != null ? Number(estimate.total_override) : calcTotal;
       const effectiveMargin = effectiveTotal > 0 ? ((effectiveTotal - totalCost) / effectiveTotal) * 100 : marginPct;
+      const { client_name: _cn, ...estimateForSave } = estimate;
       const payload = {
-        ...estimate,
+        ...estimateForSave,
         // Convert empty strings to null for FK / nullable fields
         client_id:      estimate.client_id  || null,
         project_id:     estimate.project_id || null,
@@ -1489,9 +1489,8 @@ export default function EstimateDetail() {
   };
 
   const clientObj  = clients.find(c => c.id === estimate.client_id) || null;
-  // Fall back to the stored name in case the lookup hasn't resolved yet (e.g. leads loading)
-  const clientName = clientObj?.name || estimate.client_name || "";
-  const previewClient = clientObj || (clientName ? { name: clientName, email: "", phone: "", address: "" } : null);
+  const clientName = clientObj?.name || "";
+  const previewClient = clientObj || null;
   const effectiveMarginPct = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
   const { totalCost, totalSell } = summaryTotals(items, effectiveMarginPct);
 
@@ -1547,8 +1546,7 @@ export default function EstimateDetail() {
               const selected = clients.find(c => c.id === e.target.value);
               setEstimate(est => ({
                 ...est,
-                client_id:   e.target.value,
-                client_name: selected?.name || "",
+                client_id: e.target.value,
               }));
               setSaved(false);
             }}

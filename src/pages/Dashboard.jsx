@@ -25,12 +25,14 @@ import KPIGrid from "@/components/dashboard/KPIGrid";
 import ProjectStatusChart from "@/components/dashboard/ProjectStatusChart";
 import PriorityQueuePanel from "@/components/dashboard/PriorityQueuePanel";
 import QuickNotes from "@/components/notes/QuickNotes";
+import TaskDeadlinePanel from "@/components/dashboard/TaskDeadlinePanel";
 import { getSelectedCompanyScope, subscribeToCompanyScope } from "@/lib/companyScope";
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [clients, setClients] = useState([]);
+  const [sheets, setSheets] = useState([]);
   const [selectedCompanyScope, setSelectedCompanyScope] = useState(getSelectedCompanyScope());
   const [loading, setLoading] = useState(true);
 
@@ -76,6 +78,7 @@ export default function Dashboard() {
 
     setProjects(enriched);
     setClients(clientsData);
+    setSheets(sheetsData);
     setLoading(false);
   };
 
@@ -136,6 +139,8 @@ export default function Dashboard() {
       <KPIGrid projects={visibleProjects} clients={clients} />
 
       <PriorityQueuePanel />
+
+      <TaskDeadlinePanel sheets={sheets} projects={visibleProjects} />
 
       <div>
         <div className="flex items-center justify-between mb-5">

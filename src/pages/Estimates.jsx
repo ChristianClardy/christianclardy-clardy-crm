@@ -46,7 +46,7 @@ export default function Estimates() {
 
   const handleDuplicate = async (e, est) => {
     e.stopPropagation(); // don't navigate to the estimate
-    const { id, created_at, updated_at, created_date, updated_date, estimate_number, ...rest } = est;
+    const { id, created_at, updated_at, created_date, updated_date, estimate_number, client_name, ...rest } = est;
     const copy = await base44.entities.Estimate.create({
       ...rest,
       title: `${est.title || "Estimate"} (Copy)`,
