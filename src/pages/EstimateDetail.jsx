@@ -1265,8 +1265,6 @@ export default function EstimateDetail() {
 
   // Track the live ID — starts as existingId, updated after first create
   const currentIdRef = useRef(existingId);
-  // Ref so the auto-save effect always has the latest handleSave without stale closures
-  const handleSaveRef = useRef(null);
   const [clients, setClients]           = useState([]);
   const [materials, setMaterials]       = useState([]);
   const [company, setCompany]           = useState(null);
@@ -1501,17 +1499,14 @@ export default function EstimateDetail() {
     }
   };
 
-  // Keep the ref current so the effect below never captures a stale handleSave
-  handleSaveRef.current = handleSave;
-
-  // Auto-save: 4 seconds after the last change, if there's a title or items
+  // Auto-save: 4 seconds after the last change, if there is something to save.
+  // Direct closure call — each effect render captures the latest handleSave.
   useEffect(() => {
-    if (saving) return;
-    if (!estimate.title && items.length === 0) return; // nothing worth saving yet
-    const timer = setTimeout(() => {
-      handleSaveRef.current();
-    }, 4000);
-    return () => clearTimeout(timer);
+    if (!estimate.title && items.length === 0) return; // nothing to save yet
+    const timerId = setTimeout(() => handleSave(), 4000);
+    return () => clearTimeout(timerId);
+  // handleSave is intentionally excluded — it's recreated each render so
+  // the closure already has the latest estimate/items values.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estimate, items]);
 
