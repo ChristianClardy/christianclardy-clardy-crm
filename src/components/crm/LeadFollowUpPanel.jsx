@@ -79,11 +79,11 @@ export default function LeadFollowUpPanel({ lead, followUps, onRefresh }) {
             description:    form.details || "",
             start_datetime: startDT,
             end_datetime:   endDT,
-            event_type:     form.follow_up_type === "meeting" ? "meeting" : "reminder",
+            event_type:     form.follow_up_type === "meeting" ? "meeting" : "task",
             status:         "scheduled",
             assigned_users: [form.assigned_to],
             visibility:     "team",
-          }).catch(() => {});
+          });
         }
       }
 
