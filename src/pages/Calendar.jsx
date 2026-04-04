@@ -17,23 +17,13 @@ import { canUserSeeEvent, expandRecurringEvents, filterBySearch, getVisibleRange
 import { getSelectedCompanyScope, subscribeToCompanyScope } from "@/lib/companyScope";
 import { buildIcsFile, buildWeekDays, downloadIcsFile, getRangeLabel, shiftCalendarDate, sortEntries } from "@/lib/calendarUtils";
 import { cn } from "@/lib/utils";
+import { getCalendarColors, getStoredColorScheme } from "@/lib/colorSchemes";
 
 const statusColors = {
   scheduled: "bg-blue-500 hover:bg-blue-600",
   in_progress: "bg-amber-500 hover:bg-amber-600",
   completed: "bg-emerald-500 hover:bg-emerald-600",
   delayed: "bg-rose-500 hover:bg-rose-600",
-};
-
-const eventTypeColors = {
-  meeting: "bg-slate-700 hover:bg-slate-800",
-  estimate: "bg-purple-500 hover:bg-purple-600",
-  build: "bg-amber-500 hover:bg-amber-600",
-  inspection: "bg-cyan-500 hover:bg-cyan-600",
-  task: "bg-blue-500 hover:bg-blue-600",
-  admin: "bg-indigo-500 hover:bg-indigo-600",
-  personal: "bg-pink-500 hover:bg-pink-600",
-  other: "bg-slate-500 hover:bg-slate-600",
 };
 
 function normalizeOperationStatus(value) {
@@ -238,6 +228,7 @@ export default function Calendar() {
     await loadData();
   };
 
+  const eventTypeColors = getCalendarColors(getStoredColorScheme());
   const getEventClassName = (entry) => statusColors[entry.status] || eventTypeColors[entry.event_type] || eventTypeColors.other;
 
   if (loading) {

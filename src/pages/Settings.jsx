@@ -4,8 +4,10 @@ import { supabase } from "@/lib/supabase";
 import {
   Users, ShieldCheck, Plus, Edit2, Trash2, Search,
   Save, Check, X, CalendarDays, Copy, CheckCheck,
-  Building2, UserPlus, Mail, Phone, Loader2,
+  Building2, UserPlus, Mail, Phone, Loader2, Palette, Moon, Sun,
 } from "lucide-react";
+import { useTheme } from "@/lib/ThemeContext";
+import { COLOR_SCHEMES } from "@/lib/colorSchemes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -528,6 +530,72 @@ function CalendarFeedTab() {
   );
 }
 
+// ─── Appearance tab ───────────────────────────────────────────────────────────
+
+function AppearanceTab() {
+  const { theme, toggleTheme, colorScheme, setColorScheme } = useTheme();
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      {/* Dark / Light mode */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <h2 className="text-base font-semibold text-slate-900 mb-4">Mode</h2>
+        <div className="flex gap-3">
+          {[
+            { id: "light", label: "Light", icon: Sun },
+            { id: "dark",  label: "Dark",  icon: Moon },
+          ].map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => { if (theme !== id) toggleTheme(); }}
+              className={cn(
+                "flex flex-col items-center gap-2 rounded-xl border-2 px-6 py-4 text-sm font-medium transition-all",
+                theme === id
+                  ? "border-slate-900 bg-slate-900 text-white"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-400"
+              )}
+            >
+              <Icon className="h-5 w-5" />
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Color scheme */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <h2 className="text-base font-semibold text-slate-900 mb-1">Color Scheme</h2>
+        <p className="text-sm text-slate-500 mb-5">Applies to buttons, badges, calendar accents, and sidebar highlights across the entire app.</p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {COLOR_SCHEMES.map((scheme) => (
+            <button
+              key={scheme.id}
+              onClick={() => setColorScheme(scheme.id)}
+              className={cn(
+                "flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition-all",
+                colorScheme === scheme.id
+                  ? "border-slate-900 bg-slate-50 shadow-sm"
+                  : "border-slate-200 bg-white hover:border-slate-400"
+              )}
+            >
+              <div className="flex shrink-0 gap-1">
+                {scheme.swatches.map((color, i) => (
+                  <span key={i} className="h-5 w-5 rounded-full border border-black/10" style={{ backgroundColor: color }} />
+                ))}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-900">{scheme.label}</p>
+                <p className="truncate text-xs text-slate-500">{scheme.description}</p>
+              </div>
+              {colorScheme === scheme.id && <Check className="ml-auto h-4 w-4 shrink-0 text-slate-900" />}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -536,6 +604,7 @@ const TABS = [
   { key: "companies",   label: "Companies",           icon: Building2 },
   { key: "invite",      label: "Invite & Logins",     icon: UserPlus },
   { key: "calendar",    label: "Calendar Feed",        icon: CalendarDays },
+  { key: "appearance",  label: "Appearance",           icon: Palette },
 ];
 
 export default function Settings() {
@@ -573,6 +642,7 @@ export default function Settings() {
       {activeTab === "companies"   && <CompanyManager />}
       {activeTab === "invite"      && <InviteTab />}
       {activeTab === "calendar"    && <CalendarFeedTab />}
+      {activeTab === "appearance"  && <AppearanceTab />}
     </div>
   );
 }

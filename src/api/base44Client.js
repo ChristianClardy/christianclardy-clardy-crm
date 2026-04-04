@@ -69,7 +69,7 @@ const CLIENT_ONLY_FIELDS = new Set(['client_name']);
 // Per-table fields to strip when a schema-cache "column not found" error occurs on retry.
 // These are fields the app sends that the DB might not have yet.
 const TABLE_OPTIONAL_FIELDS = {
-  lead_follow_ups: new Set(['title','details','assigned_to','lead_name','follow_up_type','follow_up_date','follow_up_time','status']),
+  lead_follow_ups: new Set(['title','details','assigned_to','lead_name','follow_up_type','follow_up_date','follow_up_time','follow_up_end_time','status']),
 };
 
 function cleanForWrite(record) {

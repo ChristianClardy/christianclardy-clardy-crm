@@ -132,3 +132,139 @@
 .dark textarea::placeholder {
   color: hsl(var(--muted-foreground)) !important;
 }
+
+/* ─── Color scheme overrides ─────────────────────────────────────────────────
+   Each [data-color-scheme] block overrides Tailwind's amber/orange utility
+   classes so every accent in the app shifts to the chosen palette.
+   The sidebar reads --brand-gold which is set via JS in colorSchemes.js.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* Blue */
+[data-color-scheme="blue"] .from-amber-500,
+[data-color-scheme="blue"] .from-amber-400 {
+  --tw-gradient-from: #3b82f6 var(--tw-gradient-from-position);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(59 130 246 / 0));
+}
+[data-color-scheme="blue"] .to-orange-500,
+[data-color-scheme="blue"] .to-orange-400,
+[data-color-scheme="blue"] .to-amber-500 {
+  --tw-gradient-to: #6366f1 var(--tw-gradient-to-position);
+}
+[data-color-scheme="blue"] .bg-amber-500  { background-color: #3b82f6 !important; }
+[data-color-scheme="blue"] .bg-amber-100  { background-color: #dbeafe !important; }
+[data-color-scheme="blue"] .bg-amber-50   { background-color: #eff6ff !important; }
+[data-color-scheme="blue"] .text-amber-700 { color: #1d4ed8 !important; }
+[data-color-scheme="blue"] .text-amber-600 { color: #2563eb !important; }
+[data-color-scheme="blue"] .text-amber-500 { color: #3b82f6 !important; }
+[data-color-scheme="blue"] .border-amber-300 { border-color: #93c5fd !important; }
+[data-color-scheme="blue"] .border-amber-500 { border-color: #3b82f6 !important; }
+[data-color-scheme="blue"] .border-t-amber-500 { border-top-color: #3b82f6 !important; }
+[data-color-scheme="blue"] .hover\:bg-amber-600:hover  { background-color: #2563eb !important; }
+[data-color-scheme="blue"] .hover\:bg-amber-50\/30:hover { background-color: rgb(239 246 255 / 0.3) !important; }
+[data-color-scheme="blue"] .hover\:text-amber-600:hover { color: #2563eb !important; }
+[data-color-scheme="blue"] .focus\:ring-amber-400:focus,
+[data-color-scheme="blue"] .ring-amber-400 { --tw-ring-color: #60a5fa !important; }
+
+/* Green */
+[data-color-scheme="green"] .from-amber-500,
+[data-color-scheme="green"] .from-amber-400 {
+  --tw-gradient-from: #10b981 var(--tw-gradient-from-position);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(16 185 129 / 0));
+}
+[data-color-scheme="green"] .to-orange-500,
+[data-color-scheme="green"] .to-orange-400,
+[data-color-scheme="green"] .to-amber-500 {
+  --tw-gradient-to: #0d9488 var(--tw-gradient-to-position);
+}
+[data-color-scheme="green"] .bg-amber-500  { background-color: #10b981 !important; }
+[data-color-scheme="green"] .bg-amber-100  { background-color: #d1fae5 !important; }
+[data-color-scheme="green"] .bg-amber-50   { background-color: #ecfdf5 !important; }
+[data-color-scheme="green"] .text-amber-700 { color: #047857 !important; }
+[data-color-scheme="green"] .text-amber-600 { color: #059669 !important; }
+[data-color-scheme="green"] .text-amber-500 { color: #10b981 !important; }
+[data-color-scheme="green"] .border-amber-300 { border-color: #6ee7b7 !important; }
+[data-color-scheme="green"] .border-amber-500 { border-color: #10b981 !important; }
+[data-color-scheme="green"] .border-t-amber-500 { border-top-color: #10b981 !important; }
+[data-color-scheme="green"] .hover\:bg-amber-600:hover  { background-color: #059669 !important; }
+[data-color-scheme="green"] .hover\:bg-amber-50\/30:hover { background-color: rgb(236 253 245 / 0.3) !important; }
+[data-color-scheme="green"] .hover\:text-amber-600:hover { color: #059669 !important; }
+[data-color-scheme="green"] .focus\:ring-amber-400:focus,
+[data-color-scheme="green"] .ring-amber-400 { --tw-ring-color: #34d399 !important; }
+
+/* Purple */
+[data-color-scheme="purple"] .from-amber-500,
+[data-color-scheme="purple"] .from-amber-400 {
+  --tw-gradient-from: #8b5cf6 var(--tw-gradient-from-position);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(139 92 246 / 0));
+}
+[data-color-scheme="purple"] .to-orange-500,
+[data-color-scheme="purple"] .to-orange-400,
+[data-color-scheme="purple"] .to-amber-500 {
+  --tw-gradient-to: #a855f7 var(--tw-gradient-to-position);
+}
+[data-color-scheme="purple"] .bg-amber-500  { background-color: #8b5cf6 !important; }
+[data-color-scheme="purple"] .bg-amber-100  { background-color: #ede9fe !important; }
+[data-color-scheme="purple"] .bg-amber-50   { background-color: #f5f3ff !important; }
+[data-color-scheme="purple"] .text-amber-700 { color: #6d28d9 !important; }
+[data-color-scheme="purple"] .text-amber-600 { color: #7c3aed !important; }
+[data-color-scheme="purple"] .text-amber-500 { color: #8b5cf6 !important; }
+[data-color-scheme="purple"] .border-amber-300 { border-color: #c4b5fd !important; }
+[data-color-scheme="purple"] .border-amber-500 { border-color: #8b5cf6 !important; }
+[data-color-scheme="purple"] .border-t-amber-500 { border-top-color: #8b5cf6 !important; }
+[data-color-scheme="purple"] .hover\:bg-amber-600:hover  { background-color: #7c3aed !important; }
+[data-color-scheme="purple"] .hover\:bg-amber-50\/30:hover { background-color: rgb(245 243 255 / 0.3) !important; }
+[data-color-scheme="purple"] .hover\:text-amber-600:hover { color: #7c3aed !important; }
+[data-color-scheme="purple"] .focus\:ring-amber-400:focus,
+[data-color-scheme="purple"] .ring-amber-400 { --tw-ring-color: #a78bfa !important; }
+
+/* Rose */
+[data-color-scheme="rose"] .from-amber-500,
+[data-color-scheme="rose"] .from-amber-400 {
+  --tw-gradient-from: #f43f5e var(--tw-gradient-from-position);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(244 63 94 / 0));
+}
+[data-color-scheme="rose"] .to-orange-500,
+[data-color-scheme="rose"] .to-orange-400,
+[data-color-scheme="rose"] .to-amber-500 {
+  --tw-gradient-to: #e11d48 var(--tw-gradient-to-position);
+}
+[data-color-scheme="rose"] .bg-amber-500  { background-color: #f43f5e !important; }
+[data-color-scheme="rose"] .bg-amber-100  { background-color: #ffe4e6 !important; }
+[data-color-scheme="rose"] .bg-amber-50   { background-color: #fff1f2 !important; }
+[data-color-scheme="rose"] .text-amber-700 { color: #be123c !important; }
+[data-color-scheme="rose"] .text-amber-600 { color: #e11d48 !important; }
+[data-color-scheme="rose"] .text-amber-500 { color: #f43f5e !important; }
+[data-color-scheme="rose"] .border-amber-300 { border-color: #fda4af !important; }
+[data-color-scheme="rose"] .border-amber-500 { border-color: #f43f5e !important; }
+[data-color-scheme="rose"] .border-t-amber-500 { border-top-color: #f43f5e !important; }
+[data-color-scheme="rose"] .hover\:bg-amber-600:hover  { background-color: #e11d48 !important; }
+[data-color-scheme="rose"] .hover\:bg-amber-50\/30:hover { background-color: rgb(255 241 242 / 0.3) !important; }
+[data-color-scheme="rose"] .hover\:text-amber-600:hover { color: #e11d48 !important; }
+[data-color-scheme="rose"] .focus\:ring-amber-400:focus,
+[data-color-scheme="rose"] .ring-amber-400 { --tw-ring-color: #fb7185 !important; }
+
+/* Slate */
+[data-color-scheme="slate"] .from-amber-500,
+[data-color-scheme="slate"] .from-amber-400 {
+  --tw-gradient-from: #475569 var(--tw-gradient-from-position);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgb(71 85 105 / 0));
+}
+[data-color-scheme="slate"] .to-orange-500,
+[data-color-scheme="slate"] .to-orange-400,
+[data-color-scheme="slate"] .to-amber-500 {
+  --tw-gradient-to: #334155 var(--tw-gradient-to-position);
+}
+[data-color-scheme="slate"] .bg-amber-500  { background-color: #475569 !important; }
+[data-color-scheme="slate"] .bg-amber-100  { background-color: #e2e8f0 !important; }
+[data-color-scheme="slate"] .bg-amber-50   { background-color: #f8fafc !important; }
+[data-color-scheme="slate"] .text-amber-700 { color: #334155 !important; }
+[data-color-scheme="slate"] .text-amber-600 { color: #475569 !important; }
+[data-color-scheme="slate"] .text-amber-500 { color: #64748b !important; }
+[data-color-scheme="slate"] .border-amber-300 { border-color: #94a3b8 !important; }
+[data-color-scheme="slate"] .border-amber-500 { border-color: #475569 !important; }
+[data-color-scheme="slate"] .border-t-amber-500 { border-top-color: #475569 !important; }
+[data-color-scheme="slate"] .hover\:bg-amber-600:hover  { background-color: #334155 !important; }
+[data-color-scheme="slate"] .hover\:bg-amber-50\/30:hover { background-color: rgb(248 250 252 / 0.3) !important; }
+[data-color-scheme="slate"] .hover\:text-amber-600:hover { color: #475569 !important; }
+[data-color-scheme="slate"] .focus\:ring-amber-400:focus,
+[data-color-scheme="slate"] .ring-amber-400 { --tw-ring-color: #94a3b8 !important; }
