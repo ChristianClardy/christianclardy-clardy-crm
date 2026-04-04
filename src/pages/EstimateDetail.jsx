@@ -673,7 +673,7 @@ async function loadImageAsDataUrl(src) {
   }
 }
 
-async function exportPDF(estimate, clientName, items) {
+async function exportPDF(estimate, clientName, items, company) {
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const W = 612, ML = 50, MR = 562, TW = MR - ML;
   let y = 50;
@@ -690,12 +690,15 @@ async function exportPDF(estimate, clientName, items) {
     doc.addImage(logoDataUrl, "PNG", ML, 10, 0, 70);
   }
 
+  // Company name — use the profile matched to the client's company, or fallback
+  const pdfCompanyName = company?.invoice_company_name || company?.name || "Construction Estimate";
+
   // Company name + label to the right of the logo
   const textX = logoDataUrl ? ML + 120 : ML;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
   doc.setTextColor(245, 240, 235);
-  doc.text("Edwards Design and Construction", textX, 40);
+  doc.text(pdfCompanyName, textX, 40);
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(181, 150, 90); // gold
@@ -1268,6 +1271,7 @@ export default function EstimateDetail() {
   const [clients, setClients]           = useState([]);
   const [materials, setMaterials]       = useState([]);
   const [company, setCompany]           = useState(null);
+  const [allCompanyProfiles, setAllCompanyProfiles] = useState([]);
 
   const [estimate, setEstimate] = useState({
     title: "",
@@ -1310,6 +1314,7 @@ export default function EstimateDetail() {
     });
     base44.entities.Material.list("name").then(setMaterials);
     base44.entities.CompanyProfile.list().then(rows => {
+      setAllCompanyProfiles(rows || []);
       if (rows.length) {
         setCompany(rows[0]);
         setCustomMaterialCategories(rows[0]?.settings?.custom_material_categories || []);
@@ -1513,6 +1518,12 @@ export default function EstimateDetail() {
   const clientObj  = clients.find(c => c.id === estimate.client_id) || null;
   const clientName = clientObj?.name || "";
   const previewClient = clientObj || null;
+
+  // Use the company profile that matches the client's assigned company,
+  // falling back to the default (first) profile.
+  const effectiveCompany = (clientObj?.company
+    ? allCompanyProfiles.find(p => p.name === clientObj.company) || company
+    : company) || company;
   const effectiveMarginPct = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
   const { totalCost, totalSell } = summaryTotals(items, effectiveMarginPct);
 
@@ -1523,7 +1534,7 @@ export default function EstimateDetail() {
           estimate={estimate}
           client={previewClient}
           items={items}
-          company={company}
+          company={effectiveCompany}
           onClose={() => setShowPreview(false)}
         />
       )}
@@ -1609,7 +1620,7 @@ export default function EstimateDetail() {
 
           <Button
             variant="outline" size="sm"
-            onClick={() => exportPDF(estimate, clientName, items).catch(console.error)}
+            onClick={() => exportPDF(estimate, clientName, items, effectiveCompany).catch(console.error)}
             className="gap-1.5"
           >
             <Download className="w-4 h-4" /> PDF
