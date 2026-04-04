@@ -240,7 +240,7 @@ export default function Calendar() {
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 lg:text-3xl">Calendar</h1>
-          <p className="mt-1 text-slate-500">{mode === "operations" ? "Timeline view of crew and subcontractor allocation from project schedules." : "Outlook-style scheduling for crews, meetings, inspections, and personal planning."}</p>
+          <p className="mt-1 text-slate-500">{mode === "operations" ? "Timeline view of crew and subcontractor allocation from project schedules." : "Scheduling for crews, meetings, inspections, and personal planning."}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center rounded-xl bg-slate-100 p-1">
