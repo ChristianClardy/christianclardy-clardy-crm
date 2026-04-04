@@ -17,7 +17,7 @@ import {
   subWeeks,
 } from "date-fns";
 
-const WEEK_STARTS_ON = 1;
+const WEEK_STARTS_ON = 0;
 
 export function parseDateTime(value, isEnd = false) {
   if (!value) return null;

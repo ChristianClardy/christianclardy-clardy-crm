@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import { buildMonthWeeks, entryOverlapsDay, isOutsideCurrentMonth, sortEntries } from "@/lib/calendarUtils";
 import { cn } from "@/lib/utils";
 
-const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const dayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export default function CalendarMonthView({ currentDate, entries, entryClassName, getEntryLabel, onEntryClick, onCreateRange }) {
   const weeks = buildMonthWeeks(currentDate);
