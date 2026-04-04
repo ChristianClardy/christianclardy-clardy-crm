@@ -66,21 +66,28 @@ export default function LeadFollowUpPanel({ lead, followUps, onRefresh }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
+    // Convert empty time strings to null so Postgres TIME columns don't reject them
+    const cleanedForm = {
+      ...form,
+      follow_up_date:     form.follow_up_date     || null,
+      follow_up_time:     form.follow_up_time     || null,
+      follow_up_end_time: form.follow_up_end_time || null,
+    };
     try {
       if (editingId) {
-        await base44.entities.LeadFollowUp.update(editingId, form);
+        await base44.entities.LeadFollowUp.update(editingId, cleanedForm);
         setEditingId(null);
       } else {
         await base44.entities.LeadFollowUp.create({
-          ...form,
+          ...cleanedForm,
           lead_id:   lead.id,
           lead_name: lead.full_name,
         });
 
         // Create calendar event for new follow-ups with date + time + assignee
-        if (form.follow_up_date && form.follow_up_time && form.assigned_to) {
-          const startDT = `${form.follow_up_date}T${form.follow_up_time}:00`;
-          const endTime = form.follow_up_end_time || addMinutes(form.follow_up_time, 15);
+        if (cleanedForm.follow_up_date && cleanedForm.follow_up_time && cleanedForm.assigned_to) {
+          const startDT = `${cleanedForm.follow_up_date}T${cleanedForm.follow_up_time}:00`;
+          const endTime = cleanedForm.follow_up_end_time || addMinutes(cleanedForm.follow_up_time, 15);
           const endDT   = `${form.follow_up_date}T${endTime}:00`;
           await base44.entities.CalendarEvent.create({
             title:            `${form.title} — ${lead.full_name}`,
