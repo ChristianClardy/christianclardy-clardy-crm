@@ -1505,13 +1505,43 @@ export default function EstimateDetail() {
         window.history.replaceState({}, "", createPageUrl(`EstimateDetail?id=${created.id}`));
       }
 
-      // Auto-save new items to the material/labor library
+      // Auto-save new items to the material/labor library.
+      // Fetch fresh list first to avoid stale-state duplicates from rapid auto-saves.
+      const freshMaterials = await base44.entities.Material.list("name").catch(() => []);
+      // Deduplicate the library: for same-name entries keep the richest, delete the rest.
+      const byNameKey = {};
+      for (const m of freshMaterials) {
+        const key = (m.name || "").trim().toLowerCase();
+        if (!key) continue;
+        if (!byNameKey[key]) { byNameKey[key] = []; }
+        byNameKey[key].push(m);
+      }
+      const richness = m =>
+        (m.name?.trim().length || 0) +
+        (m.description?.trim().length || 0) +
+        ((m.material_cost || 0) + (m.labor_cost || 0) + (m.sub_cost || 0)) * 100;
+      for (const group of Object.values(byNameKey)) {
+        if (group.length < 2) continue;
+        group.sort((a, b) => richness(b) - richness(a));
+        for (const dupe of group.slice(1)) {
+          await base44.entities.Material.delete(dupe.id).catch(() => {});
+        }
+      }
+
       const LABOR_TRADES = new Set(["Framing Labor","Masonry Labor","Roofing Labor","Electrical Labor","Plumbing Labor","HVAC Labor","Finish Labor","Demo Labor","General Labor","Subcontractor","Other Labor","Labor"]);
+      // Rebuild deduped index
+      const libIndex = {};
+      for (const m of freshMaterials) {
+        const key = (m.name || "").trim().toLowerCase();
+        if (!key) continue;
+        if (!libIndex[key] || richness(m) > richness(libIndex[key])) libIndex[key] = m;
+      }
       for (const item of items) {
         const name = (item.description || "").trim();
         const cost = Number(item.cost_per_unit) || 0;
         if (!name || cost === 0) continue; // skip blank or zero-cost items
-        const existing = materials.find(m => (m.name || "").trim().toLowerCase() === name.toLowerCase());
+        const key = name.toLowerCase();
+        const existing = libIndex[key];
         const isLaborItem = item.sectionType === "labor" || LABOR_TRADES.has(item.trade);
         const matData = {
           name,
@@ -1530,7 +1560,7 @@ export default function EstimateDetail() {
           await base44.entities.Material.create(matData).catch(() => {});
         }
       }
-      // Refresh materials list in background
+      // Refresh materials list in state
       base44.entities.Material.list("name").then(setMaterials).catch(() => {});
 
       setSaved(true);
