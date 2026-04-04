@@ -49,9 +49,10 @@ const statusStyles = {
 
 export default function Clients() {
   const navigate = useNavigate();
-  const [clients, setClients]       = useState([]);
-  const [projects, setProjects]     = useState([]);
-  const [loading, setLoading]       = useState(true);
+  const [clients, setClients]           = useState([]);
+  const [projects, setProjects]         = useState([]);
+  const [companyProfiles, setCompanyProfiles] = useState([]);
+  const [loading, setLoading]           = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCompany, setSelectedCompany] = useState("__all__");
   const [isDialogOpen, setIsDialogOpen]   = useState(false);
@@ -67,12 +68,14 @@ export default function Clients() {
 
   const loadData = async () => {
     try {
-      const [clientsData, projectsData] = await Promise.all([
+      const [clientsData, projectsData, profilesData] = await Promise.all([
         base44.entities.Client.list("-created_date"),
         base44.entities.Project.list(),
+        base44.entities.CompanyProfile.list("name"),
       ]);
       setClients(clientsData);
       setProjects(projectsData);
+      setCompanyProfiles(profilesData || []);
     } catch (error) {
       console.error("Error loading data:", error);
     } finally {
@@ -412,19 +415,20 @@ export default function Clients() {
             </div>
             <div>
               <Label className="text-slate-500">Company <span className="font-normal text-slate-400">(optional)</span></Label>
-              {/* Offer autocomplete from existing companies */}
-              <Input
-                placeholder="e.g. Acme Corp"
-                value={formData.company}
-                onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                list="company-suggestions"
-                className="mt-1.5"
-              />
-              {companies.length > 0 && (
-                <datalist id="company-suggestions">
-                  {companies.map(co => <option key={co} value={co} />)}
-                </datalist>
-              )}
+              <Select
+                value={formData.company || "__none__"}
+                onValueChange={(v) => setFormData({ ...formData, company: v === "__none__" ? "" : v })}
+              >
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue placeholder="— Select company —" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— None —</SelectItem>
+                  {companyProfiles.map(cp => (
+                    <SelectItem key={cp.id} value={cp.name}>{cp.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>

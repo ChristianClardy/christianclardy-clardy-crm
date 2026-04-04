@@ -66,6 +66,7 @@ export default function ClientDetail() {
   const [client, setClient] = useState(null);
   const [projects, setProjects] = useState([]);
   const [estimates, setEstimates] = useState([]);
+  const [companyProfiles, setCompanyProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [formData, setFormData] = useState({});
@@ -85,15 +86,17 @@ export default function ClientDetail() {
 
   const loadData = async () => {
     try {
-      const [clientData, projectsData, estimatesData] = await Promise.all([
+      const [clientData, projectsData, estimatesData, profilesData] = await Promise.all([
         base44.entities.Client.get(clientId),
         base44.entities.Project.filter({ client_id: clientId }, "-created_date"),
         base44.entities.Estimate.filter({ client_id: clientId }, "-created_date"),
+        base44.entities.CompanyProfile.list("name"),
       ]);
       setClient(clientData);
       setFormData(clientData);
       setProjects(projectsData);
       setEstimates(estimatesData);
+      setCompanyProfiles(profilesData || []);
     } catch (error) {
       console.error("Error loading client:", error);
       setClient(null);
@@ -375,7 +378,7 @@ export default function ClientDetail() {
           </DialogHeader>
           <form onSubmit={handleUpdateClient} className="space-y-4">
             <div>
-              <Label>Company Name</Label>
+              <Label>Contact Name</Label>
               <Input
                 value={formData.name || ""}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -384,12 +387,20 @@ export default function ClientDetail() {
             </div>
             <div>
               <Label>Company <span className="font-normal text-slate-400">(optional)</span></Label>
-              <Input
-                placeholder="e.g. Acme Corp"
-                value={formData.company || ""}
-                onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                className="mt-1.5"
-              />
+              <Select
+                value={formData.company || "__none__"}
+                onValueChange={(v) => setFormData({ ...formData, company: v === "__none__" ? "" : v })}
+              >
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue placeholder="— Select company —" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— None —</SelectItem>
+                  {companyProfiles.map(cp => (
+                    <SelectItem key={cp.id} value={cp.name}>{cp.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <Label>Contact Person</Label>
