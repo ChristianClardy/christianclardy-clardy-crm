@@ -72,7 +72,7 @@ export default function LeadFollowUpPanel({ lead, followUps, onRefresh }) {
         if (form.follow_up_date && form.follow_up_time && form.assigned_to) {
           const startDT = `${form.follow_up_date}T${form.follow_up_time}:00`;
           const endDate = new Date(startDT);
-          endDate.setMinutes(endDate.getMinutes() + 30);
+          endDate.setMinutes(endDate.getMinutes() + 15);
           const endDT = endDate.toISOString().slice(0, 19);
           await base44.entities.CalendarEvent.create({
             title:          form.title || `Follow Up — ${lead.full_name}`,
