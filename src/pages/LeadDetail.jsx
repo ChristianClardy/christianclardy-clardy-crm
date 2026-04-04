@@ -156,10 +156,8 @@ export default function LeadDetail() {
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <LeadFollowUpPanel lead={lead} followUps={followUps} onRefresh={loadData} />
-        <NextStepsPanel title="Lead Tasks / Next Steps" linkedClientId={lead.linked_contact_id || lead.id} />
-      </div>
+      <LeadFollowUpPanel lead={lead} followUps={followUps} onRefresh={loadData} />
+      <NextStepsPanel title="Lead Tasks / Next Steps" linkedClientId={lead.linked_contact_id || lead.id} />
 
       <ContactHistoryPanel
         title="Communication & History"
