@@ -12,7 +12,6 @@ import {
   User,
   Building2,
   ChevronRight,
-  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -86,12 +85,6 @@ export default function Clients() {
   const getClientProjectCount = (clientId) =>
     projects.filter((p) => p.client_id === clientId).length;
 
-  // Unique, sorted companies derived from client data
-  const companies = useMemo(() => {
-    const set = new Set(clients.map(c => (c.company || "").trim()).filter(Boolean));
-    return [...set].sort((a, b) => a.localeCompare(b));
-  }, [clients]);
-
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase();
     return clients.filter(c => {
@@ -119,12 +112,12 @@ export default function Clients() {
       map.get(key).push(c);
     }
     const result = [];
-    for (const co of companies) {
-      if (map.has(co)) result.push({ company: co, items: map.get(co) });
+    for (const cp of companyProfiles) {
+      if (map.has(cp.name)) result.push({ company: cp.name, items: map.get(cp.name) });
     }
     if (map.has("__none__")) result.push({ company: null, items: map.get("__none__") });
     return result;
-  }, [filtered, companies, selectedCompany]);
+  }, [filtered, companyProfiles, selectedCompany]);
 
   const openNewDialog = () => {
     setDuplicateError("");
@@ -220,55 +213,24 @@ export default function Clients() {
         />
       </div>
 
-      {/* Company filter pills */}
-      {companies.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setSelectedCompany("__all__")}
-            className={cn(
-              "inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-medium border transition-all",
-              selectedCompany === "__all__"
-                ? "bg-slate-900 text-white border-slate-900"
-                : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+      {/* Company filter dropdown */}
+      <div className="flex items-center gap-3 max-w-xs">
+        <Building2 className="w-4 h-4 text-slate-400 flex-shrink-0" />
+        <Select value={selectedCompany} onValueChange={setSelectedCompany}>
+          <SelectTrigger className="bg-white border-slate-200 rounded-xl h-10">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All Companies</SelectItem>
+            {companyProfiles.map(cp => (
+              <SelectItem key={cp.id} value={cp.name}>{cp.name}</SelectItem>
+            ))}
+            {clients.some(c => !c.company?.trim()) && (
+              <SelectItem value="__none__">No Company</SelectItem>
             )}
-          >
-            <Users className="w-3.5 h-3.5" /> All People
-            <span className="ml-0.5 text-xs opacity-70">({clients.length})</span>
-          </button>
-          {companies.map(co => {
-            const count = clients.filter(c => (c.company || "").trim() === co).length;
-            return (
-              <button
-                key={co}
-                onClick={() => setSelectedCompany(co)}
-                className={cn(
-                  "inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-medium border transition-all",
-                  selectedCompany === co
-                    ? "bg-amber-500 text-white border-amber-500"
-                    : "bg-white text-slate-600 border-slate-200 hover:border-amber-300"
-                )}
-              >
-                <Building2 className="w-3.5 h-3.5" /> {co}
-                <span className="ml-0.5 text-xs opacity-70">({count})</span>
-              </button>
-            );
-          })}
-          {clients.some(c => !c.company?.trim()) && (
-            <button
-              onClick={() => setSelectedCompany("__none__")}
-              className={cn(
-                "inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-medium border transition-all",
-                selectedCompany === "__none__"
-                  ? "bg-slate-500 text-white border-slate-500"
-                  : "bg-white text-slate-400 border-slate-200 hover:border-slate-400"
-              )}
-            >
-              No Company
-              <span className="ml-0.5 text-xs opacity-70">({clients.filter(c => !c.company?.trim()).length})</span>
-            </button>
-          )}
-        </div>
-      )}
+          </SelectContent>
+        </Select>
+      </div>
 
       {/* Contact groups */}
       {filtered.length === 0 ? (
