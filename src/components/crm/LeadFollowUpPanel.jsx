@@ -8,12 +8,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { CalendarDays, Clock, Edit2, Trash2, User, X } from "lucide-react";
 
+const addMinutes = (timeStr, mins) => {
+  const [h, m] = timeStr.split(":").map(Number);
+  const total = h * 60 + m + mins;
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(Math.floor(total / 60) % 24)}:${pad(total % 60)}`;
+};
+
 const emptyForm = {
   title: "",
   details: "",
   follow_up_type: "reminder",
   follow_up_date: "",
   follow_up_time: "",
+  follow_up_end_time: "",
   assigned_to: "",
   status: "open",
 };
@@ -42,9 +50,10 @@ export default function LeadFollowUpPanel({ lead, followUps, onRefresh }) {
       title:          followUp.title          || "",
       details:        followUp.details        || "",
       follow_up_type: followUp.follow_up_type || "reminder",
-      follow_up_date: followUp.follow_up_date || "",
-      follow_up_time: followUp.follow_up_time || "",
-      assigned_to:    followUp.assigned_to    || "",
+      follow_up_date:     followUp.follow_up_date     || "",
+      follow_up_time:     followUp.follow_up_time     || "",
+      follow_up_end_time: followUp.follow_up_end_time || "",
+      assigned_to:        followUp.assigned_to        || "",
       status:         followUp.status         || "open",
     });
   };
@@ -71,9 +80,8 @@ export default function LeadFollowUpPanel({ lead, followUps, onRefresh }) {
         // Create calendar event for new follow-ups with date + time + assignee
         if (form.follow_up_date && form.follow_up_time && form.assigned_to) {
           const startDT = `${form.follow_up_date}T${form.follow_up_time}:00`;
-          const endDate = new Date(startDT);
-          endDate.setMinutes(endDate.getMinutes() + 15);
-          const endDT = endDate.toISOString().slice(0, 19);
+          const endTime = form.follow_up_end_time || addMinutes(form.follow_up_time, 15);
+          const endDT   = `${form.follow_up_date}T${endTime}:00`;
           await base44.entities.CalendarEvent.create({
             title:            `${form.title} — ${lead.full_name}`,
             description:      form.details || "",
@@ -163,8 +171,18 @@ export default function LeadFollowUpPanel({ lead, followUps, onRefresh }) {
               <Input type="date" value={form.follow_up_date} onChange={(e) => setForm({ ...form, follow_up_date: e.target.value })} className="mt-1 h-8 text-sm" required={!isEditing} />
             </div>
             <div>
-              <Label className="flex items-center gap-1 text-xs"><Clock className="h-3 w-3" /> Time {!isEditing && "*"}</Label>
+              <Label className="flex items-center gap-1 text-xs"><Clock className="h-3 w-3" /> Start {!isEditing && "*"}</Label>
               <Input type="time" value={form.follow_up_time} onChange={(e) => setForm({ ...form, follow_up_time: e.target.value })} className="mt-1 h-8 text-sm" required={!isEditing} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="flex items-center gap-1 text-xs"><Clock className="h-3 w-3" /> End time</Label>
+              <Input type="time" value={form.follow_up_end_time} onChange={(e) => setForm({ ...form, follow_up_end_time: e.target.value })} className="mt-1 h-8 text-sm" />
+            </div>
+            <div className="flex items-end pb-0.5">
+              <p className="text-xs text-slate-400">Leave blank for 15 min</p>
             </div>
           </div>
 
