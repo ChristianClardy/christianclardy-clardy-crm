@@ -636,7 +636,7 @@ function SummaryPanel({ items, estimate, onEstimateChange }) {
       {items.length > 0 && (() => {
         const bySection = {};
         for (const it of items) {
-          const t = itemTotals(it);
+          const t = itemTotals(it, marginPct);
           bySection[it.trade] = (bySection[it.trade] || 0) + t.total_sell;
         }
         const sorted = Object.entries(bySection).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
@@ -674,7 +674,7 @@ async function loadImageAsDataUrl(src) {
   }
 }
 
-async function exportPDF(estimate, clientName, items, company) {
+async function exportPDF(estimate, clientName, items, company, marginPct = 40) {
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const W = 612, ML = 50, MR = 562, TW = MR - ML;
   let y = 50;
@@ -749,7 +749,13 @@ async function exportPDF(estimate, clientName, items, company) {
 
   // Group by trade
   const trades = [...new Set(items.map(i => i.trade))];
-  const { totalCost, totalSell, profit, margin } = summaryTotals(items);
+  const rawTotals = summaryTotals(items, marginPct);
+  // Honor total_override if set
+  const hasOverride = estimate.total_override != null && estimate.total_override !== "";
+  const totalCost   = rawTotals.totalCost;
+  const totalSell   = hasOverride ? Number(estimate.total_override) : rawTotals.totalSell;
+  const profit      = totalSell - totalCost;
+  const margin      = totalSell > 0 ? (profit / totalSell) * 100 : 0;
 
   y += 20;
 
@@ -767,7 +773,7 @@ async function exportPDF(estimate, clientName, items, company) {
 
     for (const item of tradeItems) {
       if (y > 700) { doc.addPage(); y = 50; y = colHeaders(y); }
-      const { sell_per_unit, total_cost, total_sell } = itemTotals(item);
+      const { sell_per_unit, total_cost, total_sell } = itemTotals(item, marginPct);
       const hasCost = Number(item.cost_per_unit) > 0;
       doc.text(String(item.description || "").substring(0, 38), ML, y);
       doc.text(item.unit || "",                                  ML+200, y);
@@ -935,7 +941,7 @@ function ClientEstimateModal({ estimate, client, items, company, onClose }) {
       </thead>
       <tbody>
         {tradeItems.map(item => {
-          const { sell_per_unit, total_sell } = itemTotals(item);
+          const { sell_per_unit, total_sell } = itemTotals(item, previewMarginPct);
           const hasCost = Number(item.cost_per_unit) > 0;
           return (
             <tr key={item.id} className="border-b border-slate-100">
@@ -1640,7 +1646,7 @@ export default function EstimateDetail() {
 
           <Button
             variant="outline" size="sm"
-            onClick={() => exportPDF(estimate, clientName, items, effectiveCompany).catch(console.error)}
+            onClick={() => exportPDF(estimate, clientName, items, effectiveCompany, effectiveMarginPct).catch(console.error)}
             className="gap-1.5"
           >
             <Download className="w-4 h-4" /> PDF
