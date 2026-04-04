@@ -111,54 +111,66 @@ export default function LeadFollowUpPanel({ lead, followUps, onRefresh }) {
   const isEditing = editingId !== null;
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[380px,1fr]">
+    <div className="grid gap-4 xl:grid-cols-[340px,1fr]">
       {/* Form */}
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">{isEditing ? "Edit follow up" : "Add follow up"}</h2>
-            {!isEditing && <p className="mt-0.5 text-sm text-slate-500">Sets a calendar reminder for the assigned team member.</p>}
-          </div>
+          <h2 className="text-sm font-semibold text-slate-900">{isEditing ? "Edit follow up" : "Add follow up"}</h2>
           {isEditing && (
-            <button onClick={cancelEdit} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600">
-              <X className="h-4 w-4" />
+            <button onClick={cancelEdit} className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600">
+              <X className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+        <form onSubmit={handleSubmit} className="mt-3 space-y-3">
           <div>
-            <Label>Title *</Label>
-            <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="mt-1.5" required />
+            <Label className="text-xs">Title *</Label>
+            <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="mt-1 h-8 text-sm" required />
           </div>
 
-          <div>
-            <Label>Type</Label>
-            <Select value={form.follow_up_type} onValueChange={(v) => setForm({ ...form, follow_up_type: v })}>
-              <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {[["note","Note"],["reminder","Reminder"],["call","Call"],["email","Email"],["meeting","Meeting"]].map(([v,l]) => (
-                  <SelectItem key={v} value={v}>{l}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2">
             <div>
-              <Label className="flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5" /> Date {!isEditing && "*"}</Label>
-              <Input type="date" value={form.follow_up_date} onChange={(e) => setForm({ ...form, follow_up_date: e.target.value })} className="mt-1.5" required={!isEditing} />
+              <Label className="text-xs">Type</Label>
+              <Select value={form.follow_up_type} onValueChange={(v) => setForm({ ...form, follow_up_type: v })}>
+                <SelectTrigger className="mt-1 h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {[["note","Note"],["reminder","Reminder"],["call","Call"],["email","Email"],["meeting","Meeting"]].map(([v,l]) => (
+                    <SelectItem key={v} value={v}>{l}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {isEditing && (
+              <div>
+                <Label className="text-xs">Status</Label>
+                <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
+                  <SelectTrigger className="mt-1 h-8 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="open">Open</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="flex items-center gap-1 text-xs"><CalendarDays className="h-3 w-3" /> Date {!isEditing && "*"}</Label>
+              <Input type="date" value={form.follow_up_date} onChange={(e) => setForm({ ...form, follow_up_date: e.target.value })} className="mt-1 h-8 text-sm" required={!isEditing} />
             </div>
             <div>
-              <Label className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> Time {!isEditing && "*"}</Label>
-              <Input type="time" value={form.follow_up_time} onChange={(e) => setForm({ ...form, follow_up_time: e.target.value })} className="mt-1.5" required={!isEditing} />
+              <Label className="flex items-center gap-1 text-xs"><Clock className="h-3 w-3" /> Time {!isEditing && "*"}</Label>
+              <Input type="time" value={form.follow_up_time} onChange={(e) => setForm({ ...form, follow_up_time: e.target.value })} className="mt-1 h-8 text-sm" required={!isEditing} />
             </div>
           </div>
 
           <div>
-            <Label className="flex items-center gap-1"><User className="h-3.5 w-3.5" /> Assign To {!isEditing && "*"}</Label>
+            <Label className="flex items-center gap-1 text-xs"><User className="h-3 w-3" /> Assign To {!isEditing && "*"}</Label>
             <Select value={form.assigned_to || "__none__"} onValueChange={(v) => setForm({ ...form, assigned_to: v === "__none__" ? "" : v })}>
-              <SelectTrigger className="mt-1.5"><SelectValue placeholder="Select team member" /></SelectTrigger>
+              <SelectTrigger className="mt-1 h-8 text-sm"><SelectValue placeholder="Select team member" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">— Select —</SelectItem>
                 {employees.map(emp => (
@@ -168,89 +180,75 @@ export default function LeadFollowUpPanel({ lead, followUps, onRefresh }) {
             </Select>
           </div>
 
-          {isEditing && (
-            <div>
-              <Label>Status</Label>
-              <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
-                <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="open">Open</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
           <div>
-            <Label>Details / Notes</Label>
-            <Textarea value={form.details} onChange={(e) => setForm({ ...form, details: e.target.value })} className="mt-1.5" rows={4} />
+            <Label className="text-xs">Notes</Label>
+            <Textarea value={form.details} onChange={(e) => setForm({ ...form, details: e.target.value })} className="mt-1 text-sm" rows={2} />
           </div>
 
           <div className="flex gap-2">
             {isEditing && (
-              <Button type="button" variant="outline" onClick={cancelEdit} className="flex-1">Cancel</Button>
+              <Button type="button" variant="outline" size="sm" onClick={cancelEdit} className="flex-1">Cancel</Button>
             )}
-            <Button type="submit" disabled={saving} className="flex-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white">
-              {saving ? "Saving…" : isEditing ? "Update" : "Save & Add to Calendar"}
+            <Button type="submit" size="sm" disabled={saving} className="flex-1 bg-gradient-to-r from-amber-500 to-orange-500 text-white">
+              {saving ? "Saving…" : isEditing ? "Update" : "Save & Schedule"}
             </Button>
           </div>
         </form>
       </div>
 
       {/* List */}
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Lead updates</h2>
-        <div className="mt-5 space-y-4">
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="text-sm font-semibold text-slate-900">Follow ups</h2>
+        <div className="mt-3 space-y-2">
           {followUps.map((followUp) => (
-            <div key={followUp.id} className={`rounded-2xl border p-4 ${editingId === followUp.id ? "border-amber-300 bg-amber-50" : "border-slate-200"}`}>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 className="font-semibold text-slate-900">{followUp.title}</h3>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <Badge className={statusStyles[followUp.status] || statusStyles.open}>{followUp.status || "open"}</Badge>
-                    <Badge variant="outline">{followUp.follow_up_type || "reminder"}</Badge>
+            <div key={followUp.id} className={`rounded-xl border p-3 ${editingId === followUp.id ? "border-amber-300 bg-amber-50" : "border-slate-200"}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-900">{followUp.title}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                    <Badge className={`text-[10px] px-1.5 py-0 ${statusStyles[followUp.status] || statusStyles.open}`}>{followUp.status || "open"}</Badge>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">{followUp.follow_up_type || "reminder"}</Badge>
                     {followUp.follow_up_date && (
-                      <Badge variant="outline" className="flex items-center gap-1">
-                        <CalendarDays className="h-3 w-3" />
+                      <Badge variant="outline" className="flex items-center gap-0.5 text-[10px] px-1.5 py-0">
+                        <CalendarDays className="h-2.5 w-2.5" />
                         {followUp.follow_up_date}{followUp.follow_up_time && ` @ ${followUp.follow_up_time}`}
                       </Badge>
                     )}
                     {followUp.assigned_to && (
-                      <Badge variant="outline" className="flex items-center gap-1">
-                        <User className="h-3 w-3" /> {followUp.assigned_to}
+                      <Badge variant="outline" className="flex items-center gap-0.5 text-[10px] px-1.5 py-0">
+                        <User className="h-2.5 w-2.5" /> {followUp.assigned_to}
                       </Badge>
                     )}
                   </div>
+                  {followUp.details && <p className="mt-1.5 line-clamp-2 text-xs text-slate-500">{followUp.details}</p>}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center gap-1">
                   {followUp.status !== "completed" && (
-                    <Button variant="outline" size="sm" onClick={() => markComplete(followUp)}>
-                      Mark complete
+                    <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => markComplete(followUp)}>
+                      Done
                     </Button>
                   )}
                   <button
                     onClick={() => editingId === followUp.id ? cancelEdit() : startEdit(followUp)}
-                    className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-amber-600 transition-colors"
+                    className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-amber-600 transition-colors"
                     title="Edit"
                   >
-                    <Edit2 className="h-4 w-4" />
+                    <Edit2 className="h-3.5 w-3.5" />
                   </button>
                   <button
                     onClick={() => deleteFollowUp(followUp)}
-                    className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-rose-600 transition-colors"
+                    className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-rose-600 transition-colors"
                     title="Delete"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>
-              {followUp.details && <p className="mt-3 whitespace-pre-wrap text-sm text-slate-600">{followUp.details}</p>}
             </div>
           ))}
 
           {!followUps.length && (
-            <div className="rounded-2xl border border-dashed border-slate-300 p-10 text-center text-slate-500">
+            <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-400">
               No follow ups yet.
             </div>
           )}
