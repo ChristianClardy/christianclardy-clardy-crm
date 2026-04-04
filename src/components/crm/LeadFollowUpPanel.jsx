@@ -62,7 +62,6 @@ export default function LeadFollowUpPanel({ lead, followUps, onRefresh }) {
           event_type: form.follow_up_type === "meeting" ? "meeting" : "reminder",
           status: "scheduled",
           assigned_users: [form.assigned_to],
-          linked_client_id: lead.id || null,
           visibility: "team",
         }).catch(() => {}); // non-fatal if calendar insert fails
       }
