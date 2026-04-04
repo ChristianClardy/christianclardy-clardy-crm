@@ -34,7 +34,28 @@ export default function Estimates() {
         base44.entities.Client.list(),
         base44.entities.Lead.list(),
       ]);
-      setEstimates(Array.isArray(estData) ? estData : []);
+      const estimates = Array.isArray(estData) ? estData : [];
+
+      // Retroactively assign numbers to estimates that don't have one.
+      // Sort unnumbered ones oldest-first so numbers are assigned chronologically.
+      const maxExisting = estimates.reduce((max, e) => {
+        const m = (e.estimate_number || "").match(/(\d+)$/);
+        return m ? Math.max(max, parseInt(m[1], 10)) : max;
+      }, 0);
+      const unnumbered = estimates
+        .filter(e => !e.estimate_number)
+        .sort((a, b) => new Date(a.created_date || a.created_at || 0) - new Date(b.created_date || b.created_at || 0));
+      if (unnumbered.length) {
+        let counter = maxExisting;
+        await Promise.all(unnumbered.map(e => {
+          counter++;
+          const num = `EST-${String(counter).padStart(3, "0")}`;
+          e.estimate_number = num; // update local copy immediately
+          return base44.entities.Estimate.update(e.id, { estimate_number: num }).catch(() => {});
+        }));
+      }
+
+      setEstimates(estimates);
       const leadsAsClients = (leadData || []).map(l => ({
         id:   l.id,
         name: l.full_name || l.name || l.email || "Unnamed Lead",
