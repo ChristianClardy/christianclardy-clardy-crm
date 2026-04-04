@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { jsPDF } from "jspdf";
+import { getSelectedCompanyScope } from "@/lib/companyScope";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -1272,6 +1273,7 @@ export default function EstimateDetail() {
   const [materials, setMaterials]       = useState([]);
   const [company, setCompany]           = useState(null);
   const [allCompanyProfiles, setAllCompanyProfiles] = useState([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState(null);
 
   const [estimate, setEstimate] = useState({
     title: "",
@@ -1319,6 +1321,10 @@ export default function EstimateDetail() {
         setCompany(rows[0]);
         setCustomMaterialCategories(rows[0]?.settings?.custom_material_categories || []);
         setCustomTradeCategories(rows[0]?.settings?.custom_trade_categories || []);
+        // Default to the active company scope if set, otherwise first profile
+        const scopeId = getSelectedCompanyScope();
+        const scopeMatch = scopeId !== "all" ? rows.find(r => r.id === scopeId) : null;
+        setSelectedCompanyId((scopeMatch || rows[0]).id);
       }
     });
   }, []);
@@ -1519,11 +1525,11 @@ export default function EstimateDetail() {
   const clientName = clientObj?.name || "";
   const previewClient = clientObj || null;
 
-  // Use the company profile that matches the client's assigned company,
-  // falling back to the default (first) profile.
-  const effectiveCompany = (clientObj?.company
-    ? allCompanyProfiles.find(p => p.name === clientObj.company) || company
-    : company) || company;
+  // The company whose name/logo appears on the estimate header.
+  // Driven by the explicit selector; falls back to first profile.
+  const effectiveCompany = (selectedCompanyId
+    ? allCompanyProfiles.find(p => p.id === selectedCompanyId)
+    : null) || company;
   const effectiveMarginPct = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
   const { totalCost, totalSell } = summaryTotals(items, effectiveMarginPct);
 
@@ -1577,10 +1583,12 @@ export default function EstimateDetail() {
             value={estimate.client_id}
             onChange={e => {
               const selected = clients.find(c => c.id === e.target.value);
-              setEstimate(est => ({
-                ...est,
-                client_id: e.target.value,
-              }));
+              setEstimate(est => ({ ...est, client_id: e.target.value }));
+              // Snap company to the one assigned to this client (if any)
+              if (selected?.company && allCompanyProfiles.length) {
+                const match = allCompanyProfiles.find(p => p.name === selected.company);
+                if (match) setSelectedCompanyId(match.id);
+              }
               setSaved(false);
             }}
             className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-amber-300 min-w-[180px]"
@@ -1590,6 +1598,18 @@ export default function EstimateDetail() {
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
+
+          {allCompanyProfiles.length > 1 && (
+            <select
+              value={selectedCompanyId || ""}
+              onChange={e => { setSelectedCompanyId(e.target.value); setSaved(false); }}
+              className="text-sm border border-amber-300 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-amber-300 min-w-[160px]"
+            >
+              {allCompanyProfiles.map(cp => (
+                <option key={cp.id} value={cp.id}>{cp.invoice_company_name || cp.name}</option>
+              ))}
+            </select>
+          )}
 
           <select
             value={estimate.status}
