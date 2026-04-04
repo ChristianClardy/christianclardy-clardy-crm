@@ -1082,7 +1082,7 @@ function ClientEstimateModal({ estimate, client, items, company, onClose }) {
             {opts.showTradeHeaders ? (
               trades.map(trade => {
                 const tradeItems = items.filter(i => i.trade === trade);
-                const tradeSell = tradeItems.reduce((s, it) => s + itemTotals(it).total_sell, 0);
+                const tradeSell = tradeItems.reduce((s, it) => s + itemTotals(it, previewMarginPct).total_sell, 0);
                 return (
                   <div key={trade} className="rounded overflow-hidden border border-slate-200">
                     <div className="px-4 py-2.5 text-sm font-bold uppercase tracking-wide text-white" style={{ backgroundColor: "#3d3530" }}>
