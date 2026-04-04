@@ -1,34 +1,31 @@
 import { useState } from "react";
-import { Users, Target, CheckCircle2, Archive } from "lucide-react";
+import { Target, CheckCircle2, Archive } from "lucide-react";
 import { cn } from "@/lib/utils";
-import Clients from "./Clients";
 import Prospects from "./Prospects";
 import LeadList from "@/components/crm/LeadList";
 
 const tabs = [
-  { key: "clients", label: "Contacts", icon: Users },
-  { key: "leads", label: "Leads", icon: Target },
+  { key: "leads",     label: "Leads",     icon: Target },
   { key: "prospects", label: "Prospects", icon: Target },
-  { key: "approved", label: "Approved", icon: CheckCircle2 },
+  { key: "approved",  label: "Approved",  icon: CheckCircle2 },
   { key: "completed", label: "Completed", icon: CheckCircle2 },
-  { key: "closed", label: "Closed", icon: CheckCircle2 },
-  { key: "archived", label: "Archived", icon: Archive },
+  { key: "closed",    label: "Closed",    icon: CheckCircle2 },
+  { key: "archived",  label: "Archived",  icon: Archive },
 ];
 
 const tabDescriptions = {
-  clients: "Manage contacts in one place.",
-  leads: "View contacts in the lead stage.",
+  leads:     "Active leads moving through the sales funnel.",
   prospects: "View contacts with active estimates.",
-  approved: "View approved contacts and active projects.",
+  approved:  "View approved contacts and active projects.",
   completed: "View completed contacts and jobs.",
-  closed: "View closed contacts and finished jobs.",
-  archived: "View archived contacts and dead leads.",
+  closed:    "View closed contacts and finished jobs.",
+  archived:  "Leads marked as lost or dead.",
 };
 
 export default function CRM() {
   const urlParams = new URLSearchParams(window.location.search);
   const requestedTab = urlParams.get("tab");
-  const initialTab = tabs.some((tab) => tab.key === requestedTab) ? requestedTab : "clients";
+  const initialTab = tabs.some((tab) => tab.key === requestedTab) ? requestedTab : "leads";
   const [activeTab, setActiveTab] = useState(initialTab);
 
   return (
@@ -62,8 +59,14 @@ export default function CRM() {
       </div>
 
       <div>
-        {activeTab === "clients" ? <Clients /> : activeTab === "leads" ? <LeadList /> : <Prospects key={activeTab} initialBucket={activeTab} showBucketTabs={false} />}
+        {activeTab === "leads" ? (
+          <LeadList />
+        ) : activeTab === "archived" ? (
+          <LeadList archived />
+        ) : (
+          <Prospects key={activeTab} initialBucket={activeTab} showBucketTabs={false} />
+        )}
       </div>
     </div>
   );
-  }
+}

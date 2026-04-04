@@ -30,7 +30,9 @@ const statusStyles = {
   "On Hold": "bg-slate-200 text-slate-700",
 };
 
-export default function LeadList() {
+const DEAD_STATUSES = ["Lost"];
+
+export default function LeadList({ archived = false }) {
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -53,19 +55,26 @@ export default function LeadList() {
     return unsubscribe;
   }, []);
 
-  const filteredLeads = useMemo(() => leads.filter((lead) => {
+  const visibleLeads = useMemo(() =>
+    leads.filter((lead) =>
+      archived
+        ? DEAD_STATUSES.includes(lead.status)
+        : !DEAD_STATUSES.includes(lead.status)
+    ), [leads, archived]);
+
+  const filteredLeads = useMemo(() => visibleLeads.filter((lead) => {
     const value = search.toLowerCase();
     return !value ||
       (lead.full_name || "").toLowerCase().includes(value) ||
       (lead.email || "").toLowerCase().includes(value) ||
       (lead.phone || "").toLowerCase().includes(value) ||
       (lead.project_description || "").toLowerCase().includes(value);
-  }), [leads, search]);
+  }), [visibleLeads, search]);
 
   const funnelCounts = useMemo(() => funnelBuckets.map((bucket) => ({
     ...bucket,
-    count: leads.filter((lead) => bucket.match.includes(lead.status || "New Lead")).length,
-  })), [leads]);
+    count: visibleLeads.filter((lead) => bucket.match.includes(lead.status || "New Lead")).length,
+  })), [visibleLeads]);
 
   if (loading) {
     return <div className="flex items-center justify-center py-20"><div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-slate-800" /></div>;
@@ -73,24 +82,28 @@ export default function LeadList() {
 
   return (
     <div className="space-y-6 px-6 pb-6 lg:px-8 lg:pb-8">
-      <div className="grid gap-3 md:grid-cols-5">
-        {funnelCounts.map((bucket) => (
-          <div key={bucket.key} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{bucket.label}</p>
-            <p className="mt-2 text-3xl font-bold text-slate-900">{bucket.count}</p>
-          </div>
-        ))}
-      </div>
+      {!archived && (
+        <div className="grid gap-3 md:grid-cols-5">
+          {funnelCounts.map((bucket) => (
+            <div key={bucket.key} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{bucket.label}</p>
+              <p className="mt-2 text-3xl font-bold text-slate-900">{bucket.count}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-center md:justify-between">
         <div className="relative w-full md:max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search leads..." className="pl-9" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={archived ? "Search archived leads..." : "Search leads..."} className="pl-9" />
         </div>
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Lead
-        </Button>
+        {!archived && (
+          <Button onClick={() => setDialogOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Lead
+          </Button>
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -126,7 +139,7 @@ export default function LeadList() {
 
       {!filteredLeads.length && (
         <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-500">
-          No leads found.
+          {archived ? "No archived leads." : "No leads found."}
         </div>
       )}
 
