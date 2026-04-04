@@ -54,7 +54,7 @@ export default function NextStepsPanel({
       return;
     }
 
-    const data = await base44.entities.TodoItem.filter(query, "due_date", 200);
+    const data = await base44.entities.TodoItem.filter(query, "due_date", 200).catch(() => []);
     setItems(data || []);
   };
 

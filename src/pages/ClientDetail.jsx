@@ -164,6 +164,11 @@ export default function ClientDetail() {
               <h1 className="text-2xl lg:text-3xl font-bold text-slate-900 tracking-tight">
                 {client.name}
               </h1>
+              {client.company && (
+                <p className="text-sm text-amber-700 font-medium flex items-center gap-1">
+                  <Building2 className="w-3.5 h-3.5" />{client.company}
+                </p>
+              )}
               {client.contact_person && (
                 <p className="text-slate-500">{client.contact_person}</p>
               )}
@@ -374,6 +379,15 @@ export default function ClientDetail() {
               <Input
                 value={formData.name || ""}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="mt-1.5"
+              />
+            </div>
+            <div>
+              <Label>Company <span className="font-normal text-slate-400">(optional)</span></Label>
+              <Input
+                placeholder="e.g. Acme Corp"
+                value={formData.company || ""}
+                onChange={(e) => setFormData({ ...formData, company: e.target.value })}
                 className="mt-1.5"
               />
             </div>
