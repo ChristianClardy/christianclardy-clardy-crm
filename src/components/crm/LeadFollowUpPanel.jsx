@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { CalendarDays, Clock, Edit2, User, X } from "lucide-react";
+import { CalendarDays, Clock, Edit2, Trash2, User, X } from "lucide-react";
 
 const emptyForm = {
   title: "",
@@ -98,6 +98,13 @@ export default function LeadFollowUpPanel({ lead, followUps, onRefresh }) {
 
   const markComplete = async (followUp) => {
     await base44.entities.LeadFollowUp.update(followUp.id, { status: "completed" });
+    onRefresh?.();
+  };
+
+  const deleteFollowUp = async (followUp) => {
+    if (!window.confirm(`Delete "${followUp.title}"?`)) return;
+    await base44.entities.LeadFollowUp.delete(followUp.id);
+    if (editingId === followUp.id) cancelEdit();
     onRefresh?.();
   };
 
@@ -228,6 +235,13 @@ export default function LeadFollowUpPanel({ lead, followUps, onRefresh }) {
                     title="Edit"
                   >
                     <Edit2 className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => deleteFollowUp(followUp)}
+                    className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-rose-600 transition-colors"
+                    title="Delete"
+                  >
+                    <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
               </div>
