@@ -1488,14 +1488,28 @@ export default function EstimateDetail() {
       const effectiveTotal  = estimate.total_override != null ? Number(estimate.total_override) : calcTotal;
       const effectiveMargin = effectiveTotal > 0 ? ((effectiveTotal - totalCost) / effectiveTotal) * 100 : marginPct;
       const { client_name: _cn, ...estimateForSave } = estimate;
+
+      // Auto-assign estimate number on first create
+      let estimateNumber = estimate.estimate_number;
+      if (!estimateNumber && !currentIdRef.current) {
+        const allEstimates = await base44.entities.Estimate.list().catch(() => []);
+        const maxNum = allEstimates.reduce((max, e) => {
+          const m = (e.estimate_number || "").match(/(\d+)$/);
+          return m ? Math.max(max, parseInt(m[1], 10)) : max;
+        }, 0);
+        estimateNumber = `EST-${String(maxNum + 1).padStart(3, "0")}`;
+        setEstimate(e => ({ ...e, estimate_number: estimateNumber }));
+      }
+
       const payload = {
         ...estimateForSave,
         // Convert empty strings to null for FK / nullable fields
-        client_id:      estimate.client_id  || null,
-        project_id:     estimate.project_id || null,
-        line_items:     items,
-        total:          effectiveTotal,
-        margin_percent: effectiveMargin,
+        client_id:       estimate.client_id  || null,
+        project_id:      estimate.project_id || null,
+        line_items:      items,
+        total:           effectiveTotal,
+        margin_percent:  effectiveMargin,
+        ...(estimateNumber ? { estimate_number: estimateNumber } : {}),
       };
       if (currentIdRef.current) {
         await base44.entities.Estimate.update(currentIdRef.current, payload);
