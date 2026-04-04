@@ -64,12 +64,12 @@ function mapDates(record) {
 
 // Strip Base44-style date fields, client-only UI fields, and undefined values before writing.
 // Add any column name here that exists in app state but NOT in the database schema.
-const CLIENT_ONLY_FIELDS = new Set(['client_name']);
+const CLIENT_ONLY_FIELDS = new Set(['client_name', 'follow_up_end_time']);
 
 // Per-table fields to strip when a schema-cache "column not found" error occurs on retry.
 // These are fields the app sends that the DB might not have yet.
 const TABLE_OPTIONAL_FIELDS = {
-  lead_follow_ups: new Set(['title','details','assigned_to','lead_name','follow_up_type','follow_up_date','follow_up_time','follow_up_end_time','status']),
+  lead_follow_ups: new Set(['title','details','assigned_to','lead_name','follow_up_type','follow_up_date','follow_up_time','status']),
 };
 
 function cleanForWrite(record) {
