@@ -60,7 +60,10 @@ export default function LeadDetail() {
   const activeStepIndex = useMemo(() => Math.max(funnelSteps.indexOf(lead?.status || "New Lead"), 0), [lead]);
 
   const updateStatus = async (value) => {
-    await base44.entities.Lead.update(lead.id, { status: value });
+    await base44.entities.Lead.update(lead.id, { status: value }).catch(err => {
+      console.error("Status update failed:", err?.message);
+      alert(`Could not set status "${value}".\n\nRun this in Supabase SQL editor:\nALTER TYPE lead_status_enum ADD VALUE IF NOT EXISTS '${value}';`);
+    });
     loadData();
   };
 
