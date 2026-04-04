@@ -65,15 +65,20 @@ export default function Prospects({ initialBucket = "all", showBucketTabs = true
   }, [initialBucket]);
 
   const loadData = async () => {
-    const [clients, ests, projectData] = await Promise.all([
-      base44.entities.Client.list("-created_date", 5000),
-      base44.entities.Estimate.list("-created_date", 2000),
-      base44.entities.Project.list("-updated_date", 2000),
-    ]);
-    setProspects(clients);
-    setEstimates(ests);
-    setProjects(projectData);
-    setLoading(false);
+    try {
+      const [clients, ests, projectData] = await Promise.all([
+        base44.entities.Client.list("-created_date", 5000),
+        base44.entities.Estimate.list("-created_date", 2000),
+        base44.entities.Project.list("-updated_date", 2000),
+      ]);
+      setProspects(clients || []);
+      setEstimates(ests || []);
+      setProjects(projectData || []);
+    } catch (err) {
+      console.error("Failed to load prospects:", err?.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getProspectIds = (prospectOrId) => {

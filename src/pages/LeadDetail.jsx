@@ -34,13 +34,18 @@ export default function LeadDetail() {
 
   const loadData = async () => {
     if (!leadId) return;
-    const [leadRows, followUpRows] = await Promise.all([
-      base44.entities.Lead.filter({ id: leadId }),
-      base44.entities.LeadFollowUp.filter({ lead_id: leadId }, "-created_date", 200),
-    ]);
-    setLead(leadRows[0] || null);
-    setFollowUps(followUpRows || []);
-    setLoading(false);
+    try {
+      const [leadRows, followUpRows] = await Promise.all([
+        base44.entities.Lead.filter({ id: leadId }),
+        base44.entities.LeadFollowUp.filter({ lead_id: leadId }, "-created_date", 200),
+      ]);
+      setLead(leadRows[0] || null);
+      setFollowUps(followUpRows || []);
+    } catch (err) {
+      console.error("Failed to load lead:", err?.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {

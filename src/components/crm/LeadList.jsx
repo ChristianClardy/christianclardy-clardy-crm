@@ -37,9 +37,14 @@ export default function LeadList() {
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const loadLeads = async () => {
-    const data = await base44.entities.Lead.list("-created_date", 500);
-    setLeads(data);
-    setLoading(false);
+    try {
+      const data = await base44.entities.Lead.list("-created_date", 500);
+      setLeads(data || []);
+    } catch (err) {
+      console.error("Failed to load leads:", err?.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {

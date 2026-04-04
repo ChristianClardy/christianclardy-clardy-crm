@@ -14,9 +14,12 @@ export default function SalesDashboard() {
       base44.entities.Estimate.list("-created_date", 2000),
       base44.entities.Task.list("-created_date", 2000),
     ]).then(([leadData, estimateData, taskData]) => {
-      setLeads(leadData);
-      setEstimates(estimateData);
-      setTasks(taskData);
+      setLeads(leadData || []);
+      setEstimates(estimateData || []);
+      setTasks(taskData || []);
+    }).catch(err => {
+      console.error("Failed to load sales dashboard:", err?.message);
+    }).finally(() => {
       setLoading(false);
     });
   }, []);
