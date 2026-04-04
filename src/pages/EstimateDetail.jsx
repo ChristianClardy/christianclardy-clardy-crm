@@ -163,20 +163,23 @@ const TEMPLATES = [
 
 // ─── Pricing helpers ──────────────────────────────────────────────────────────
 
-function sellFromCost(cost, marginPct = 40) {
-  const m = Math.min(Math.max(Number(marginPct) || 40, 0), 99.9) / 100;
+function sellFromCost(cost, marginPct) {
+  const pct = marginPct != null ? Number(marginPct) : 40;
+  const m = Math.min(Math.max(pct, 0), 99.9) / 100;
   return cost > 0 ? cost / (1 - m) : 0;
 }
 
 function itemTotals(item, marginPct = 40) {
   const qty  = Number(item.quantity)     || 0;
   const cost = Number(item.cost_per_unit) || 0;
-  const sell = sellFromCost(cost, marginPct);
+  const hasSellOverride = item.sell_override != null && item.sell_override !== "";
+  const sell = hasSellOverride ? Number(item.sell_override) : sellFromCost(cost, marginPct);
   return {
-    sell_per_unit: sell,
-    total_cost:    qty * cost,
-    total_sell:    qty * sell,
-    profit:        qty * (sell - cost),
+    sell_per_unit:     sell,
+    has_sell_override: hasSellOverride,
+    total_cost:        qty * cost,
+    total_sell:        qty * sell,
+    profit:            qty * (sell - cost),
   };
 }
 
@@ -346,8 +349,9 @@ function DescriptionCell({ item, onChange, materials, onAddToLibrary }) {
 // ─── Line Item Row ────────────────────────────────────────────────────────────
 
 function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, marginPct = 40 }) {
-  const { sell_per_unit, total_cost, total_sell } = itemTotals(item, marginPct);
+  const { sell_per_unit, has_sell_override, total_cost, total_sell } = itemTotals(item, marginPct);
   const hasCost = Number(item.cost_per_unit) > 0;
+  const calcSell = sellFromCost(Number(item.cost_per_unit) || 0, marginPct);
 
   return (
     <tr className="border-b border-slate-100 hover:bg-amber-50/20 group">
@@ -392,8 +396,31 @@ function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, marg
           />
         </div>
       </td>
-      <td className="px-2 py-1.5 w-28 text-right text-xs text-slate-500">
-        {hasCost ? fmt(sell_per_unit) : <span className="text-slate-300">—</span>}
+      {/* Sell/Unit — editable override; placeholder shows margin-calculated value */}
+      <td className="px-2 py-1.5 w-28">
+        <div className="relative">
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
+          {hasCost ? (
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={item.sell_override ?? ""}
+              onChange={e => {
+                const v = e.target.value;
+                onChange({ ...item, sell_override: v === "" ? null : Number(v) });
+              }}
+              placeholder={calcSell > 0 ? Number(calcSell.toFixed(2)).toString() : "0.00"}
+              title={has_sell_override ? "Manual override — clear to use margin" : "Override sell price (optional)"}
+              className={cn(
+                "w-full pl-3 text-xs text-right bg-transparent border-b outline-none py-0.5 placeholder:text-slate-300",
+                has_sell_override
+                  ? "border-amber-400 text-amber-700 font-semibold focus:border-amber-500"
+                  : "border-transparent text-slate-500 focus:border-amber-400"
+              )}
+            />
+          ) : <span className="text-slate-300 pl-3">—</span>}
+        </div>
       </td>
       <td className="px-2 py-1.5 w-28 text-right text-xs text-slate-600">
         {hasCost ? fmt(total_cost) : <span className="text-slate-300">—</span>}
@@ -478,7 +505,7 @@ function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onD
                   <th className="px-2 py-2 text-left w-32">Unit</th>
                   <th className="px-2 py-2 text-right w-24">Qty</th>
                   <th className="px-2 py-2 text-right w-28">Cost/Unit</th>
-                  <th className="px-2 py-2 text-right w-28">Sell/Unit</th>
+                  <th className="px-2 py-2 text-right w-28">Sell/Unit ✎</th>
                   <th className="px-2 py-2 text-right w-28">Total Cost</th>
                   <th className="px-2 py-2 text-right w-28">Total Sell</th>
                   <th className="w-16"></th>
