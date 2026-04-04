@@ -53,7 +53,7 @@ export default function CalendarTimeGrid({ dates, entries, onEntryClick, onCreat
           const startMinutes = start.getHours() * 60 + start.getMinutes();
           const endMinutes = end.getHours() * 60 + end.getMinutes();
           const top = ((startMinutes - START_HOUR * 60) / SLOT_MINUTES) * SLOT_HEIGHT;
-          const height = Math.max(SLOT_HEIGHT, ((endMinutes - startMinutes) / SLOT_MINUTES) * SLOT_HEIGHT);
+          const height = Math.max(SLOT_HEIGHT / 2, ((endMinutes - startMinutes) / SLOT_MINUTES) * SLOT_HEIGHT);
           return { ...entry, top, height };
         })
         .filter(Boolean);

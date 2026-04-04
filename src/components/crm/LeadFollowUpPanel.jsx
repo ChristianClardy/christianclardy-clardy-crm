@@ -75,14 +75,15 @@ export default function LeadFollowUpPanel({ lead, followUps, onRefresh }) {
           endDate.setMinutes(endDate.getMinutes() + 15);
           const endDT = endDate.toISOString().slice(0, 19);
           await base44.entities.CalendarEvent.create({
-            title:          form.title || `Follow Up — ${lead.full_name}`,
-            description:    form.details || "",
-            start_datetime: startDT,
-            end_datetime:   endDT,
-            event_type:     form.follow_up_type === "meeting" ? "meeting" : "task",
-            status:         "scheduled",
-            assigned_users: [form.assigned_to],
-            visibility:     "team",
+            title:            `${form.title} — ${lead.full_name}`,
+            description:      form.details || "",
+            start_datetime:   startDT,
+            end_datetime:     endDT,
+            event_type:       form.follow_up_type === "meeting" ? "meeting" : "task",
+            status:           "scheduled",
+            assigned_users:   [form.assigned_to],
+            visibility:       "team",
+            linked_client_id: lead.linked_contact_id || null,
           });
         }
       }
