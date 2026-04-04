@@ -66,6 +66,12 @@ function mapDates(record) {
 // Add any column name here that exists in app state but NOT in the database schema.
 const CLIENT_ONLY_FIELDS = new Set(['client_name']);
 
+// Per-table fields to strip when a schema-cache "column not found" error occurs on retry.
+// These are fields the app sends that the DB might not have yet.
+const TABLE_OPTIONAL_FIELDS = {
+  lead_follow_ups: new Set(['title','details','assigned_to','lead_name','follow_up_type','follow_up_date','status']),
+};
+
 function cleanForWrite(record) {
   const { created_date, updated_date, created_at, updated_at, ...rest } = record;
   // Remove undefined values and UI-only fields that have no DB column
@@ -132,14 +138,32 @@ function createEntity(tableName) {
 
     /** create(record) → created record */
     async create(record) {
-      const { data, error } = await supabase.from(tableName).insert(cleanForWrite(record)).select().single();
+      const payload = cleanForWrite(record);
+      let { data, error } = await supabase.from(tableName).insert(payload).select().single();
+      // If a column is missing from the schema cache, strip optional fields and retry once
+      if (error?.message?.includes('schema cache') || error?.message?.includes('Could not find')) {
+        const optional = TABLE_OPTIONAL_FIELDS[tableName];
+        if (optional) {
+          const stripped = Object.fromEntries(Object.entries(payload).filter(([k]) => !optional.has(k)));
+          ({ data, error } = await supabase.from(tableName).insert(stripped).select().single());
+        }
+      }
       if (error) reportError('create', tableName, error);
       return mapDates(data);
     },
 
     /** update(id, record) → updated record */
     async update(id, record) {
-      const { data, error } = await supabase.from(tableName).update(cleanForWrite(record)).eq('id', id).select().single();
+      const payload = cleanForWrite(record);
+      let { data, error } = await supabase.from(tableName).update(payload).eq('id', id).select().single();
+      // If a column is missing from the schema cache, strip optional fields and retry once
+      if (error?.message?.includes('schema cache') || error?.message?.includes('Could not find')) {
+        const optional = TABLE_OPTIONAL_FIELDS[tableName];
+        if (optional) {
+          const stripped = Object.fromEntries(Object.entries(payload).filter(([k]) => !optional.has(k)));
+          ({ data, error } = await supabase.from(tableName).update(stripped).eq('id', id).select().single());
+        }
+      }
       if (error) reportError('update', tableName, error);
       return mapDates(data);
     },
