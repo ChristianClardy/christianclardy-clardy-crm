@@ -28,15 +28,20 @@ export default function LeadFollowUpPanel({ lead, followUps, onRefresh }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
-    await base44.entities.LeadFollowUp.create({
-      ...form,
-      lead_id: lead.id,
-      lead_name: lead.full_name,
-      assigned_to: lead.assigned_sales_rep || "",
-    });
-    setForm(initialForm);
-    setSaving(false);
-    onRefresh?.();
+    try {
+      await base44.entities.LeadFollowUp.create({
+        ...form,
+        lead_id: lead.id,
+        lead_name: lead.full_name,
+        assigned_to: lead.assigned_sales_rep || "",
+      });
+      setForm(initialForm);
+      onRefresh?.();
+    } catch (err) {
+      // error already alerted by base44Client — just keep the form so nothing is lost
+    } finally {
+      setSaving(false);
+    }
   };
 
   const markComplete = async (followUp) => {
