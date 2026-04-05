@@ -615,9 +615,7 @@ function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onD
 
 function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {} }) {
   const marginPct = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
-  const { totalCost } = summaryTotals(items, marginPct, sectionMargins);
-  // Total from margin formula
-  const calcTotal  = totalCost > 0 ? totalCost / (1 - marginPct / 100) : 0;
+  const { totalCost, totalSell: calcTotal } = summaryTotals(items, marginPct, sectionMargins);
   // Final display total (manual override wins)
   const hasOverride   = estimate.total_override != null && estimate.total_override !== "";
   const displayTotal  = hasOverride ? Number(estimate.total_override) : calcTotal;
@@ -992,8 +990,8 @@ function ClientEstimateModal({ estimate, client, items, company, onClose, sectio
   const handleEmail = () => {
     const subject = `Estimate: ${estimate.title || "Your Estimate"}`;
     const em = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
-    const { totalCost: ec } = summaryTotals(items, em, sectionMargins);
-    const et = estimate.total_override != null ? Number(estimate.total_override) : (ec > 0 ? ec / (1 - em / 100) : 0);
+    const { totalSell: ecSell } = summaryTotals(items, em, sectionMargins);
+    const et = estimate.total_override != null ? Number(estimate.total_override) : ecSell;
     const total = fmt(et);
     const body = [
       `Hi ${client?.name || ""},`,
@@ -1010,8 +1008,7 @@ function ClientEstimateModal({ estimate, client, items, company, onClose, sectio
   };
 
   const previewMarginPct = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
-  const { totalCost: previewCost } = summaryTotals(items, previewMarginPct, sectionMargins);
-  const previewCalcTotal = previewCost > 0 ? previewCost / (1 - previewMarginPct / 100) : 0;
+  const { totalCost: previewCost, totalSell: previewCalcTotal } = summaryTotals(items, previewMarginPct, sectionMargins);
   const totalSell = estimate.total_override != null ? Number(estimate.total_override) : previewCalcTotal;
   const trades = [...new Set(items.map(i => i.trade).filter(Boolean))];
   const companyName = company?.invoice_company_name || company?.name || "Clardy.io";
@@ -1561,8 +1558,7 @@ export default function EstimateDetail() {
     setSaveError("");
     try {
       const marginPct = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
-      const { totalCost } = summaryTotals(items, marginPct, sectionMargins);
-      const calcTotal = totalCost > 0 ? totalCost / (1 - marginPct / 100) : 0;
+      const { totalCost, totalSell: calcTotal } = summaryTotals(items, marginPct, sectionMargins);
       const effectiveTotal  = estimate.total_override != null ? Number(estimate.total_override) : calcTotal;
       const effectiveMargin = effectiveTotal > 0 ? ((effectiveTotal - totalCost) / effectiveTotal) * 100 : marginPct;
       const { client_name: _cn, ...estimateForSave } = estimate;
