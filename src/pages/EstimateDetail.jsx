@@ -613,7 +613,7 @@ function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onD
 
 // ─── Summary Panel ────────────────────────────────────────────────────────────
 
-function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {} }) {
+function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {}, onClearAllOverrides }) {
   const marginPct = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
 
   // Compute totals inline.
@@ -643,6 +643,8 @@ function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {} }
   const setMargin = (val) => {
     const clamped = Math.min(95, Math.max(0, Number(val) || 0));
     onEstimateChange({ margin_override: clamped, total_override: null });
+    // Global margin overrides everything — clear all per-item and per-section overrides
+    onClearAllOverrides?.();
   };
   const setTotal = (val) => {
     onEstimateChange({ total_override: val === "" ? null : Number(val), margin_override: null });
@@ -652,11 +654,6 @@ function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {} }
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4 sticky top-6">
       <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Summary</h3>
-
-      {/* DEBUG — remove after confirming */}
-      <div className="text-[10px] text-slate-400 bg-slate-50 rounded p-1.5 font-mono">
-        margin={marginPct}% · items={items.length} · cost={fmt(totalCost)} · sell={fmt(calcTotal)}
-      </div>
 
       {/* Cost */}
       <div className="flex justify-between text-sm">
@@ -1527,6 +1524,11 @@ export default function EstimateDetail() {
     setSaved(false);
   }, []);
 
+  const handleClearAllOverrides = useCallback(() => {
+    setItems(prev => prev.map(it => ({ ...it, sell_override: null, margin_override: null })));
+    setSectionMargins({});
+  }, []);
+
   const handleSectionMarginChange = useCallback((sectionName, value) => {
     setSectionMargins(prev => {
       if (value === null) {
@@ -1950,7 +1952,7 @@ export default function EstimateDetail() {
 
         {/* Right — summary */}
         <div className="w-64 flex-shrink-0">
-          <SummaryPanel items={items} estimate={estimate} onEstimateChange={handleEstimateChange} sectionMargins={sectionMargins} />
+          <SummaryPanel items={items} estimate={estimate} onEstimateChange={handleEstimateChange} sectionMargins={sectionMargins} onClearAllOverrides={handleClearAllOverrides} />
         </div>
       </div>
     </div>
