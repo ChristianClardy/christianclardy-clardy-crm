@@ -187,10 +187,12 @@ function itemTotals(item, marginPct = 40) {
   };
 }
 
-function summaryTotals(items, marginPct = 40) {
+function summaryTotals(items, marginPct = 40, sectionMargins = {}) {
   let totalCost = 0, totalSell = 0;
   for (const it of items) {
-    const t = itemTotals(it, marginPct);
+    const secOverride = sectionMargins[it.trade];
+    const effectiveMargin = secOverride != null ? Number(secOverride) : marginPct;
+    const t = itemTotals(it, effectiveMargin);
     totalCost += t.total_cost;
     totalSell += t.total_sell;
   }
@@ -611,11 +613,9 @@ function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onD
 
 // ─── Summary Panel ────────────────────────────────────────────────────────────
 
-function SummaryPanel({ items, estimate, onEstimateChange }) {
-  const { totalCost } = summaryTotals(items);
-
-  // Effective margin % (0–95)
+function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {} }) {
   const marginPct = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
+  const { totalCost } = summaryTotals(items, marginPct, sectionMargins);
   // Total from margin formula
   const calcTotal  = totalCost > 0 ? totalCost / (1 - marginPct / 100) : 0;
   // Final display total (manual override wins)
@@ -764,7 +764,7 @@ async function loadImageAsDataUrl(src) {
   }
 }
 
-async function exportPDF(estimate, clientName, items, company, marginPct = 40) {
+async function exportPDF(estimate, clientName, items, company, marginPct = 40, sectionMargins = {}) {
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const W = 612, ML = 50, MR = 562, TW = MR - ML;
   let y = 50;
@@ -839,7 +839,7 @@ async function exportPDF(estimate, clientName, items, company, marginPct = 40) {
 
   // Group by trade
   const trades = [...new Set(items.map(i => i.trade))];
-  const rawTotals = summaryTotals(items, marginPct);
+  const rawTotals = summaryTotals(items, marginPct, sectionMargins);
   // Honor total_override if set
   const hasOverride = estimate.total_override != null && estimate.total_override !== "";
   const totalCost   = rawTotals.totalCost;
@@ -945,7 +945,7 @@ function PreviewToggle({ label, checked, onChange }) {
   );
 }
 
-function ClientEstimateModal({ estimate, client, items, company, onClose }) {
+function ClientEstimateModal({ estimate, client, items, company, onClose, sectionMargins = {} }) {
   const [opts, setOpts] = useState(DEFAULT_PREVIEW_OPTS);
   const tog = (key) => setOpts(o => ({ ...o, [key]: !o[key] }));
 
@@ -991,8 +991,8 @@ function ClientEstimateModal({ estimate, client, items, company, onClose }) {
 
   const handleEmail = () => {
     const subject = `Estimate: ${estimate.title || "Your Estimate"}`;
-    const { totalCost: ec } = summaryTotals(items);
     const em = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
+    const { totalCost: ec } = summaryTotals(items, em, sectionMargins);
     const et = estimate.total_override != null ? Number(estimate.total_override) : (ec > 0 ? ec / (1 - em / 100) : 0);
     const total = fmt(et);
     const body = [
@@ -1009,8 +1009,8 @@ function ClientEstimateModal({ estimate, client, items, company, onClose }) {
     window.open(`mailto:${client?.email || ""}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
   };
 
-  const { totalCost: previewCost } = summaryTotals(items);
   const previewMarginPct = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
+  const { totalCost: previewCost } = summaryTotals(items, previewMarginPct, sectionMargins);
   const previewCalcTotal = previewCost > 0 ? previewCost / (1 - previewMarginPct / 100) : 0;
   const totalSell = estimate.total_override != null ? Number(estimate.total_override) : previewCalcTotal;
   const trades = [...new Set(items.map(i => i.trade).filter(Boolean))];
@@ -1560,8 +1560,8 @@ export default function EstimateDetail() {
     setSaving(true);
     setSaveError("");
     try {
-      const { totalCost } = summaryTotals(items);
       const marginPct = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
+      const { totalCost } = summaryTotals(items, marginPct, sectionMargins);
       const calcTotal = totalCost > 0 ? totalCost / (1 - marginPct / 100) : 0;
       const effectiveTotal  = estimate.total_override != null ? Number(estimate.total_override) : calcTotal;
       const effectiveMargin = effectiveTotal > 0 ? ((effectiveTotal - totalCost) / effectiveTotal) * 100 : marginPct;
@@ -1687,7 +1687,7 @@ export default function EstimateDetail() {
     ? allCompanyProfiles.find(p => p.id === selectedCompanyId)
     : null) || company;
   const effectiveMarginPct = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
-  const { totalCost, totalSell } = summaryTotals(items, effectiveMarginPct);
+  const { totalCost, totalSell } = summaryTotals(items, effectiveMarginPct, sectionMargins);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -1698,6 +1698,7 @@ export default function EstimateDetail() {
           items={items}
           company={effectiveCompany}
           onClose={() => setShowPreview(false)}
+          sectionMargins={sectionMargins}
         />
       )}
       {showPicker && <TemplatePicker onSelect={handleTemplatePick} onClose={() => navigate(createPageUrl("Estimates"))} />}
@@ -1796,7 +1797,7 @@ export default function EstimateDetail() {
 
           <Button
             variant="outline" size="sm"
-            onClick={() => exportPDF(estimate, clientName, items, effectiveCompany, effectiveMarginPct).catch(console.error)}
+            onClick={() => exportPDF(estimate, clientName, items, effectiveCompany, effectiveMarginPct, sectionMargins).catch(console.error)}
             className="gap-1.5"
           >
             <Download className="w-4 h-4" /> PDF
@@ -1926,7 +1927,7 @@ export default function EstimateDetail() {
 
         {/* Right — summary */}
         <div className="w-64 flex-shrink-0">
-          <SummaryPanel items={items} estimate={estimate} onEstimateChange={handleEstimateChange} />
+          <SummaryPanel items={items} estimate={estimate} onEstimateChange={handleEstimateChange} sectionMargins={sectionMargins} />
         </div>
       </div>
     </div>
