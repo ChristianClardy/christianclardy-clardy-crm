@@ -615,12 +615,30 @@ function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onD
 
 function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {} }) {
   const marginPct = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
-  const { totalCost, totalSell: calcTotal } = summaryTotals(items, marginPct, sectionMargins);
+
+  // Compute totals inline so there's no indirection that could mask stale values
+  let totalCost = 0;
+  let calcTotal = 0;
+  for (const it of (items || [])) {
+    const cost = Number(it.cost_per_unit) || 0;
+    const qty  = Number(it.quantity)      || 0;
+    totalCost += qty * cost;
+    if (!cost) continue;
+    if (it.sell_override != null && it.sell_override !== "") {
+      calcTotal += qty * Number(it.sell_override);
+    } else {
+      const secM   = sectionMargins[it.trade];
+      const itemM  = it.margin_override != null && it.margin_override !== "" ? Number(it.margin_override) : (secM != null ? Number(secM) : marginPct);
+      const m      = Math.min(Math.max(Number(itemM) || 0, 0), 99.9) / 100;
+      calcTotal   += qty * cost / (1 - m);
+    }
+  }
+
   // Final display total (manual override wins)
   const hasOverride   = estimate.total_override != null && estimate.total_override !== "";
   const displayTotal  = hasOverride ? Number(estimate.total_override) : calcTotal;
-  const displayProfit = displayTotal - totalCost;
-  const displayMargin = displayTotal > 0 ? (displayProfit / displayTotal) * 100 : 0;
+  const displayProfit = calcTotal - totalCost;
+  const displayMargin = calcTotal > 0 ? (displayProfit / calcTotal) * 100 : 0;
 
   const setMargin = (val) => {
     const clamped = Math.min(95, Math.max(0, Number(val) || 0));
