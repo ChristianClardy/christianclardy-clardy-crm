@@ -71,6 +71,7 @@ const CLIENT_ONLY_FIELDS = new Set(['client_name', 'follow_up_end_time']);
 const TABLE_OPTIONAL_FIELDS = {
   lead_follow_ups: new Set(['title','details','assigned_to','lead_name','follow_up_type','follow_up_date','follow_up_time','status']),
   estimates: new Set(['section_margins']),
+  leads: new Set(['property_address']),
 };
 
 function cleanForWrite(record) {
