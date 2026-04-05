@@ -654,8 +654,11 @@ function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {} }
       <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Summary</h3>
 
       {/* DEBUG — remove after confirming */}
-      <div className="text-[10px] text-slate-400 bg-slate-50 rounded p-1.5 font-mono">
-        margin={marginPct}% · items={items.length} · cost={fmt(totalCost)} · sell={fmt(calcTotal)}
+      <div className="text-[10px] text-slate-400 bg-slate-50 rounded p-1.5 font-mono space-y-0.5">
+        <div>margin={marginPct}% · items={items.length} · cost={fmt(totalCost)} · sell={fmt(calcTotal)}</div>
+        {items.slice(0,3).map((it,i) => (
+          <div key={i}>#{i+1}: qty={it.quantity} cost={it.cost_per_unit} sell_ov={String(it.sell_override)} m_ov={String(it.margin_override)}</div>
+        ))}
       </div>
 
       {/* Cost */}
