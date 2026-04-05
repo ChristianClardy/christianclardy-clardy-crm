@@ -706,7 +706,7 @@ function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {} }
       <div className="border-t border-slate-100 pt-3 space-y-2">
         <div className="flex justify-between text-sm">
           <span className="text-slate-500">Total Sell</span>
-          <span className="font-bold text-slate-900">{fmt(displayTotal)}</span>
+          <span className="font-bold text-slate-900">{fmt(calcTotal)}</span>
         </div>
         <div className="flex justify-between text-sm">
           <span className="text-slate-500">Gross Profit</span>
@@ -1484,6 +1484,8 @@ export default function EstimateDetail() {
 
   const handleChangeItem = useCallback((updated) => {
     setItems(prev => prev.map(it => it.id === updated.id ? updated : it));
+    // If item margin changed, clear any manual total override so computed total is shown
+    setEstimate(e => e.total_override != null ? { ...e, total_override: null } : e);
     setSaved(false);
   }, []);
 
@@ -1510,6 +1512,8 @@ export default function EstimateDetail() {
       }
       return { ...prev, [sectionName]: value };
     });
+    // Clear any manual total override so computed total is shown
+    setEstimate(e => e.total_override != null ? { ...e, total_override: null } : e);
     setSaved(false);
   }, []);
 
