@@ -653,6 +653,11 @@ function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {} }
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4 sticky top-6">
       <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Summary</h3>
 
+      {/* DEBUG — remove after confirming */}
+      <div className="text-[10px] text-slate-400 bg-slate-50 rounded p-1.5 font-mono">
+        margin={marginPct}% · items={items.length} · cost={fmt(totalCost)} · sell={fmt(calcTotal)}
+      </div>
+
       {/* Cost */}
       <div className="flex justify-between text-sm">
         <span className="text-slate-500">Total Cost</span>
