@@ -59,11 +59,16 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated }) {
     }
 
     setSaving(true);
-    await base44.entities.Lead.create({ ...form, status: "New Lead" });
-    setSaving(false);
-    setForm(initialForm);
-    onOpenChange(false);
-    onCreated?.();
+    try {
+      await base44.entities.Lead.create({ ...form, status: "New Lead" });
+      setForm(initialForm);
+      onOpenChange(false);
+      onCreated?.();
+    } catch {
+      // error already shown by base44Client alert
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
