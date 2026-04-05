@@ -616,7 +616,9 @@ function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onD
 function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {} }) {
   const marginPct = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
 
-  // Compute totals inline so there's no indirection that could mask stale values
+  // Compute totals inline.
+  // calcTotal uses MARGIN only (ignores sell_override) so the slider always reacts.
+  // sell_override is a per-line pricing tool; the summary reflects the margin picture.
   let totalCost = 0;
   let calcTotal = 0;
   for (const it of (items || [])) {
@@ -624,14 +626,12 @@ function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {} }
     const qty  = Number(it.quantity)      || 0;
     totalCost += qty * cost;
     if (!cost) continue;
-    if (it.sell_override != null && it.sell_override !== "") {
-      calcTotal += qty * Number(it.sell_override);
-    } else {
-      const secM   = sectionMargins[it.trade];
-      const itemM  = it.margin_override != null && it.margin_override !== "" ? Number(it.margin_override) : (secM != null ? Number(secM) : marginPct);
-      const m      = Math.min(Math.max(Number(itemM) || 0, 0), 99.9) / 100;
-      calcTotal   += qty * cost / (1 - m);
-    }
+    const secM  = sectionMargins[it.trade];
+    const itemM = it.margin_override != null && it.margin_override !== ""
+      ? Number(it.margin_override)
+      : (secM != null ? Number(secM) : marginPct);
+    const m     = Math.min(Math.max(Number(itemM) || 0, 0), 99.9) / 100;
+    calcTotal  += qty * cost / (1 - m);
   }
 
   // Final display total (manual override wins)
@@ -654,11 +654,8 @@ function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {} }
       <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Summary</h3>
 
       {/* DEBUG — remove after confirming */}
-      <div className="text-[10px] text-slate-400 bg-slate-50 rounded p-1.5 font-mono space-y-0.5">
-        <div>margin={marginPct}% · items={items.length} · cost={fmt(totalCost)} · sell={fmt(calcTotal)}</div>
-        {items.slice(0,3).map((it,i) => (
-          <div key={i}>#{i+1}: qty={it.quantity} cost={it.cost_per_unit} sell_ov={String(it.sell_override)} m_ov={String(it.margin_override)}</div>
-        ))}
+      <div className="text-[10px] text-slate-400 bg-slate-50 rounded p-1.5 font-mono">
+        margin={marginPct}% · items={items.length} · cost={fmt(totalCost)} · sell={fmt(calcTotal)}
       </div>
 
       {/* Cost */}
