@@ -172,14 +172,18 @@ function sellFromCost(cost, marginPct) {
 function itemTotals(item, marginPct = 40) {
   const qty  = Number(item.quantity)     || 0;
   const cost = Number(item.cost_per_unit) || 0;
-  const hasSellOverride = item.sell_override != null && item.sell_override !== "";
-  const sell = hasSellOverride ? Number(item.sell_override) : sellFromCost(cost, marginPct);
+  const hasSellOverride   = item.sell_override   != null && item.sell_override   !== "";
+  const hasMarginOverride = item.margin_override != null && item.margin_override !== "";
+  const effectiveMargin   = hasMarginOverride ? Number(item.margin_override) : marginPct;
+  const sell = hasSellOverride ? Number(item.sell_override) : sellFromCost(cost, effectiveMargin);
   return {
-    sell_per_unit:     sell,
-    has_sell_override: hasSellOverride,
-    total_cost:        qty * cost,
-    total_sell:        qty * sell,
-    profit:            qty * (sell - cost),
+    sell_per_unit:       sell,
+    has_sell_override:   hasSellOverride,
+    has_margin_override: hasMarginOverride,
+    effective_margin:    effectiveMargin,
+    total_cost:          qty * cost,
+    total_sell:          qty * sell,
+    profit:              qty * (sell - cost),
   };
 }
 
@@ -349,7 +353,7 @@ function DescriptionCell({ item, onChange, materials, onAddToLibrary }) {
 // ─── Line Item Row ────────────────────────────────────────────────────────────
 
 function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, marginPct = 40 }) {
-  const { sell_per_unit, has_sell_override, total_cost, total_sell } = itemTotals(item, marginPct);
+  const { sell_per_unit, has_sell_override, has_margin_override, effective_margin, total_cost, total_sell } = itemTotals(item, marginPct);
   const hasCost = Number(item.cost_per_unit) > 0;
   const calcSell = sellFromCost(Number(item.cost_per_unit) || 0, marginPct);
 
@@ -394,6 +398,34 @@ function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, marg
             placeholder="0.00"
             className="w-full pl-3 text-xs text-right text-slate-700 bg-transparent border-b border-transparent focus:border-amber-400 outline-none py-0.5 placeholder:text-slate-300"
           />
+        </div>
+      </td>
+      {/* Margin % — per-item override; disabled when sell_override is set */}
+      <td className="px-2 py-1.5 w-20">
+        <div className="relative">
+          <input
+            type="number"
+            min="0"
+            max="95"
+            step="1"
+            disabled={has_sell_override}
+            value={item.margin_override ?? ""}
+            onChange={e => {
+              const v = e.target.value;
+              onChange({ ...item, margin_override: v === "" ? null : Number(v) });
+            }}
+            placeholder={String(marginPct)}
+            title={has_sell_override ? "Sell price override active — clear sell override to use margin" : has_margin_override ? "Per-item margin override" : "Override margin % for this item"}
+            className={cn(
+              "w-full text-xs text-right bg-transparent border-b outline-none py-0.5 placeholder:text-slate-300",
+              has_sell_override
+                ? "border-transparent text-slate-300 cursor-not-allowed"
+                : has_margin_override
+                  ? "border-amber-400 text-amber-700 font-semibold focus:border-amber-500"
+                  : "border-transparent text-slate-500 focus:border-amber-400"
+            )}
+          />
+          <span className="absolute right-0 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none">%</span>
         </div>
       </td>
       {/* Sell/Unit — editable override; placeholder shows margin-calculated value */}
@@ -451,13 +483,15 @@ function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, marg
 
 // ─── Trade / Material Section ─────────────────────────────────────────────────
 
-function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onDeleteSection, materials, onAddToLibrary, sectionType = "trade", marginPct = 40 }) {
+function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onDeleteSection, materials, onAddToLibrary, sectionType = "trade", marginPct = 40, sectionMarginOverride, onSectionMarginChange }) {
   const [collapsed, setCollapsed] = useState(false);
+  const effectiveSectionMargin = sectionMarginOverride != null ? Number(sectionMarginOverride) : marginPct;
   const tradeItems = items.filter(it => it.trade === trade);
-  const { totalCost, totalSell } = summaryTotals(tradeItems, marginPct);
+  const { totalCost, totalSell } = summaryTotals(tradeItems, effectiveSectionMargin);
   const hasValues = totalSell > 0;
   const isMaterial = sectionType === "material";
   const isEmpty = tradeItems.length === 0;
+  const hasSectionMarginOverride = sectionMarginOverride != null && sectionMarginOverride !== "";
 
   return (
     <div className={cn("bg-white rounded-xl border overflow-hidden mb-3", isMaterial ? "border-sky-200" : "border-slate-200")}>
@@ -476,6 +510,34 @@ function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onD
           <span className="text-xs text-slate-400">({tradeItems.length} item{tradeItems.length !== 1 ? "s" : ""})</span>
         </div>
         <div className="flex items-center gap-3">
+          {/* Section-level margin override */}
+          {onSectionMarginChange && (
+            <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+              <span className="text-[10px] text-slate-400 uppercase tracking-wider">Margin</span>
+              <div className="relative w-16">
+                <input
+                  type="number"
+                  min="0"
+                  max="95"
+                  step="1"
+                  value={sectionMarginOverride ?? ""}
+                  onChange={e => {
+                    const v = e.target.value;
+                    onSectionMarginChange(trade, v === "" ? null : Number(v));
+                  }}
+                  placeholder={String(marginPct)}
+                  title={hasSectionMarginOverride ? "Section margin override — clear to use global margin" : "Override margin % for this section"}
+                  className={cn(
+                    "w-full text-xs text-right bg-transparent border rounded px-1.5 py-0.5 outline-none placeholder:text-slate-300",
+                    hasSectionMarginOverride
+                      ? "border-amber-400 text-amber-700 font-semibold"
+                      : "border-slate-200 text-slate-500 focus:border-amber-400"
+                  )}
+                />
+                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 pointer-events-none">%</span>
+              </div>
+            </div>
+          )}
           {hasValues && (
             <div className="flex items-center gap-4 text-xs text-slate-500">
               <span>Cost: <strong className="text-slate-700">{fmt(totalCost)}</strong></span>
@@ -505,6 +567,7 @@ function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onD
                   <th className="px-2 py-2 text-left w-32">Unit</th>
                   <th className="px-2 py-2 text-right w-24">Qty</th>
                   <th className="px-2 py-2 text-right w-28">Cost/Unit</th>
+                  <th className="px-2 py-2 text-right w-20">Margin % ✎</th>
                   <th className="px-2 py-2 text-right w-28">Sell/Unit ✎</th>
                   <th className="px-2 py-2 text-right w-28">Total Cost</th>
                   <th className="px-2 py-2 text-right w-28">Total Sell</th>
@@ -514,7 +577,7 @@ function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onD
               <tbody>
                 {tradeItems.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-300">No items yet</td>
+                    <td colSpan={10} className="px-4 py-6 text-center text-sm text-slate-300">No items yet</td>
                   </tr>
                 ) : (
                   tradeItems.map(item => (
@@ -525,7 +588,7 @@ function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onD
                       onDelete={onDeleteItem}
                       materials={materials}
                       onAddToLibrary={onAddToLibrary}
-                      marginPct={marginPct}
+                      marginPct={effectiveSectionMargin}
                     />
                   ))
                 )}
@@ -1317,6 +1380,7 @@ export default function EstimateDetail() {
     margin_override: null,
     total_override: null,
   });
+  const [sectionMargins, setSectionMargins] = useState({});
   const [items, setItems]                         = useState([]);
   const [activeTrades, setActiveTrades]           = useState([]);
   const [activeMaterialSections, setActiveMaterialSections] = useState([]);
@@ -1401,6 +1465,9 @@ export default function EstimateDetail() {
         margin_override: est.margin_override ?? null,
         total_override:  est.total_override  ?? null,
       });
+      if (est.section_margins && typeof est.section_margins === "object") {
+        setSectionMargins(est.section_margins);
+      }
       const savedItems = Array.isArray(est.line_items) ? est.line_items : [];
       setItems(savedItems);
       setActiveTrades([...new Set(savedItems.filter(i => i.sectionType !== "material").map(i => i.trade))]);
@@ -1435,6 +1502,17 @@ export default function EstimateDetail() {
 
   const handleEstimateChange = useCallback((patch) => {
     setEstimate(e => ({ ...e, ...patch }));
+    setSaved(false);
+  }, []);
+
+  const handleSectionMarginChange = useCallback((sectionName, value) => {
+    setSectionMargins(prev => {
+      if (value === null) {
+        const { [sectionName]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [sectionName]: value };
+    });
     setSaved(false);
   }, []);
 
@@ -1507,6 +1585,7 @@ export default function EstimateDetail() {
         client_id:       estimate.client_id  || null,
         project_id:      estimate.project_id || null,
         line_items:      items,
+        section_margins: sectionMargins,
         total:           effectiveTotal,
         margin_percent:  effectiveMargin,
         ...(estimateNumber ? { estimate_number: estimateNumber } : {}),
@@ -1768,6 +1847,8 @@ export default function EstimateDetail() {
               onAddToLibrary={handleAddToLibrary}
               sectionType="material"
               marginPct={effectiveMarginPct}
+              sectionMarginOverride={sectionMargins[sec] ?? null}
+              onSectionMarginChange={handleSectionMarginChange}
             />
           ))}
 
@@ -1785,6 +1866,8 @@ export default function EstimateDetail() {
               onAddToLibrary={handleAddToLibrary}
               sectionType="trade"
               marginPct={effectiveMarginPct}
+              sectionMarginOverride={sectionMargins[trade] ?? null}
+              onSectionMarginChange={handleSectionMarginChange}
             />
           ))}
 
@@ -1802,6 +1885,8 @@ export default function EstimateDetail() {
               onAddToLibrary={handleAddToLibrary}
               sectionType="trade"
               marginPct={effectiveMarginPct}
+              sectionMarginOverride={sectionMargins[trade] ?? null}
+              onSectionMarginChange={handleSectionMarginChange}
             />
           ))}
 
