@@ -61,7 +61,8 @@ const ESTIMATE_STATUS = {
 export default function ClientDetail() {
   const navigate = useNavigate();
   const urlParams = new URLSearchParams(window.location.search);
-  const clientId = urlParams.get("id");
+  const rawId = urlParams.get("id");
+  const clientId = rawId && rawId !== "null" ? rawId : null;
 
   const [client, setClient] = useState(null);
   const [projects, setProjects] = useState([]);

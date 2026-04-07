@@ -121,7 +121,7 @@ function createEntity(tableName) {
     async filter(filterObj, sortField, limit) {
       let query = supabase.from(tableName).select('*');
       for (const [key, val] of Object.entries(filterObj ?? {})) {
-        if (val !== undefined && val !== null) query = query.eq(key, val);
+        if (val !== undefined && val !== null && val !== "null" && val !== "undefined") query = query.eq(key, val);
       }
       const sort = parseSortField(sortField);
       if (sort) query = query.order(sort.field, { ascending: sort.ascending });
