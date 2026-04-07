@@ -316,13 +316,17 @@ export default function WIPReport() {
                                 <ChevronRight className="w-4 h-4 text-slate-400" />
                               )}
                               <Building2 className="w-4 h-4 text-amber-500" />
-                              <Link 
-                                to={createPageUrl(`ClientDetail?id=${clientId}`)}
-                                className="hover:text-amber-600"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {client?.name || "Unknown Client"}
-                              </Link>
+                              {client ? (
+                                <Link
+                                  to={createPageUrl(`ClientDetail?id=${clientId}`)}
+                                  className="hover:text-amber-600"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  {client.name}
+                                </Link>
+                              ) : (
+                                <span>Total Active Projects</span>
+                              )}
                               <Badge variant="secondary" className="ml-2">
                                 {clientProjects.length}
                               </Badge>
