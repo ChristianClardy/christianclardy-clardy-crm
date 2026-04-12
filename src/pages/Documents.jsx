@@ -1,17 +1,137 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { supabase } from "@/lib/supabase";
 import { createPageUrl } from "@/utils";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import CompanyDocumentsSection from "@/components/documents/CompanyDocumentsSection";
 import { getSelectedCompanyScope, subscribeToCompanyScope } from "@/lib/companyScope";
-import { Search, FileText, Image, File, Download, FolderOpen } from "lucide-react";
+import { Search, FileText, Image, File, Download, FolderOpen, Send, Plus, Trash2, Loader2, CheckCircle } from "lucide-react";
 
 function FileIcon({ fileType }) {
   if (fileType?.startsWith("image/")) return <Image className="h-4 w-4 text-blue-500" />;
   if (fileType === "application/pdf") return <FileText className="h-4 w-4 text-red-500" />;
   return <File className="h-4 w-4 text-slate-400" />;
+}
+
+const EMPTY_SIGNER = { name: "", email: "" };
+
+function SendDocuSignModal({ doc, onClose }) {
+  const [signers, setSigners]   = useState([{ ...EMPTY_SIGNER }]);
+  const [sending, setSending]   = useState(false);
+  const [result, setResult]     = useState(null); // null | { ok, message }
+
+  const updateSigner = (i, field, value) =>
+    setSigners((prev) => prev.map((s, idx) => idx === i ? { ...s, [field]: value } : s));
+
+  const addSigner = () => setSigners((prev) => [...prev, { ...EMPTY_SIGNER }]);
+  const removeSigner = (i) => setSigners((prev) => prev.filter((_, idx) => idx !== i));
+
+  const handleSend = async (e) => {
+    e.preventDefault();
+    setSending(true);
+    setResult(null);
+    try {
+      const res = await fetch("/api/docusign-send", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          file_url:  doc.file_url,
+          file_name: doc.file_name,
+          signers,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to send envelope.");
+      setResult({ ok: true, message: `Envelope sent! ID: ${data.envelope_id}` });
+    } catch (err) {
+      setResult({ ok: false, message: err.message });
+    }
+    setSending(false);
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Send className="w-4 h-4" /> Send via DocuSign
+          </DialogTitle>
+        </DialogHeader>
+
+        {result?.ok ? (
+          <div className="py-6 text-center space-y-3">
+            <CheckCircle className="w-10 h-10 text-emerald-500 mx-auto" />
+            <p className="font-semibold text-slate-900">Sent for Signature</p>
+            <p className="text-sm text-slate-500">{result.message}</p>
+            <Button onClick={onClose} size="sm" className="bg-slate-900 text-white">Done</Button>
+          </div>
+        ) : (
+          <form onSubmit={handleSend} className="space-y-4">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm text-slate-700 font-medium truncate">
+              {doc.file_name}
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs uppercase tracking-wide text-slate-500">Signers</Label>
+                <button type="button" onClick={addSigner} className="flex items-center gap-1 text-xs font-medium text-amber-700 hover:text-amber-800">
+                  <Plus className="w-3 h-3" /> Add signer
+                </button>
+              </div>
+
+              {signers.map((s, i) => (
+                <div key={i} className="flex gap-2 items-start">
+                  <div className="flex-1 space-y-1.5">
+                    <Input
+                      required
+                      placeholder="Full name"
+                      value={s.name}
+                      onChange={(e) => updateSigner(i, "name", e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                    <Input
+                      required
+                      type="email"
+                      placeholder="Email address"
+                      value={s.email}
+                      onChange={(e) => updateSigner(i, "email", e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  {signers.length > 1 && (
+                    <button type="button" onClick={() => removeSigner(i)} className="mt-1 p-1.5 rounded hover:bg-rose-100 text-slate-400 hover:text-rose-500">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {result && !result.ok && (
+              <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+                {result.message}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-2 pt-1 border-t border-slate-200">
+              <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+              <Button type="submit" size="sm" disabled={sending} className="bg-[#1A2B3C] hover:bg-[#243647] text-white">
+                {sending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+                {sending ? "Sending…" : "Send for Signature"}
+              </Button>
+            </div>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 export default function Documents() {
@@ -21,9 +141,12 @@ export default function Documents() {
   const [selectedCompanyScope, setSelectedCompanyScope] = useState(getSelectedCompanyScope());
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [docusignConnected, setDocusignConnected] = useState(false);
+  const [sendTarget, setSendTarget] = useState(null);
 
   useEffect(() => {
     loadData();
+    checkDocuSign();
     const unsubScope = subscribeToCompanyScope(setSelectedCompanyScope);
     return () => unsubScope();
   }, []);
@@ -38,6 +161,15 @@ export default function Documents() {
     setProjects(projectData);
     setTasks(taskData);
     setLoading(false);
+  };
+
+  const checkDocuSign = async () => {
+    const { data } = await supabase
+      .from("company_profiles")
+      .select("settings")
+      .limit(1)
+      .single();
+    setDocusignConnected(!!data?.settings?.docusign?.access_token);
   };
 
   const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects : projects.filter((project) => project.company_id === selectedCompanyScope), [projects, selectedCompanyScope]);
@@ -82,6 +214,10 @@ export default function Documents() {
 
       <CompanyDocumentsSection selectedCompanyScope={selectedCompanyScope} search={search} />
 
+      {sendTarget && (
+        <SendDocuSignModal doc={sendTarget} onClose={() => setSendTarget(null)} />
+      )}
+
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         {filtered.length === 0 ? (
           <div className="p-12 text-center text-slate-500">
@@ -99,7 +235,7 @@ export default function Documents() {
                   <th className="px-5 py-3">Project</th>
                   <th className="px-5 py-3">Uploaded By</th>
                   <th className="px-5 py-3">Uploaded</th>
-                  <th className="px-5 py-3 text-right">Action</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -128,9 +264,20 @@ export default function Documents() {
                       <td className="px-5 py-4 text-slate-600">{doc.uploaded_by || "—"}</td>
                       <td className="px-5 py-4 text-slate-500">{doc.created_date ? new Date(doc.created_date).toLocaleDateString() : "—"}</td>
                       <td className="px-5 py-4 text-right">
-                        <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium text-amber-700 hover:text-amber-800">
-                          <Download className="h-4 w-4" /> Open
-                        </a>
+                        <div className="flex items-center justify-end gap-3">
+                          {docusignConnected && (
+                            <button
+                              onClick={() => setSendTarget(doc)}
+                              className="inline-flex items-center gap-1 text-sm font-medium text-[#1A2B3C] hover:text-[#243647]"
+                              title="Send for signature via DocuSign"
+                            >
+                              <Send className="h-4 w-4" /> Sign
+                            </button>
+                          )}
+                          <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium text-amber-700 hover:text-amber-800">
+                            <Download className="h-4 w-4" /> Open
+                          </a>
+                        </div>
                       </td>
                     </tr>
                   );

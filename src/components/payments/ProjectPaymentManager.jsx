@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Pencil } from "lucide-react";
+import { Plus, Trash2, Pencil, Loader2 } from "lucide-react";
 
 const emptyForm = {
   amount_received: "",
@@ -21,6 +21,8 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPayment, setEditingPayment] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
     loadPayments();
@@ -39,15 +41,14 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
   const syncProjectTotals = async (paymentList) => {
     const received = paymentList.reduce((sum, payment) => sum + (Number(payment.amount_received) || 0), 0);
     await base44.entities.Project.update(projectId, {
-      collected_to_date: received,
       billed_to_date: received,
-      remaining_balance: (Number(contractValue) || 0) - received,
       sync_locked: true,
     });
     await onUpdated?.();
   };
 
   const openDialog = (payment = null) => {
+    setSaveError("");
     if (payment) {
       setEditingPayment(payment);
       setForm({
@@ -66,28 +67,32 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSaving(true);
+    setSaveError("");
     const payload = {
-      payment_id: editingPayment?.payment_id || `PMT-${Date.now()}`,
       linked_job_id: projectId,
-      acculynx_job_id: acculynxJobId || null,
       amount_received: parseFloat(form.amount_received) || 0,
       payment_date: form.payment_date,
       payment_method: form.payment_method,
       reference_number: form.reference_number,
-      source: editingPayment?.source || "manual",
       notes: form.notes,
     };
 
-    if (editingPayment) {
-      await base44.entities.Payment.update(editingPayment.id, payload);
-    } else {
-      await base44.entities.Payment.create(payload);
+    try {
+      if (editingPayment) {
+        await base44.entities.Payment.update(editingPayment.id, payload);
+      } else {
+        await base44.entities.Payment.create(payload);
+      }
+      const refreshed = await base44.entities.Payment.filter({ linked_job_id: projectId }, "-payment_date", 500);
+      setPayments(refreshed);
+      await syncProjectTotals(refreshed);
+      setDialogOpen(false);
+    } catch (err) {
+      setSaveError(err?.message || "Failed to save payment. Please try again.");
+    } finally {
+      setSaving(false);
     }
-
-    const refreshed = await base44.entities.Payment.filter({ linked_job_id: projectId }, "-payment_date", 500);
-    setPayments(refreshed);
-    await syncProjectTotals(refreshed);
-    setDialogOpen(false);
   };
 
   const handleDelete = async (paymentId) => {
@@ -201,9 +206,14 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
               <Label>Notes</Label>
               <Input value={form.notes} onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))} className="mt-1.5" placeholder="Optional notes" />
             </div>
+            {saveError && (
+              <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{saveError}</p>
+            )}
             <div className="flex justify-end gap-3 pt-2">
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-              <Button type="submit" className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white">{editingPayment ? "Save Changes" : "Add Payment"}</Button>
+              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>Cancel</Button>
+              <Button type="submit" disabled={saving} className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white">
+                {saving ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Saving…</> : editingPayment ? "Save Changes" : "Add Payment"}
+              </Button>
             </div>
           </form>
         </DialogContent>

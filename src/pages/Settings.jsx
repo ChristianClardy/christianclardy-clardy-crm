@@ -5,6 +5,7 @@ import {
   Users, ShieldCheck, Plus, Edit2, Trash2, Search,
   Save, Check, X, CalendarDays, Copy, CheckCheck,
   Building2, UserPlus, Mail, Phone, Loader2, Palette, Moon, Sun,
+  FileSignature, Link as LinkIcon,
 } from "lucide-react";
 import { useTheme } from "@/lib/ThemeContext";
 import { COLOR_SCHEMES } from "@/lib/colorSchemes";
@@ -17,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import CompanyManager from "@/components/company/CompanyManager";
+import { useAuth } from "@/lib/AuthContext";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -596,19 +598,169 @@ function AppearanceTab() {
   );
 }
 
+// ─── DocuSign tab (admin only) ────────────────────────────────────────────────
+
+function DocuSignTab() {
+  const [docusign, setDocusign]         = useState(null);
+  const [loading, setLoading]           = useState(true);
+  const [disconnecting, setDisconnecting] = useState(false);
+
+  const CLIENT_ID = import.meta.env.VITE_DOCUSIGN_CLIENT_ID;
+  const DS_BASE   = import.meta.env.VITE_DOCUSIGN_ENV === "production"
+    ? "https://account.docusign.com"
+    : "https://account-d.docusign.com";
+
+  useEffect(() => { loadStatus(); }, []);
+
+  const loadStatus = async () => {
+    const { data } = await supabase
+      .from("company_profiles")
+      .select("id, settings")
+      .limit(1)
+      .single();
+    setDocusign(data?.settings?.docusign || null);
+    setLoading(false);
+  };
+
+  const handleConnect = () => {
+    const redirectUri = encodeURIComponent(`${window.location.origin}/DocuSignCallback`);
+    const scope       = encodeURIComponent("signature");
+    window.location.href = `${DS_BASE}/oauth/auth?response_type=code&scope=${scope}&client_id=${CLIENT_ID}&redirect_uri=${redirectUri}`;
+  };
+
+  const handleDisconnect = async () => {
+    if (!confirm("Disconnect DocuSign? You will need to reconnect to send documents.")) return;
+    setDisconnecting(true);
+    const { data } = await supabase
+      .from("company_profiles")
+      .select("id, settings")
+      .limit(1)
+      .single();
+    if (data) {
+      const { docusign: _removed, ...rest } = data.settings || {};
+      await supabase.from("company_profiles").update({ settings: rest }).eq("id", data.id);
+    }
+    setDocusign(null);
+    setDisconnecting(false);
+  };
+
+  if (loading) return (
+    <div className="flex justify-center py-12">
+      <div className="w-6 h-6 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+
+  return (
+    <div className="space-y-6 max-w-lg">
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-[#1A2B3C]">
+            <FileSignature className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <p className="font-semibold text-slate-900">DocuSign Integration</p>
+            <p className="text-xs text-slate-500">Link your DocuSign account to send documents for signature</p>
+          </div>
+          {docusign && (
+            <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+              Connected
+            </span>
+          )}
+        </div>
+
+        {docusign ? (
+          <div className="space-y-4">
+            <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-2 text-sm">
+              {[
+                { label: "Account",   value: docusign.account_name },
+                { label: "User",      value: docusign.user_name },
+                { label: "Email",     value: docusign.email },
+                { label: "Connected", value: docusign.connected_at ? new Date(docusign.connected_at).toLocaleDateString() : null },
+              ].map(({ label, value }) => value ? (
+                <div key={label} className="flex items-center justify-between">
+                  <span className="text-slate-500">{label}</span>
+                  <span className="font-medium text-slate-900">{value}</span>
+                </div>
+              ) : null)}
+            </div>
+            <Button
+              onClick={handleDisconnect}
+              disabled={disconnecting}
+              variant="outline"
+              className="w-full border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+            >
+              {disconnecting
+                ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                : <X className="w-4 h-4 mr-2" />}
+              Disconnect DocuSign
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-500">
+              Connect your DocuSign account to send documents for signature directly from the Documents portal.
+            </p>
+            {!CLIENT_ID && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
+                <p className="font-semibold mb-1">Environment Variable Missing</p>
+                <p>
+                  Add <code className="font-mono bg-amber-100 px-1 rounded">VITE_DOCUSIGN_CLIENT_ID</code> to
+                  your <code className="font-mono bg-amber-100 px-1 rounded">.env</code> file before connecting.
+                </p>
+              </div>
+            )}
+            <Button
+              onClick={handleConnect}
+              disabled={!CLIENT_ID}
+              className="w-full bg-[#1A2B3C] hover:bg-[#243647] text-white"
+            >
+              <LinkIcon className="w-4 h-4 mr-2" />
+              Connect DocuSign Account
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+        <p className="font-semibold mb-2">Setup Instructions</p>
+        <ol className="list-decimal list-inside space-y-1 text-xs leading-relaxed">
+          <li>Create a DocuSign developer account at <strong>developers.docusign.com</strong></li>
+          <li>Create an integration (app) and copy the <strong>Integration Key</strong></li>
+          <li>
+            Add <strong>{window.location.origin}/DocuSignCallback</strong> as a Redirect URI in your DocuSign app
+          </li>
+          <li>
+            Set <code className="font-mono bg-amber-100 px-1 rounded">VITE_DOCUSIGN_CLIENT_ID</code> = Integration Key in your <code>.env</code>
+          </li>
+          <li>
+            Set <code className="font-mono bg-amber-100 px-1 rounded">DOCUSIGN_CLIENT_ID</code> and{" "}
+            <code className="font-mono bg-amber-100 px-1 rounded">DOCUSIGN_CLIENT_SECRET</code> in your Vercel environment variables
+          </li>
+          <li>For production, set <code className="font-mono bg-amber-100 px-1 rounded">VITE_DOCUSIGN_ENV=production</code></li>
+        </ol>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-const TABS = [
-  { key: "team",        label: "Team Members",        icon: Users },
-  { key: "permissions", label: "Roles & Permissions", icon: ShieldCheck },
-  { key: "companies",   label: "Companies",           icon: Building2 },
-  { key: "invite",      label: "Invite & Logins",     icon: UserPlus },
-  { key: "calendar",    label: "Calendar Feed",        icon: CalendarDays },
-  { key: "appearance",  label: "Appearance",           icon: Palette },
+const ALL_TABS = [
+  { key: "team",        label: "Team Members",        icon: Users,          adminOnly: false },
+  { key: "permissions", label: "Roles & Permissions", icon: ShieldCheck,    adminOnly: false },
+  { key: "companies",   label: "Companies",           icon: Building2,      adminOnly: false },
+  { key: "invite",      label: "Invite & Logins",     icon: UserPlus,       adminOnly: false },
+  { key: "calendar",    label: "Calendar Feed",        icon: CalendarDays,   adminOnly: false },
+  { key: "appearance",  label: "Appearance",           icon: Palette,        adminOnly: false },
+  { key: "docusign",    label: "DocuSign",             icon: FileSignature,  adminOnly: true  },
 ];
 
 export default function Settings() {
+  const { user }        = useAuth();
+  const isAdmin         = user?.role === "admin";
   const [activeTab, setActiveTab] = useState("team");
+
+  const visibleTabs = ALL_TABS.filter((t) => !t.adminOnly || isAdmin);
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
@@ -619,7 +771,7 @@ export default function Settings() {
           <p className="mt-1 text-sm text-slate-500">Manage your team, companies, roles, and app access.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {TABS.map(({ key, label, icon: Icon }) => (
+          {visibleTabs.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
@@ -643,6 +795,7 @@ export default function Settings() {
       {activeTab === "invite"      && <InviteTab />}
       {activeTab === "calendar"    && <CalendarFeedTab />}
       {activeTab === "appearance"  && <AppearanceTab />}
+      {activeTab === "docusign"    && isAdmin && <DocuSignTab />}
     </div>
   );
 }

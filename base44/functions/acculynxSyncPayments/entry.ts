@@ -106,14 +106,11 @@ function buildPaymentPayload(project, item) {
   ].filter(Boolean);
 
   return {
-    payment_id: externalId,
     linked_job_id: project.id,
-    acculynx_job_id: project.acculynx_job_id,
-    acculynx_payment_id: externalId,
+    acculynx_id: externalId,
     amount_received: amount,
     payment_date: paymentDate,
     payment_method: normalizeMethod(rawMethod),
-    source: 'acculynx',
     notes: noteParts.join(' | '),
   };
 }
@@ -140,8 +137,8 @@ Deno.serve(async (req) => {
     const paymentByExternalId = {};
 
     for (const payment of existingPayments) {
-      if (payment.acculynx_payment_id) {
-        paymentByExternalId[payment.acculynx_payment_id] = payment;
+      if (payment.acculynx_id) {
+        paymentByExternalId[payment.acculynx_id] = payment;
       }
     }
 
@@ -161,15 +158,15 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        const existing = paymentByExternalId[payload.acculynx_payment_id];
+        const existing = paymentByExternalId[payload.acculynx_id];
 
         if (existing) {
           await base44.asServiceRole.entities.Payment.update(existing.id, payload);
-          paymentByExternalId[payload.acculynx_payment_id] = { ...existing, ...payload };
+          paymentByExternalId[payload.acculynx_id] = { ...existing, ...payload };
           updated++;
         } else {
           const createdPayment = await base44.asServiceRole.entities.Payment.create(payload);
-          paymentByExternalId[payload.acculynx_payment_id] = createdPayment;
+          paymentByExternalId[payload.acculynx_id] = createdPayment;
           created++;
         }
       }
