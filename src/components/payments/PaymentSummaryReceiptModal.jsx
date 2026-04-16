@@ -19,16 +19,20 @@ export default function PaymentSummaryReceiptModal({ open, onClose, projectId, p
     const load = async () => {
       setData({ project: null, client: null, company: null, loading: true });
 
-      const project = await base44.entities.Project.get(projectId).catch(() => null);
+      // Use filter() instead of get() — avoids alert popups on lookup failures
+      const projects = await base44.entities.Project.filter({ id: projectId }).catch(() => []);
+      const project = projects[0] || null;
 
       let client = null;
       if (project?.client_id) {
-        client = await base44.entities.Client.get(project.client_id).catch(() => null);
+        const clients = await base44.entities.Client.filter({ id: project.client_id }).catch(() => []);
+        client = clients[0] || null;
       }
 
       let company = null;
       if (project?.company_id) {
-        company = await base44.entities.CompanyProfile.get(project.company_id).catch(() => null);
+        const companies = await base44.entities.CompanyProfile.filter({ id: project.company_id }).catch(() => []);
+        company = companies[0] || null;
       }
       if (!company) {
         const all = await base44.entities.CompanyProfile.list("name", 200).catch(() => []);

@@ -19,21 +19,30 @@ export default function PaymentReceiptModal({ open, onClose, payment }) {
     const load = async () => {
       setData({ project: null, client: null, company: null, loading: true });
 
-      const project = await base44.entities.Project.get(payment.linked_job_id).catch(() => null);
+      // Use filter() instead of get() — avoids alert popups on lookup failures
+      const projects = await base44.entities.Project.filter({ id: payment.linked_job_id }).catch(() => []);
+      const project = projects[0] || null;
+      console.log('[Receipt] payment.linked_job_id:', payment.linked_job_id, '→ project:', project?.id, project?.name, 'client_id:', project?.client_id);
 
       let client = null;
       if (project?.client_id) {
-        client = await base44.entities.Client.get(project.client_id).catch(() => null);
+        const clients = await base44.entities.Client.filter({ id: project.client_id }).catch(() => []);
+        client = clients[0] || null;
+        console.log('[Receipt] client lookup result:', client?.id, client?.name);
+      } else {
+        console.log('[Receipt] project has no client_id — skipping client fetch');
       }
 
       let company = null;
       if (project?.company_id) {
-        company = await base44.entities.CompanyProfile.get(project.company_id).catch(() => null);
+        const companies = await base44.entities.CompanyProfile.filter({ id: project.company_id }).catch(() => []);
+        company = companies[0] || null;
       }
       if (!company) {
         const all = await base44.entities.CompanyProfile.list("name", 200).catch(() => []);
         company = (client?.company ? all.find(c => c.name === client.company) : null) || all[0] || null;
       }
+      console.log('[Receipt] final → client:', client?.name, '| company:', company?.name);
 
       if (!cancelled) setData({ project, client, company, loading: false });
     };
