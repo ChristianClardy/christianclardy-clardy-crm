@@ -17,12 +17,16 @@ export default function ReceivedPaymentsTable({ payments, projectMap, clientMap,
 
   const openReceipt = async (payment) => {
     const project = projectMap[payment.linked_job_id] || null;
-    const company = project ? (companyMap[project.company_id] || null) : null;
 
-    // Try clientMap first, fall back to direct fetch
+    // Try maps first, fall back to direct fetch for both client and company
     let client = project ? (clientMap[project.client_id] || null) : null;
     if (!client && project?.client_id) {
       client = await base44.entities.Client.get(project.client_id).catch(() => null);
+    }
+
+    let company = project ? (companyMap[project.company_id] || null) : null;
+    if (!company && project?.company_id) {
+      company = await base44.entities.CompanyProfile.get(project.company_id).catch(() => null);
     }
 
     setReceiptProject(project);

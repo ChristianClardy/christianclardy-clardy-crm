@@ -28,12 +28,13 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [resolvedClient, setResolvedClient] = useState(null);
+  const [resolvedCompany, setResolvedCompany] = useState(null);
 
   useEffect(() => {
     loadPayments();
   }, [projectId]);
 
-  // Load client directly if not provided via props (e.g. when project has no client_id yet loaded)
+  // Load client directly if not provided via props
   useEffect(() => {
     if (client) {
       setResolvedClient(client);
@@ -45,6 +46,19 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
       setResolvedClient(null);
     }
   }, [client, project?.client_id]);
+
+  // Load company directly if not provided via props
+  useEffect(() => {
+    if (company) {
+      setResolvedCompany(company);
+    } else if (project?.company_id) {
+      base44.entities.CompanyProfile.get(project.company_id)
+        .then(setResolvedCompany)
+        .catch(() => setResolvedCompany(null));
+    } else {
+      setResolvedCompany(null);
+    }
+  }, [company, project?.company_id]);
 
   const loadPayments = async () => {
     setLoading(true);
@@ -202,7 +216,7 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
         payments={payments}
         project={project}
         client={resolvedClient}
-        company={company}
+        company={resolvedCompany}
         contractValue={contractValue}
       />
 
@@ -213,7 +227,7 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
           payment={receiptPayment}
           project={project}
           client={resolvedClient}
-          company={company}
+          company={resolvedCompany}
         />
       )}
 
