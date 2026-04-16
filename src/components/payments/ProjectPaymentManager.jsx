@@ -17,7 +17,7 @@ const emptyForm = {
   notes: "",
 };
 
-export default function ProjectPaymentManager({ projectId, contractValue = 0, acculynxJobId = "", onUpdated, project, client, company }) {
+export default function ProjectPaymentManager({ projectId, contractValue = 0, acculynxJobId = "", onUpdated }) {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -27,43 +27,10 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const [resolvedClient, setResolvedClient] = useState(null);
-  const [resolvedCompany, setResolvedCompany] = useState(null);
 
   useEffect(() => {
     loadPayments();
   }, [projectId]);
-
-  // Load client directly if not provided via props
-  useEffect(() => {
-    if (client) {
-      setResolvedClient(client);
-    } else if (project?.client_id) {
-      base44.entities.Client.get(project.client_id)
-        .then(setResolvedClient)
-        .catch(() => setResolvedClient(null));
-    } else {
-      setResolvedClient(null);
-    }
-  }, [client, project?.client_id]);
-
-  // Load company directly if not provided via props; fallback to client's company name
-  useEffect(() => {
-    const load = async () => {
-      if (company) { setResolvedCompany(company); return; }
-      if (project?.company_id) {
-        const c = await base44.entities.CompanyProfile.get(project.company_id).catch(() => null);
-        if (c) { setResolvedCompany(c); return; }
-      }
-      // Last resort: look up by the client's company name string
-      if (resolvedClient?.company) {
-        const all = await base44.entities.CompanyProfile.list("name", 200).catch(() => []);
-        const found = all.find(c => c.name === resolvedClient.company) || null;
-        setResolvedCompany(found);
-      }
-    };
-    load();
-  }, [company, project?.company_id, resolvedClient?.company]);
 
   const loadPayments = async () => {
     setLoading(true);
@@ -218,10 +185,8 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
       <PaymentSummaryReceiptModal
         open={summaryOpen}
         onClose={() => setSummaryOpen(false)}
+        projectId={projectId}
         payments={payments}
-        project={project}
-        client={resolvedClient}
-        company={resolvedCompany}
         contractValue={contractValue}
       />
 
@@ -230,9 +195,6 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
           open={Boolean(receiptPayment)}
           onClose={() => setReceiptPayment(null)}
           payment={receiptPayment}
-          project={project}
-          client={resolvedClient}
-          company={resolvedCompany}
         />
       )}
 
