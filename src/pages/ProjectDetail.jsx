@@ -421,6 +421,9 @@ export default function ProjectDetail() {
            contractValue={project.contract_value || 0}
            acculynxJobId={project.acculynx_job_id || ""}
            onProjectUpdated={loadData}
+           project={project}
+           client={client}
+           company={companies.find((c) => c.id === project.company_id) || null}
          />
        )}
 

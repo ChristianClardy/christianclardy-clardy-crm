@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
-import { Upload, Trash2, FileText, Image, File, Download, Paperclip, FolderOpen } from "lucide-react";
+import { Upload, Trash2, FileText, Image, File, Download, Paperclip, FolderOpen, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -10,8 +10,17 @@ const CATEGORIES = [
   { id: "photo", label: "Site Photos" },
   { id: "permit", label: "Permits" },
   { id: "contract", label: "Contracts" },
+  { id: "misc", label: "Important Misc Documents" },
   { id: "other", label: "Other" },
 ];
+
+const CATEGORY_COLORS = {
+  photo: "bg-blue-100 text-blue-700",
+  permit: "bg-purple-100 text-purple-700",
+  contract: "bg-green-100 text-green-700",
+  misc: "bg-amber-100 text-amber-700",
+  other: "bg-slate-100 text-slate-500",
+};
 
 const ACCEPT_MAP = {
   photo: "image/*",
@@ -38,7 +47,10 @@ export default function ProjectFiles({ projectId }) {
   const [activeCategory, setActiveCategory] = useState("all");
   const [uploadCategory, setUploadCategory] = useState("other");
   const [user, setUser] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [editingTag, setEditingTag] = useState(null); // attachment id being re-tagged
   const fileInputRef = useRef();
+  const dragCounterRef = useRef(0);
 
   useEffect(() => {
     base44.auth.me().then(setUser).catch(() => {});
@@ -56,38 +68,78 @@ export default function ProjectFiles({ projectId }) {
     setAttachments(data);
   };
 
-  const handleUpload = async (e) => {
-    const files = Array.from(e.target.files);
+  const uploadFiles = useCallback(async (files, category) => {
     if (!files.length) return;
     setUploading(true);
-    for (const file of files) {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
-      await base44.entities.Attachment.create({
-        entity_type: "project",
-        entity_id: projectId,
-        file_name: file.name,
-        file_url,
-        file_type: file.type,
-        uploaded_by: user?.full_name || user?.email || "Team Member",
-        // Store category in file_name prefix for filtering
-        notes: uploadCategory,
-      });
+    try {
+      for (const file of files) {
+        await base44.integrations.Core.UploadFile({
+          file,
+          entity_type: "project",
+          entity_id: projectId,
+          uploaded_by: user?.full_name || user?.email || "Team Member",
+          category: category || "other",
+        });
+      }
+      loadAttachments();
+    } catch (err) {
+      console.error("Upload failed:", err);
+      alert("Upload failed: " + (err?.message || "Unknown error"));
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
-    setUploading(false);
-    loadAttachments();
-    fileInputRef.current.value = "";
+  }, [projectId, user]);
+
+  const handleUpload = (e) => {
+    uploadFiles(Array.from(e.target.files), uploadCategory);
   };
 
-  const handleDelete = async (id) => {
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) setIsDragging(false);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) uploadFiles(files, uploadCategory);
+  };
+
+  const handleDelete = async (e, id) => {
+    e.stopPropagation();
     await base44.entities.Attachment.delete(id);
     loadAttachments();
   };
 
-  // Infer category from file type or stored notes
+  const handleRetag = async (e, id, newCategory) => {
+    e.stopPropagation();
+    await base44.entities.Attachment.update(id, { category: newCategory });
+    setEditingTag(null);
+    loadAttachments();
+  };
+
   const getCategory = (att) => {
-    if (att.notes && CATEGORIES.find(c => c.id === att.notes)) return att.notes;
+    if (att.category && att.category !== "other") return att.category;
     if (att.file_type?.startsWith("image/")) return "photo";
-    return "other";
+    return att.category || "other";
   };
 
   const filtered = activeCategory === "all"
@@ -100,7 +152,16 @@ export default function ProjectFiles({ projectId }) {
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5">
+    <div
+      className={cn(
+        "bg-white rounded-2xl border-2 p-6 space-y-5 transition-colors",
+        isDragging ? "border-amber-400 bg-amber-50" : "border-slate-200"
+      )}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -117,6 +178,7 @@ export default function ProjectFiles({ projectId }) {
             <option value="photo">Site Photo</option>
             <option value="permit">Permit</option>
             <option value="contract">Contract</option>
+            <option value="misc">Important Misc Document</option>
             <option value="other">Other</option>
           </select>
           <Button
@@ -160,55 +222,90 @@ export default function ProjectFiles({ projectId }) {
         ))}
       </div>
 
-      {/* File Grid */}
-      {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-14 text-slate-400 gap-3">
-          <Paperclip className="w-10 h-10 opacity-30" />
-          <p className="text-sm">No files in this category yet.</p>
-          <p className="text-xs">Select a category above and click Upload to attach files.</p>
+      {/* Drag overlay */}
+      {isDragging && (
+        <div className="flex flex-col items-center justify-center py-8 text-amber-600 gap-2 border-2 border-dashed border-amber-400 rounded-xl bg-amber-50">
+          <Upload className="w-8 h-8" />
+          <p className="text-sm font-medium">Drop files here to upload</p>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      )}
+
+      {/* File Grid */}
+      {!isDragging && filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-14 text-slate-400 gap-3 border-2 border-dashed border-slate-200 rounded-xl">
+          <Paperclip className="w-10 h-10 opacity-30" />
+          <p className="text-sm">No files yet. Click Upload or drag & drop files here.</p>
+        </div>
+      ) : !isDragging && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
           {filtered.map(att => {
             const isImage = att.file_type?.startsWith("image/");
             const cat = getCategory(att);
             const catLabel = CATEGORIES.find(c => c.id === cat)?.label || "Other";
+            const isEditingThisTag = editingTag === att.id;
+
             return (
-              <div key={att.id} className="group relative border border-slate-200 rounded-xl overflow-hidden bg-slate-50 hover:shadow-md transition-shadow">
+              <div
+                key={att.id}
+                className="group relative border border-slate-200 rounded-lg overflow-hidden bg-slate-50 hover:shadow-md hover:border-amber-300 transition-all cursor-pointer"
+                onClick={() => { if (!isEditingThisTag) window.open(att.url, "_blank"); }}
+              >
                 {isImage ? (
-                  <div className="h-36 bg-slate-100 overflow-hidden">
-                    <img src={att.file_url} alt={att.file_name} className="w-full h-full object-cover" />
+                  <div className="h-20 bg-slate-100 overflow-hidden">
+                    <img src={att.url} alt={att.filename} className="w-full h-full object-cover" />
                   </div>
                 ) : (
-                  <div className="h-36 flex flex-col items-center justify-center bg-slate-100 gap-2">
+                  <div className="h-20 flex flex-col items-center justify-center bg-slate-100 gap-1">
                     <FileIcon fileType={att.file_type} />
-                    <span className="text-xs text-slate-400 px-2 text-center truncate w-full text-center">{att.file_name}</span>
                   </div>
                 )}
-                <div className="p-3">
-                  <p className="text-xs font-medium text-slate-700 truncate">{att.file_name}</p>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="text-[10px] text-slate-400">{att.uploaded_by} · {formatDate(att.created_date)}</span>
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">{catLabel}</Badge>
-                  </div>
+                <div className="px-2 py-1.5">
+                  <p className="text-[11px] font-medium text-slate-700 truncate">{att.filename}</p>
+
+                  {/* Tag — click to edit */}
+                  {isEditingThisTag ? (
+                    <select
+                      autoFocus
+                      className="mt-1 w-full text-[10px] border border-amber-300 rounded px-1 py-0.5 bg-white focus:outline-none"
+                      defaultValue={cat}
+                      onClick={e => e.stopPropagation()}
+                      onChange={e => handleRetag(e, att.id, e.target.value)}
+                      onBlur={() => setEditingTag(null)}
+                    >
+                      {CATEGORIES.filter(c => c.id !== "all").map(c => (
+                        <option key={c.id} value={c.id}>{c.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span
+                      className={cn("inline-flex items-center gap-0.5 mt-1 text-[9px] px-1.5 py-0.5 rounded-full font-medium cursor-pointer hover:opacity-80", CATEGORY_COLORS[cat] || "bg-slate-100 text-slate-500")}
+                      title="Click to change category"
+                      onClick={e => { e.stopPropagation(); setEditingTag(att.id); }}
+                    >
+                      <Tag className="w-2 h-2" />
+                      {catLabel}
+                    </span>
+                  )}
                 </div>
+
                 {/* Hover actions */}
-                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <a
-                    href={att.file_url}
+                    href={att.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-1.5 bg-white rounded-lg shadow border border-slate-200 hover:bg-amber-50"
-                    title="Download"
+                    onClick={e => e.stopPropagation()}
+                    className="p-1 bg-white rounded shadow border border-slate-200 hover:bg-amber-50"
+                    title="Open in new tab"
                   >
-                    <Download className="w-3.5 h-3.5 text-slate-600" />
+                    <Download className="w-3 h-3 text-slate-600" />
                   </a>
                   <button
-                    onClick={() => handleDelete(att.id)}
-                    className="p-1.5 bg-white rounded-lg shadow border border-slate-200 hover:bg-rose-50"
+                    onClick={(e) => handleDelete(e, att.id)}
+                    className="p-1 bg-white rounded shadow border border-slate-200 hover:bg-rose-50"
                     title="Delete"
                   >
-                    <Trash2 className="w-3.5 h-3.5 text-slate-400 hover:text-rose-500" />
+                    <Trash2 className="w-3 h-3 text-slate-400 hover:text-rose-500" />
                   </button>
                 </div>
               </div>

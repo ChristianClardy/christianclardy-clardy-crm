@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Pencil, Loader2 } from "lucide-react";
+import { Plus, Trash2, Pencil, Loader2, Receipt } from "lucide-react";
+import PaymentReceiptModal from "@/components/payments/PaymentReceiptModal";
 
 const emptyForm = {
   amount_received: "",
@@ -15,11 +16,12 @@ const emptyForm = {
   notes: "",
 };
 
-export default function ProjectPaymentManager({ projectId, contractValue = 0, acculynxJobId = "", onUpdated }) {
+export default function ProjectPaymentManager({ projectId, contractValue = 0, acculynxJobId = "", onUpdated, project, client, company }) {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPayment, setEditingPayment] = useState(null);
+  const [receiptPayment, setReceiptPayment] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -140,7 +142,7 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
                 <th className="text-left px-4 py-3">Reference</th>
                 <th className="text-right px-4 py-3">Amount</th>
                 <th className="text-left px-4 py-3">Notes</th>
-                <th className="px-4 py-3 w-24" />
+                <th className="px-4 py-3 w-32" />
               </tr>
             </thead>
             <tbody>
@@ -153,6 +155,9 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
                   <td className="px-4 py-3 text-slate-500">{payment.notes || "—"}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-amber-700" title="View / Download Receipt" onClick={() => setReceiptPayment(payment)}>
+                        <Receipt className="w-3.5 h-3.5" />
+                      </Button>
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400" onClick={() => openDialog(payment)}>
                         <Pencil className="w-3.5 h-3.5" />
                       </Button>
@@ -166,6 +171,17 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
             </tbody>
           </table>
         </div>
+      )}
+
+      {receiptPayment && (
+        <PaymentReceiptModal
+          open={Boolean(receiptPayment)}
+          onClose={() => setReceiptPayment(null)}
+          payment={receiptPayment}
+          project={project}
+          client={client}
+          company={company}
+        />
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

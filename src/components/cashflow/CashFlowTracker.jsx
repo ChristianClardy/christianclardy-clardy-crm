@@ -39,7 +39,7 @@ const emptyForm = {
   linked_task_id: "",
 };
 
-export default function CashFlowTracker({ projectId, contractValue = 0, acculynxJobId = "", onProjectUpdated }) {
+export default function CashFlowTracker({ projectId, contractValue = 0, acculynxJobId = "", onProjectUpdated, project, client, company }) {
   const [draws, setDraws] = useState([]);
   const [sheetRows, setSheetRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -354,6 +354,9 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
         contractValue={contractValue}
         acculynxJobId={acculynxJobId}
         onUpdated={onProjectUpdated}
+        project={project}
+        client={client}
+        company={company}
       />
 
       {/* Add/Edit Dialog */}

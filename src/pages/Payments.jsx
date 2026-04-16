@@ -227,7 +227,7 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
         onDelete={handleDeleteInvoice}
       />
 
-      <ReceivedPaymentsTable payments={filteredPayments} projectMap={projectMap} clientMap={clientMap} />
+      <ReceivedPaymentsTable payments={filteredPayments} projectMap={projectMap} clientMap={clientMap} companyMap={companyMap} />
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">

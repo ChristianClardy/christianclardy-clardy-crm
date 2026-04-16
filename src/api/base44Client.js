@@ -238,19 +238,48 @@ const functions = {
 };
 
 // ─── Integrations (file uploads via Supabase Storage) ────────────────────────
-const STORAGE_BUCKET = 'attachments';
+const STORAGE_BUCKET = 'Attachements';
 
 const integrations = {
   Core: {
-    async UploadFile({ file }) {
+    async UploadFile({ file, entity_type, entity_id, uploaded_by, category }) {
+      // Step 1: Upload file directly to Supabase Storage from the browser
+      // (bypasses Vercel's 4.5MB serverless body limit)
       const ext = file.name.split('.').pop();
       const path = `uploads/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { data, error } = await supabase.storage.from(STORAGE_BUCKET).upload(path, file, {
-        cacheControl: '3600',
-        upsert: false,
-      });
-      if (error) throw error;
-      const { data: { publicUrl } } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(data.path);
+
+      const { data, error } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(path, file, { cacheControl: '3600', upsert: false });
+
+      if (error) throw new Error(`Storage upload failed: ${error.message}`);
+
+      const { data: { publicUrl } } = supabase.storage
+        .from(STORAGE_BUCKET)
+        .getPublicUrl(data.path);
+
+      // Step 2: Save the attachment record via server (service role bypasses RLS)
+      if (entity_type && entity_id) {
+        const res = await fetch('/api/upload-record', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            entity_type,
+            entity_id,
+            filename: file.name,
+            url: publicUrl,
+            file_type: file.type,
+            file_size: file.size,
+            uploaded_by: uploaded_by || 'Team Member',
+            category: category || 'other',
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: res.statusText }));
+          throw new Error(err.error || 'Failed to save attachment record');
+        }
+      }
+
       return { file_url: publicUrl };
     },
   },
