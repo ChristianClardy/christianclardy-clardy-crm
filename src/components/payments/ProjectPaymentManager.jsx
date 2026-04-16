@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Pencil, Loader2, Receipt } from "lucide-react";
+import { Plus, Trash2, Pencil, Loader2, Receipt, FileText } from "lucide-react";
 import PaymentReceiptModal from "@/components/payments/PaymentReceiptModal";
+import PaymentSummaryReceiptModal from "@/components/payments/PaymentSummaryReceiptModal";
 
 const emptyForm = {
   amount_received: "",
@@ -22,6 +23,7 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPayment, setEditingPayment] = useState(null);
   const [receiptPayment, setReceiptPayment] = useState(null);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -112,9 +114,16 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
           <h3 className="font-semibold text-slate-900">Payments Received</h3>
           <p className="text-xs text-slate-400 mt-0.5">Track manual and synced payments for this project.</p>
         </div>
-        <Button size="sm" onClick={() => openDialog()} className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white">
-          <Plus className="w-4 h-4 mr-1" /> Add Payment
-        </Button>
+        <div className="flex items-center gap-2">
+          {payments.length > 0 && (
+            <Button size="sm" variant="outline" onClick={() => setSummaryOpen(true)}>
+              <FileText className="w-4 h-4 mr-1" /> Payment Summary
+            </Button>
+          )}
+          <Button size="sm" onClick={() => openDialog()} className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white">
+            <Plus className="w-4 h-4 mr-1" /> Add Payment
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 p-4 border-b border-slate-100 bg-slate-50">
@@ -172,6 +181,16 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
           </table>
         </div>
       )}
+
+      <PaymentSummaryReceiptModal
+        open={summaryOpen}
+        onClose={() => setSummaryOpen(false)}
+        payments={payments}
+        project={project}
+        client={client}
+        company={company}
+        contractValue={contractValue}
+      />
 
       {receiptPayment && (
         <PaymentReceiptModal
