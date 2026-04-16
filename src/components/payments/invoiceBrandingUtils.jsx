@@ -12,11 +12,17 @@ export function getInvoiceBranding(company) {
   return {
     ...defaultInvoiceBranding,
     company_name: company?.invoice_company_name || company?.name || defaultInvoiceBranding.company_name,
-    logo_url: company?.invoice_logo_url || "",
+    // invoice_logo_url is an optional column; fall back to the base logo_url from company_profiles
+    logo_url: company?.invoice_logo_url || company?.logo_url || "",
     header_title: company?.invoice_header_title || defaultInvoiceBranding.header_title,
     accent_color: company?.invoice_accent_color || company?.color || defaultInvoiceBranding.accent_color,
     intro_text: company?.invoice_intro_text || defaultInvoiceBranding.intro_text,
     footer_text: company?.invoice_footer_text || defaultInvoiceBranding.footer_text,
     default_scope_label: company?.invoice_scope_label || defaultInvoiceBranding.default_scope_label,
+    // Direct contact fields from company_profiles table
+    company_address: company?.address || "",
+    company_phone: company?.phone || "",
+    company_email: company?.email || "",
+    company_website: company?.website || "",
   };
 }

@@ -66,7 +66,8 @@ export default function Projects() {
 
   const [employees, setEmployees] = useState([]);
   const [newClientMode, setNewClientMode] = useState(false);
-  const [newClientName, setNewClientName] = useState("");
+  const [newClientFirstName, setNewClientFirstName] = useState("");
+  const [newClientLastName, setNewClientLastName] = useState("");
   const [newClientEmail, setNewClientEmail] = useState("");
   const [newClientPhone, setNewClientPhone] = useState("");
 
@@ -123,8 +124,9 @@ export default function Projects() {
 
     let clientId = formData.client_id;
     if (newClientMode) {
-      if (!newClientName.trim()) return;
-      const created = await base44.entities.Client.create({ name: newClientName, email: newClientEmail, phone: newClientPhone, status: "active", sync_locked: true });
+      if (!newClientFirstName.trim()) return;
+      const fullName = [newClientFirstName, newClientLastName].filter(Boolean).join(" ").trim();
+      const created = await base44.entities.Client.create({ first_name: newClientFirstName.trim(), last_name: newClientLastName.trim(), name: fullName, email: newClientEmail, phone: newClientPhone, status: "active", sync_locked: true });
       clientId = created.id;
       setClients(prev => [...prev, created]);
     }
@@ -321,7 +323,10 @@ export default function Projects() {
               </div>
               {newClientMode ? (
                 <div className="space-y-2 border border-amber-200 bg-amber-50 rounded-lg p-3">
-                  <Input placeholder="Contact name *" value={newClientName} onChange={e => setNewClientName(e.target.value)} required className="bg-white" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input placeholder="First name *" value={newClientFirstName} onChange={e => setNewClientFirstName(e.target.value)} required className="bg-white" />
+                    <Input placeholder="Last name" value={newClientLastName} onChange={e => setNewClientLastName(e.target.value)} className="bg-white" />
+                  </div>
                   <Input placeholder="Email" value={newClientEmail} onChange={e => setNewClientEmail(e.target.value)} className="bg-white" />
                   <Input placeholder="Phone" value={newClientPhone} onChange={e => setNewClientPhone(e.target.value)} className="bg-white" />
                 </div>

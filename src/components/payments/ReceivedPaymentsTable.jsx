@@ -28,6 +28,11 @@ export default function ReceivedPaymentsTable({ payments, projectMap, clientMap,
     if (!company && project?.company_id) {
       company = await base44.entities.CompanyProfile.get(project.company_id).catch(() => null);
     }
+    // Last resort: look up by client's company name
+    if (!company && client?.company) {
+      const all = await base44.entities.CompanyProfile.list("name", 200).catch(() => []);
+      company = all.find(c => c.name === client.company) || null;
+    }
 
     setReceiptProject(project);
     setReceiptClient(client);

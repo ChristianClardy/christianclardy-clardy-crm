@@ -109,7 +109,8 @@ export default function ClientDetail() {
 
   const handleUpdateClient = async (e) => {
     e.preventDefault();
-    await base44.entities.Client.update(clientId, { ...formData, sync_locked: true });
+    const fullName = [formData.first_name, formData.last_name].filter(Boolean).join(" ").trim() || formData.name;
+    await base44.entities.Client.update(clientId, { ...formData, name: fullName, sync_locked: true });
     setIsEditDialogOpen(false);
     loadData();
   };
@@ -165,9 +166,14 @@ export default function ClientDetail() {
               <Building2 className="w-7 h-7 text-amber-600" />
             </div>
             <div>
-              <h1 className="text-2xl lg:text-3xl font-bold text-slate-900 tracking-tight">
-                {client.name}
-              </h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl lg:text-3xl font-bold text-slate-900 tracking-tight">
+                  {client.name}
+                </h1>
+                {client.customer_number && (
+                  <span className="text-sm font-mono bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md">{client.customer_number}</span>
+                )}
+              </div>
               {client.company && (
                 <p className="text-sm text-amber-700 font-medium flex items-center gap-1">
                   <Building2 className="w-3.5 h-3.5" />{client.company}
@@ -378,13 +384,25 @@ export default function ClientDetail() {
             <DialogTitle>Edit Contact</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleUpdateClient} className="space-y-4">
-            <div>
-              <Label>Contact Name</Label>
-              <Input
-                value={formData.name || ""}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="mt-1.5"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>First Name</Label>
+                <Input
+                  value={formData.first_name || ""}
+                  onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                  className="mt-1.5"
+                  placeholder="John"
+                />
+              </div>
+              <div>
+                <Label>Last Name</Label>
+                <Input
+                  value={formData.last_name || ""}
+                  onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                  className="mt-1.5"
+                  placeholder="Smith"
+                />
+              </div>
             </div>
             <div>
               <Label>Company <span className="font-normal text-slate-400">(optional)</span></Label>

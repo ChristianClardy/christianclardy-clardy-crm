@@ -59,7 +59,7 @@ export default function Clients() {
   const [duplicateError, setDuplicateError] = useState("");
 
   const [formData, setFormData] = useState({
-    name: "", contact_person: "", email: "", phone: "",
+    first_name: "", last_name: "", name: "", contact_person: "", email: "", phone: "",
     address: "", notes: "", status: "active", company: "",
   });
 
@@ -81,6 +81,23 @@ export default function Clients() {
           untagged.map(c => {
             c.company = TARGET_COMPANY;
             return base44.entities.Client.update(c.id, { company: TARGET_COMPANY }).catch(() => {});
+          })
+        );
+      }
+
+      // One-time backfill: assign customer_number to any client that doesn't have one
+      const withoutNumber = clientsData.filter(c => !c.customer_number);
+      if (withoutNumber.length) {
+        let maxNum = clientsData.reduce((max, c) => {
+          const n = parseInt((c.customer_number || "").replace(/\D/g, ""), 10);
+          return isNaN(n) ? max : Math.max(max, n);
+        }, 0);
+        await Promise.all(
+          withoutNumber.map(c => {
+            maxNum += 1;
+            const num = `CUST-${String(maxNum).padStart(4, "0")}`;
+            c.customer_number = num;
+            return base44.entities.Client.update(c.id, { customer_number: num }).catch(() => {});
           })
         );
       }
@@ -132,11 +149,16 @@ export default function Clients() {
     return result;
   }, [filtered, companyProfiles, selectedCompany]);
 
+  const splitName = (fullName) => {
+    const parts = (fullName || "").trim().split(/\s+/);
+    return { first: parts[0] || "", last: parts.length > 1 ? parts.slice(1).join(" ") : "" };
+  };
+
   const openNewDialog = () => {
     setDuplicateError("");
     setEditingClient(null);
     setFormData({
-      name: "", contact_person: "", email: "", phone: "",
+      first_name: "", last_name: "", name: "", contact_person: "", email: "", phone: "",
       address: "", notes: "", status: "active",
       company: selectedCompany !== "__all__" && selectedCompany !== "__none__" ? selectedCompany : "",
     });
@@ -146,8 +168,11 @@ export default function Clients() {
   const openEditDialog = (client) => {
     setDuplicateError("");
     setEditingClient(client);
+    const { first, last } = splitName(client.name);
     setFormData({
-      name: client.name,
+      first_name: client.first_name || first,
+      last_name: client.last_name || last,
+      name: client.name || "",
       contact_person: client.contact_person || "",
       email: client.email || "",
       phone: client.phone || "",
@@ -162,24 +187,40 @@ export default function Clients() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setDuplicateError("");
-    const normalizedName  = formData.name.trim().toLowerCase();
+    // Compute full name from first + last
+    const fullName = [formData.first_name, formData.last_name].filter(Boolean).join(" ").trim();
+    if (!fullName) { setDuplicateError("First or last name is required."); return; }
+    const normalizedName  = fullName.toLowerCase();
     const normalizedEmail = formData.email?.trim().toLowerCase();
     const duplicate = clients.find((c) => c.id !== editingClient?.id && (
-      c.name.trim().toLowerCase() === normalizedName ||
+      (c.name || "").trim().toLowerCase() === normalizedName ||
       (normalizedEmail && c.email?.trim().toLowerCase() === normalizedEmail)
     ));
     if (duplicate) {
       setDuplicateError(
-        duplicate.name.trim().toLowerCase() === normalizedName
+        (duplicate.name || "").trim().toLowerCase() === normalizedName
           ? `A contact named "${duplicate.name}" already exists.`
           : `A contact with email "${duplicate.email}" already exists.`
       );
       return;
     }
+    const payload = {
+      ...formData,
+      name: fullName,
+      first_name: formData.first_name.trim(),
+      last_name: formData.last_name.trim(),
+      sync_locked: true,
+    };
     if (editingClient) {
-      await base44.entities.Client.update(editingClient.id, { ...formData, sync_locked: true });
+      await base44.entities.Client.update(editingClient.id, payload);
     } else {
-      await base44.entities.Client.create({ ...formData, sync_locked: true });
+      // Auto-assign next customer number
+      const maxNum = clients.reduce((max, c) => {
+        const n = parseInt((c.customer_number || "").replace(/\D/g, ""), 10);
+        return isNaN(n) ? max : Math.max(max, n);
+      }, 0);
+      payload.customer_number = `CUST-${String(maxNum + 1).padStart(4, "0")}`;
+      await base44.entities.Client.create(payload);
     }
     setIsDialogOpen(false);
     loadData();
@@ -297,11 +338,14 @@ export default function Clients() {
                         <div className="flex items-center gap-3">
                           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center flex-shrink-0">
                             <span className="text-lg font-bold text-amber-600">
-                              {client.name?.charAt(0)?.toUpperCase() || "?"}
+                              {(client.first_name || client.name)?.charAt(0)?.toUpperCase() || "?"}
                             </span>
                           </div>
                           <div>
                             <h3 className="font-semibold text-slate-900 leading-tight">{client.name}</h3>
+                            {client.customer_number && (
+                              <p className="text-xs text-slate-400 font-mono mt-0.5">{client.customer_number}</p>
+                            )}
                             {client.company && selectedCompany === "__all__" && (
                               <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
                                 <Building2 className="w-3 h-3" />{client.company}
@@ -375,19 +419,29 @@ export default function Clients() {
             <DialogTitle>{editingClient ? "Edit Contact" : "Add New Contact"}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label>Contact Name *</Label>
-              <Input
-                placeholder="e.g. John Smith"
-                value={formData.name}
-                onChange={(e) => { setDuplicateError(""); setFormData({ ...formData, name: e.target.value }); }}
-                required
-                className="mt-1.5"
-              />
-              {duplicateError && !duplicateError.includes("email") && (
-                <p className="text-sm text-rose-600 mt-1">{duplicateError}</p>
-              )}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>First Name *</Label>
+                <Input
+                  placeholder="John"
+                  value={formData.first_name}
+                  onChange={(e) => { setDuplicateError(""); setFormData({ ...formData, first_name: e.target.value }); }}
+                  className="mt-1.5"
+                />
+              </div>
+              <div>
+                <Label>Last Name</Label>
+                <Input
+                  placeholder="Smith"
+                  value={formData.last_name}
+                  onChange={(e) => { setDuplicateError(""); setFormData({ ...formData, last_name: e.target.value }); }}
+                  className="mt-1.5"
+                />
+              </div>
             </div>
+            {duplicateError && (
+              <p className="text-sm text-rose-600 -mt-2">{duplicateError}</p>
+            )}
             <div>
               <Label className="text-slate-500">Company <span className="font-normal text-slate-400">(optional)</span></Label>
               <Select
@@ -414,9 +468,6 @@ export default function Clients() {
                   onChange={(e) => { setDuplicateError(""); setFormData({ ...formData, email: e.target.value }); }}
                   className="mt-1.5"
                 />
-                {duplicateError && duplicateError.includes("email") && (
-                  <p className="text-sm text-rose-600 mt-1">{duplicateError}</p>
-                )}
               </div>
               <div>
                 <Label>Phone</Label>

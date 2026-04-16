@@ -74,6 +74,8 @@ const TABLE_OPTIONAL_FIELDS = {
   leads: new Set(['property_address']),
   payments: new Set(['acculynx_job_id','acculynx_payment_id','payment_id','source','collected_to_date','remaining_balance']),
   projects: new Set(['collected_to_date','remaining_balance']),
+  company_profiles: new Set(['invoice_company_name','invoice_logo_url','invoice_header_title','invoice_accent_color','invoice_intro_text','invoice_footer_text','invoice_scope_label','color']),
+  clients: new Set(['first_name','last_name','customer_number']),
 };
 
 function cleanForWrite(record) {

@@ -101,6 +101,15 @@ export default function PaymentReceiptModal({ open, onClose, payment, project, c
                     <div style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", marginTop: 2 }}>
                       Payment Receipt
                     </div>
+                    {branding.company_address && (
+                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", marginTop: 4 }}>{branding.company_address}</div>
+                    )}
+                    {branding.company_phone && (
+                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", marginTop: 2 }}>{branding.company_phone}</div>
+                    )}
+                    {branding.company_email && (
+                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", marginTop: 2 }}>{branding.company_email}</div>
+                    )}
                   </div>
                 </div>
                 <div style={{ textAlign: "right" }}>

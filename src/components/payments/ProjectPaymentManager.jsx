@@ -47,18 +47,23 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
     }
   }, [client, project?.client_id]);
 
-  // Load company directly if not provided via props
+  // Load company directly if not provided via props; fallback to client's company name
   useEffect(() => {
-    if (company) {
-      setResolvedCompany(company);
-    } else if (project?.company_id) {
-      base44.entities.CompanyProfile.get(project.company_id)
-        .then(setResolvedCompany)
-        .catch(() => setResolvedCompany(null));
-    } else {
-      setResolvedCompany(null);
-    }
-  }, [company, project?.company_id]);
+    const load = async () => {
+      if (company) { setResolvedCompany(company); return; }
+      if (project?.company_id) {
+        const c = await base44.entities.CompanyProfile.get(project.company_id).catch(() => null);
+        if (c) { setResolvedCompany(c); return; }
+      }
+      // Last resort: look up by the client's company name string
+      if (resolvedClient?.company) {
+        const all = await base44.entities.CompanyProfile.list("name", 200).catch(() => []);
+        const found = all.find(c => c.name === resolvedClient.company) || null;
+        setResolvedCompany(found);
+      }
+    };
+    load();
+  }, [company, project?.company_id, resolvedClient?.company]);
 
   const loadPayments = async () => {
     setLoading(true);
