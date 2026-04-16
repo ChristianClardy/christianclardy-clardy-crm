@@ -30,9 +30,9 @@ export default function PaymentSummaryReceiptModal({ open, onClose, projectId, p
       if (project?.company_id) {
         company = await base44.entities.CompanyProfile.get(project.company_id).catch(() => null);
       }
-      if (!company && client?.company) {
+      if (!company) {
         const all = await base44.entities.CompanyProfile.list("name", 200).catch(() => []);
-        company = all.find(c => c.name === client.company) || null;
+        company = (client?.company ? all.find(c => c.name === client.company) : null) || all[0] || null;
       }
 
       if (!cancelled) setData({ project, client, company, loading: false });
