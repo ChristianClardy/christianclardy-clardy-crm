@@ -4,16 +4,32 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { createPageUrl } from "@/utils";
 import { Receipt } from "lucide-react";
+import { base44 } from "@/api/base44Client";
 import PaymentReceiptModal from "@/components/payments/PaymentReceiptModal";
 
 export default function ReceivedPaymentsTable({ payments, projectMap, clientMap, companyMap = {} }) {
   const [receiptPayment, setReceiptPayment] = useState(null);
+  const [receiptClient, setReceiptClient] = useState(null);
+  const [receiptProject, setReceiptProject] = useState(null);
+  const [receiptCompany, setReceiptCompany] = useState(null);
 
   const sortedPayments = [...payments].sort((a, b) => String(b.payment_date || "").localeCompare(String(a.payment_date || "")));
 
-  const receiptProject = receiptPayment ? projectMap[receiptPayment.linked_job_id] : null;
-  const receiptClient = receiptProject ? clientMap[receiptProject.client_id] : null;
-  const receiptCompany = receiptProject ? companyMap[receiptProject.company_id] : null;
+  const openReceipt = async (payment) => {
+    const project = projectMap[payment.linked_job_id] || null;
+    const company = project ? (companyMap[project.company_id] || null) : null;
+
+    // Try clientMap first, fall back to direct fetch
+    let client = project ? (clientMap[project.client_id] || null) : null;
+    if (!client && project?.client_id) {
+      client = await base44.entities.Client.get(project.client_id).catch(() => null);
+    }
+
+    setReceiptProject(project);
+    setReceiptClient(client);
+    setReceiptCompany(company);
+    setReceiptPayment(payment);
+  };
 
   return (
     <>
@@ -73,7 +89,7 @@ export default function ReceivedPaymentsTable({ payments, projectMap, clientMap,
                           size="sm"
                           className="h-8 w-8 p-0 text-slate-400 hover:text-amber-700"
                           title="View / Download Receipt"
-                          onClick={() => setReceiptPayment(payment)}
+                          onClick={() => openReceipt(payment)}
                         >
                           <Receipt className="h-4 w-4" />
                         </Button>
@@ -90,7 +106,7 @@ export default function ReceivedPaymentsTable({ payments, projectMap, clientMap,
       {receiptPayment && (
         <PaymentReceiptModal
           open={Boolean(receiptPayment)}
-          onClose={() => setReceiptPayment(null)}
+          onClose={() => { setReceiptPayment(null); setReceiptClient(null); setReceiptProject(null); setReceiptCompany(null); }}
           payment={receiptPayment}
           project={receiptProject}
           client={receiptClient}
