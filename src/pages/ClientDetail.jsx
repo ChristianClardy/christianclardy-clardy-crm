@@ -298,7 +298,7 @@ export default function ClientDetail() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-slate-900">Projects ({projects.length})</h2>
           <Button
-            onClick={() => navigate(createPageUrl("Projects") + "?new=true")}
+            onClick={() => navigate(createPageUrl("Projects") + `?new=true&clientId=${clientId}`)}
             size="sm"
           >
             <Plus className="w-4 h-4 mr-1" />

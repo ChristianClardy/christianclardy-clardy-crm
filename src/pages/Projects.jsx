@@ -50,9 +50,10 @@ export default function Projects() {
   const [isDialogOpen, setIsDialogOpen] = useState(urlParams.get("new") === "true");
   const [selectedTemplate, setSelectedTemplate] = useState(null); // { type, template }
 
+  const prefilledClientId = urlParams.get("clientId") || "";
   const [formData, setFormData] = useState({
     name: "",
-    client_id: "",
+    client_id: prefilledClientId,
     description: "",
     status: "planning",
     start_date: "",
@@ -123,6 +124,10 @@ export default function Projects() {
     e.preventDefault();
 
     let clientId = formData.client_id;
+    if (!newClientMode && !clientId) {
+      alert("Please select a contact for this project.");
+      return;
+    }
     if (newClientMode) {
       if (!newClientFirstName.trim()) return;
       const fullName = [newClientFirstName, newClientLastName].filter(Boolean).join(" ").trim();
