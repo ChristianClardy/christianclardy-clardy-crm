@@ -260,7 +260,7 @@ export function AssigneeCell({ value, onChange, subcontractors, employees, onCre
                 {filteredSubs.map((s) => (
                   <button key={s.id} className="w-full text-left px-3 py-1.5 hover:bg-amber-50 transition-colors" onClick={() => { onChange(s.name); setOpen(false); }}>
                     <p className="text-xs font-medium text-slate-800">{s.name}</p>
-                    {s.trade_type && <p className="text-xs text-slate-400 capitalize">{s.trade_type.replace(/_/g, " ")}</p>}
+                    {s.trade && <p className="text-xs text-slate-400 capitalize">{s.trade}</p>}
                   </button>
                 ))}
               </>
@@ -274,18 +274,22 @@ export function AssigneeCell({ value, onChange, subcontractors, employees, onCre
                 disabled={creating}
                 onClick={async () => {
                   setCreating(true);
-                  const created = onCreateSubcontractor
-                    ? await onCreateSubcontractor(search.trim())
-                    : await base44.entities.Subcontractor.create({
-                        name: search.trim(),
-                        trade_type: "other",
-                        vendor_type: "Subcontractor",
-                        status: "active",
-                      });
-                  setCreatedSubcontractors((prev) => [created, ...prev]);
-                  onChange(created.name);
-                  setCreating(false);
-                  setOpen(false);
+                  try {
+                    const created = onCreateSubcontractor
+                      ? await onCreateSubcontractor(search.trim())
+                      : await base44.entities.Subcontractor.create({
+                          name: search.trim(),
+                          trade: "Other",
+                          status: "active",
+                        });
+                    setCreatedSubcontractors((prev) => [created, ...prev]);
+                    onChange(created.name);
+                    setOpen(false);
+                  } catch (err) {
+                    console.error("Failed to create subcontractor", err);
+                  } finally {
+                    setCreating(false);
+                  }
                 }}
               >
                 <Plus className="w-3.5 h-3.5" />
