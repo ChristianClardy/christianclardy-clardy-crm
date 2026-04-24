@@ -52,6 +52,7 @@ import AttachmentSection from "@/components/collaboration/AttachmentSection";
 import ProjectFiles from "@/components/projects/ProjectFiles";
 import CashFlowTracker from "@/components/cashflow/CashFlowTracker";
 import ProjectFinancials from "@/components/financials/ProjectFinancials";
+import ProjectAccounting from "@/components/accounting/ProjectAccounting";
 import PermitTracker from "@/components/projects/PermitTracker";
 import AITaskManager from "@/components/projects/AITaskManager";
 import AppointmentsPanel from "@/components/scheduling/AppointmentsPanel";
@@ -81,7 +82,7 @@ export default function ProjectDetail() {
   const [project, setProject] = useState(null);
   const [client, setClient] = useState(null);
   const [companies, setCompanies] = useState([]);
-  const [activeTab, setActiveTab] = useState(["overview", "timeline", "appointments", "permits", "sheet", "photos", "files", "collaboration", "cashflow", "financials"].includes(requestedTab) ? requestedTab : "overview");
+  const [activeTab, setActiveTab] = useState(["overview", "timeline", "appointments", "permits", "sheet", "photos", "files", "collaboration", "cashflow", "financials", "accounting"].includes(requestedTab) ? requestedTab : "overview");
   const [sheetRows, setSheetRows] = useState([]);
   const [aiSheetRows, setAiSheetRows] = useState(null); // rows pushed by AI to the sheet
   const [loading, setLoading] = useState(true);
@@ -339,6 +340,18 @@ export default function ProjectDetail() {
            <BarChart3 className="w-4 h-4" />
            Financials
          </button>
+         <button
+           onClick={() => setActiveTab("accounting")}
+           className={cn(
+             "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+             activeTab === "accounting"
+               ? "bg-white text-slate-900 shadow-sm"
+               : "text-slate-500 hover:text-slate-700"
+           )}
+         >
+           <DollarSign className="w-4 h-4" />
+           Accounting
+         </button>
         </div>
 
       {/* Timeline tab */}
@@ -412,6 +425,11 @@ export default function ProjectDetail() {
        {/* Financials tab */}
        {activeTab === "financials" && (
          <ProjectFinancials project={project} onUpdateProject={loadData} />
+       )}
+
+       {/* Accounting tab — AP, lien waivers, cash flow projection */}
+       {activeTab === "accounting" && (
+         <ProjectAccounting project={project} />
        )}
 
        {/* Cash Flow tab */}

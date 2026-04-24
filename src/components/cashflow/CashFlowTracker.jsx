@@ -37,6 +37,8 @@ const emptyForm = {
   paid_date: "",
   notes: "",
   linked_task_id: "",
+  retainage_percent: "10",
+  retainage_released: false,
 };
 
 export default function CashFlowTracker({ projectId, contractValue = 0, acculynxJobId = "", onProjectUpdated, project, client, company }) {
@@ -81,6 +83,8 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
         paid_date: draw.paid_date || "",
         notes: draw.notes || "",
         linked_task_id: draw.linked_task_id || "",
+        retainage_percent: draw.retainage_percent ?? "10",
+        retainage_released: draw.retainage_released ?? false,
       });
       setInputMode(draw.percent_of_contract ? "percent" : "amount");
     } else {
@@ -122,17 +126,24 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
     const prevStatus = editingDraw?.status;
     const newStatus = form.status;
 
+    const drawAmt = parseFloat(form.amount) || 0;
+    const retPct = parseFloat(form.retainage_percent) || 0;
+    const retHeld = form.retainage_released ? 0 : (drawAmt * retPct) / 100;
+
     const payload = {
       project_id: projectId,
       title: form.title,
       percent_of_contract: parseFloat(form.percent_of_contract) || 0,
-      amount: parseFloat(form.amount) || 0,
+      amount: drawAmt,
       status: newStatus,
       due_date: form.due_date || null,
       paid_date: form.paid_date || null,
       notes: form.notes,
       linked_task_id: form.linked_task_id || null,
       draw_number: editingDraw ? editingDraw.draw_number : (draws.length + 1),
+      retainage_percent: retPct,
+      retainage_held: retHeld,
+      retainage_released: form.retainage_released,
     };
 
     let savedDraw;
@@ -172,6 +183,8 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
   const totalAmount = draws.reduce((s, d) => s + (d.amount || 0), 0);
   const paidAmount = draws.filter(d => d.status === "paid").reduce((s, d) => s + (d.amount || 0), 0);
   const outstandingAmount = totalAmount - paidAmount;
+  const totalRetainageHeld = draws.reduce((s, d) => s + (d.retainage_released ? 0 : (d.retainage_held || 0)), 0);
+  const totalRetainageReleased = draws.reduce((s, d) => s + (d.retainage_released ? (d.retainage_held || 0) : 0), 0);
 
   const fmt = (n) => `$${(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
@@ -203,6 +216,11 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
         <div className="bg-amber-50 rounded-xl border border-amber-200 p-4">
           <p className="text-xs text-amber-600 mb-1">Outstanding</p>
           <p className="text-lg font-bold text-amber-700">{fmt(outstandingAmount)}</p>
+        </div>
+        <div className="bg-orange-50 rounded-xl border border-orange-200 p-4">
+          <p className="text-xs text-orange-600 mb-1">Retainage Withheld</p>
+          <p className="text-lg font-bold text-orange-700">{fmt(totalRetainageHeld)}</p>
+          {totalRetainageReleased > 0 && <p className="text-xs text-slate-400">{fmt(totalRetainageReleased)} released</p>}
         </div>
       </div>
 
@@ -258,6 +276,7 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
                   <th className="text-right px-4 py-3 text-slate-500 font-medium">% of Contract</th>
                   <th className="text-right px-4 py-3 text-slate-500 font-medium">Amount</th>
                   <th className="text-center px-4 py-3 text-slate-500 font-medium">Status</th>
+                  <th className="text-right px-4 py-3 text-slate-500 font-medium">Retainage</th>
                   <th className="text-left px-4 py-3 text-slate-500 font-medium">Due Date</th>
                   <th className="text-left px-4 py-3 text-slate-500 font-medium">Paid Date</th>
                   <th className="text-center px-4 py-3 text-slate-500 font-medium">Actions</th>
@@ -296,6 +315,13 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
                           <Icon className="w-3 h-3" />
                           {sc.label}
                         </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {draw.retainage_held > 0 ? (
+                          <span className={cn("text-xs font-medium", draw.retainage_released ? "text-emerald-600 line-through" : "text-orange-600")}>
+                            {fmt(draw.retainage_held)}
+                          </span>
+                        ) : <span className="text-slate-300 text-xs">—</span>}
                       </td>
                       <td className="px-4 py-3 text-slate-600 text-xs">{draw.due_date || "—"}</td>
                       <td className="px-4 py-3 text-slate-600 text-xs">{draw.paid_date || "—"}</td>
@@ -486,6 +512,39 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
                 <Label>Paid Date</Label>
                 <Input type="date" value={form.paid_date} onChange={e => setForm(f => ({ ...f, paid_date: e.target.value }))} className="mt-1.5" />
               </div>
+            </div>
+
+            <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 space-y-3">
+              <Label className="text-orange-800 font-semibold">Retainage</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs text-slate-600">Retainage %</Label>
+                  <Input
+                    type="number" min="0" max="100" step="0.5"
+                    value={form.retainage_percent}
+                    onChange={e => setForm(f => ({ ...f, retainage_percent: e.target.value }))}
+                    className="mt-1 bg-white border-orange-200"
+                    placeholder="10"
+                  />
+                </div>
+                <div className="flex flex-col justify-end">
+                  <div className="px-3 py-2 border border-orange-200 rounded-md bg-white text-sm font-medium text-orange-700">
+                    {form.amount && form.retainage_percent
+                      ? fmt((parseFloat(form.amount) || 0) * (parseFloat(form.retainage_percent) || 0) / 100)
+                      : "—"}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">Withheld amount</p>
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.retainage_released}
+                  onChange={e => setForm(f => ({ ...f, retainage_released: e.target.checked }))}
+                  className="rounded border-orange-300 text-orange-500"
+                />
+                Release retainage on this draw (final completion)
+              </label>
             </div>
 
             <div>
