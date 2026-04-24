@@ -77,6 +77,7 @@ const TABLE_OPTIONAL_FIELDS = {
   projects: new Set(['collected_to_date','remaining_balance']),
   draws: new Set(['retainage_percent','retainage_held','retainage_released','percent_of_contract','linked_task_id']),
   sub_invoices: new Set([]),
+  subcontractors: new Set(['trade_type','vendor_type']),
   company_profiles: new Set(['invoice_company_name','invoice_logo_url','invoice_header_title','invoice_accent_color','invoice_intro_text','invoice_footer_text','invoice_scope_label','color']),
   clients: new Set(['first_name','last_name','customer_number']),
 };
