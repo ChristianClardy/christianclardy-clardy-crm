@@ -326,7 +326,7 @@ export default function ProjectDetail() {
            )}
          >
            <TrendingUp className="w-4 h-4" />
-           Cash Flow
+           Billing
          </button>
          <button
            onClick={() => setActiveTab("financials")}
@@ -338,7 +338,7 @@ export default function ProjectDetail() {
            )}
          >
            <BarChart3 className="w-4 h-4" />
-           Financials
+           Job Cost
          </button>
          <button
            onClick={() => setActiveTab("accounting")}
@@ -350,7 +350,7 @@ export default function ProjectDetail() {
            )}
          >
            <DollarSign className="w-4 h-4" />
-           Accounting
+           AP & Cash
          </button>
         </div>
 
