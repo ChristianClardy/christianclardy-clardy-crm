@@ -72,6 +72,7 @@ export function Cell({ value, onChange, className, placeholder, type = "text", c
 
   return (
     <div
+      data-editable
       className={cn(
         "px-2 py-1 rounded text-sm min-h-[28px] flex items-center select-none",
         centerAlign && "justify-center",

@@ -93,9 +93,8 @@ function activateCell(cell) {
     return;
   }
 
-  const editableText = cell.querySelector("a, span, div");
+  const editableText = cell.querySelector("[data-editable], a, span, div");
   const target = editableText || cell;
-  target.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
   target.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
   setTimeout(() => {
