@@ -20,6 +20,9 @@ function normalizeUrl(val) {
 export function Cell({ value, onChange, className, placeholder, type = "text", centerAlign = false, editTrigger = null, editMode = "keep", onCommitNavigate }) {
   const [editing, setEditing] = useState(false);
   const [local, setLocal] = useState(value ?? "");
+  const divRef = useRef(null);
+  const activateRef = useRef(null);
+  activateRef.current = () => { setLocal(value ?? ""); setEditing(true); };
 
   useEffect(() => { setLocal(value ?? ""); }, [value]);
   useEffect(() => {
@@ -27,6 +30,14 @@ export function Cell({ value, onChange, className, placeholder, type = "text", c
     setLocal(editMode === "replace" ? "" : (value ?? ""));
     setEditing(true);
   }, [editTrigger]);
+
+  useEffect(() => {
+    const el = divRef.current;
+    if (!el) return;
+    const handler = () => activateRef.current?.();
+    el.addEventListener("activate-for-edit", handler);
+    return () => el.removeEventListener("activate-for-edit", handler);
+  }, []);
 
   const commit = () => {
     setEditing(false);
@@ -72,6 +83,7 @@ export function Cell({ value, onChange, className, placeholder, type = "text", c
 
   return (
     <div
+      ref={divRef}
       data-editable
       className={cn(
         "px-2 py-1 rounded text-sm min-h-[28px] flex items-center select-none",

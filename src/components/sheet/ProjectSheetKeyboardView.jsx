@@ -93,15 +93,22 @@ function activateCell(cell) {
     return;
   }
 
-  const editableText = cell.querySelector("[data-editable], a, span, div");
-  const target = editableText || cell;
-  target.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  // Fire the custom event that Cell's imperative listener handles directly.
+  const editable = cell.querySelector("[data-editable]");
+  if (editable) {
+    editable.dispatchEvent(new CustomEvent("activate-for-edit", { bubbles: false }));
+  } else {
+    // Fallback for non-Cell components (AssigneeCell, StatusCell, etc.)
+    const target = cell.querySelector("a, span, div") || cell;
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  }
 
+  // Fallback: once React re-renders the input, grab focus explicitly.
   setTimeout(() => {
     const focusable = cell.querySelector("input, textarea, select");
     focusable?.focus?.();
     focusable?.select?.();
-  }, 20);
+  }, 50);
 }
 
 const BUILTIN_COLUMN_LABELS = {
@@ -144,6 +151,7 @@ export default function ProjectSheetKeyboardView(props) {
   const undoStackRef = useRef([]);
   const applyingUndoRef = useRef(false);
   const dragFillCleanupRef = useRef(null);
+  const selectedRowIdRef = useRef(null);
   const [overrideRows, setOverrideRows] = useState(null);
   const [sheetInstanceKey, setSheetInstanceKey] = useState(0);
 
@@ -445,28 +453,56 @@ export default function ProjectSheetKeyboardView(props) {
 
     if (event.key !== "Enter" && event.key !== "Tab") return;
     if (!(event.target instanceof HTMLElement)) return;
-    if (!event.target.closest("tbody tr[data-row-id]")) return;
-    if (!event.target.matches("input, textarea, select")) return;
 
-    const row = event.target.closest('tr[data-row-id]');
-    const cell = event.target.closest("td");
     const container = containerRef.current;
-    if (!row || !cell || !container) return;
+    if (!container) return;
 
-    const rows = getTaskRows(container);
-    const rowIndex = rows.indexOf(row);
-    const cellIndex = getEditableCells(row).indexOf(cell);
-    if (rowIndex === -1 || cellIndex === -1) return;
+    // Two modes:
+    // 1. editing  – an input inside a task row is the event target
+    // 2. selected – the container itself has focus (row clicked but not editing)
+    const isEditing =
+      event.target.matches("input, textarea, select") &&
+      !!event.target.closest("tbody tr[data-row-id]");
+    const isContainerFocused = event.target === container;
 
-    event.preventDefault();
-    event.stopPropagation();
-    event.target.blur();
+    if (!isEditing && !isContainerFocused) return;
+
+    let row, cell, rows, rowIndex, cellIndex;
+
+    if (isEditing) {
+      row = event.target.closest("tr[data-row-id]");
+      cell = event.target.closest("td");
+      rows = getTaskRows(container);
+      rowIndex = rows.indexOf(row);
+      cellIndex = getEditableCells(row).indexOf(cell);
+      if (!row || !cell || rowIndex === -1 || cellIndex === -1) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      event.target.blur();
+    } else {
+      // Container focused — use the tracked selected row
+      rows = getTaskRows(container);
+      const selectedRow = selectedRowIdRef.current
+        ? rows.find((r) => r.getAttribute("data-row-id") === selectedRowIdRef.current)
+        : rows[rows.length - 1];
+      if (!selectedRow) return;
+
+      row = selectedRow;
+      rowIndex = rows.indexOf(row);
+      cellIndex = 0;
+      cell = getEditableCells(row)[0];
+
+      event.preventDefault();
+    }
 
     if (event.key === "Enter") {
-      const nextExistingRow = rows[rowIndex + 1];
-
-      if (nextExistingRow) {
-        const nextCell = getEditableCells(nextExistingRow)[cellIndex] || getEditableCells(nextExistingRow)[0];
+      // When editing a non-last row, Enter moves to the next row.
+      // When row is just selected (or at end), Enter always creates a new row below.
+      if (isEditing && rows[rowIndex + 1]) {
+        const nextCell =
+          getEditableCells(rows[rowIndex + 1])[cellIndex] ||
+          getEditableCells(rows[rowIndex + 1])[0];
         activateCell(nextCell);
         return;
       }
@@ -477,11 +513,16 @@ export default function ProjectSheetKeyboardView(props) {
       setTimeout(() => {
         const nextRows = getTaskRows(container);
         const nextRow = nextRows[rowIndex + 1];
-        const nextCell = nextRow ? (getEditableCells(nextRow)[cellIndex] || getEditableCells(nextRow)[0]) : null;
+        const nextCell = nextRow
+          ? getEditableCells(nextRow)[0]
+          : null;
         activateCell(nextCell);
-      }, 40);
+      }, 60);
       return;
     }
+
+    // Tab — only meaningful when editing
+    if (!isEditing) return;
 
     const step = event.shiftKey ? -1 : 1;
     let nextRowIndex = rowIndex;
@@ -513,8 +554,27 @@ export default function ProjectSheetKeyboardView(props) {
     };
   }, []);
 
+  const handleContainerMouseDown = (e) => {
+    const rowEl = e.target.closest?.("tbody tr[data-row-id]");
+    if (rowEl && !e.target.closest("input, textarea, select, button")) {
+      selectedRowIdRef.current = rowEl.getAttribute("data-row-id");
+      // Focus the container so subsequent key events reach handleKeyDownCapture.
+      // Use setTimeout to let the click finish first (avoids focus fights with inputs).
+      setTimeout(() => {
+        if (document.activeElement?.matches("input, textarea, select")) return;
+        containerRef.current?.focus();
+      }, 0);
+    }
+  };
+
   return (
-    <div ref={containerRef} onKeyDownCapture={handleKeyDownCapture}>
+    <div
+      ref={containerRef}
+      tabIndex={-1}
+      className="outline-none"
+      onMouseDown={handleContainerMouseDown}
+      onKeyDownCapture={handleKeyDownCapture}
+    >
       <ProjectSheetView
         key={sheetInstanceKey}
         {...props}
