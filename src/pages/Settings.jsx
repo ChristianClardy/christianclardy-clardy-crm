@@ -752,7 +752,7 @@ const ALL_TABS = [
   { key: "invite",      label: "Invite & Logins",     icon: UserPlus,       adminOnly: false },
   { key: "calendar",    label: "Calendar Feed",        icon: CalendarDays,   adminOnly: false },
   { key: "appearance",  label: "Appearance",           icon: Palette,        adminOnly: false },
-  { key: "docusign",    label: "DocuSign",             icon: FileSignature,  adminOnly: true  },
+  { key: "docusign",    label: "DocuSign",             icon: FileSignature,  adminOnly: false },
 ];
 
 export default function Settings() {
@@ -795,7 +795,7 @@ export default function Settings() {
       {activeTab === "invite"      && <InviteTab />}
       {activeTab === "calendar"    && <CalendarFeedTab />}
       {activeTab === "appearance"  && <AppearanceTab />}
-      {activeTab === "docusign"    && isAdmin && <DocuSignTab />}
+      {activeTab === "docusign"    && <DocuSignTab />}
     </div>
   );
 }
