@@ -5,7 +5,8 @@ import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
   ArrowLeft, Save, Download, Plus, Trash2, ChevronDown, ChevronRight,
-  Package, FileText, Loader2, Check, GripVertical, Eye, Mail, X
+  Package, FileText, Loader2, Check, GripVertical, Eye, Mail, X,
+  Lock, LockOpen, ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { jsPDF } from "jspdf";
 import { getSelectedCompanyScope } from "@/lib/companyScope";
+import { useAuth } from "@/lib/AuthContext";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -354,18 +356,18 @@ function DescriptionCell({ item, onChange, materials, onAddToLibrary }) {
 
 // ─── Line Item Row ────────────────────────────────────────────────────────────
 
-function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, marginPct = 40 }) {
+function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, marginPct = 40, locked = false }) {
   const { sell_per_unit, has_sell_override, has_margin_override, effective_margin, total_cost, total_sell } = itemTotals(item, marginPct);
   const hasCost = Number(item.cost_per_unit) > 0;
   const calcSell = sellFromCost(Number(item.cost_per_unit) || 0, marginPct);
 
   return (
-    <tr className="border-b border-slate-100 hover:bg-amber-50/20 group">
-      <td className="pl-3 pr-1 py-2 w-6 text-slate-300 cursor-grab"><GripVertical className="w-3.5 h-3.5" /></td>
+    <tr className={cn("border-b border-slate-100 group", locked ? "bg-slate-50/50" : "hover:bg-amber-50/20")}>
+      <td className="pl-3 pr-1 py-2 w-6 text-slate-300"><GripVertical className="w-3.5 h-3.5" /></td>
       <td className="px-2 py-1.5 min-w-[200px]">
         <DescriptionCell
           item={item}
-          onChange={onChange}
+          onChange={locked ? () => {} : onChange}
           materials={materials}
           onAddToLibrary={onAddToLibrary}
         />
@@ -374,7 +376,8 @@ function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, marg
         <select
           value={item.unit}
           onChange={e => onChange({ ...item, unit: e.target.value })}
-          className="w-full text-xs text-slate-600 bg-transparent border-b border-transparent focus:border-amber-400 outline-none py-0.5"
+          disabled={locked}
+          className="w-full text-xs text-slate-600 bg-transparent border-b border-transparent focus:border-amber-400 outline-none py-0.5 disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {UNITS.map(u => <option key={u}>{u}</option>)}
         </select>
@@ -385,7 +388,8 @@ function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, marg
           min="0"
           value={item.quantity}
           onChange={e => onChange({ ...item, quantity: e.target.value })}
-          className="w-full text-xs text-right text-slate-700 bg-transparent border-b border-transparent focus:border-amber-400 outline-none py-0.5"
+          disabled={locked}
+          className="w-full text-xs text-right text-slate-700 bg-transparent border-b border-transparent focus:border-amber-400 outline-none py-0.5 disabled:opacity-60 disabled:cursor-not-allowed"
         />
       </td>
       <td className="px-2 py-1.5 w-28">
@@ -397,8 +401,9 @@ function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, marg
             step="0.01"
             value={item.cost_per_unit}
             onChange={e => onChange({ ...item, cost_per_unit: e.target.value })}
+            disabled={locked}
             placeholder="0.00"
-            className="w-full pl-3 text-xs text-right text-slate-700 bg-transparent border-b border-transparent focus:border-amber-400 outline-none py-0.5 placeholder:text-slate-300"
+            className="w-full pl-3 text-xs text-right text-slate-700 bg-transparent border-b border-transparent focus:border-amber-400 outline-none py-0.5 placeholder:text-slate-300 disabled:opacity-60 disabled:cursor-not-allowed"
           />
         </div>
       </td>
@@ -410,7 +415,7 @@ function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, marg
             min="0"
             max="95"
             step="1"
-            disabled={has_sell_override}
+            disabled={has_sell_override || locked}
             value={item.margin_override ?? ""}
             onChange={e => {
               const v = e.target.value;
@@ -420,7 +425,7 @@ function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, marg
             title={has_sell_override ? "Sell price override active — clear sell override to use margin" : has_margin_override ? "Per-item margin override" : "Override margin % for this item"}
             className={cn(
               "w-full text-xs text-right bg-transparent border-b outline-none py-0.5 placeholder:text-slate-300",
-              has_sell_override
+              (has_sell_override || locked)
                 ? "border-transparent text-slate-300 cursor-not-allowed"
                 : has_margin_override
                   ? "border-amber-400 text-amber-700 font-semibold focus:border-amber-500"
@@ -463,21 +468,23 @@ function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, marg
         {hasCost ? fmt(total_sell) : <span className="text-slate-300">—</span>}
       </td>
       <td className="px-2 py-1.5 w-16 text-center">
-        <div className="flex items-center gap-1">
-          <button
-            title="Link to material library"
-            className="p-1 rounded hover:bg-slate-100 text-slate-300 hover:text-amber-500 transition-colors"
-            onClick={() => {/* placeholder for material library hook */}}
-          >
-            <Package className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => onDelete(item.id)}
-            className="p-1 rounded hover:bg-rose-100 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        {!locked && (
+          <div className="flex items-center gap-1">
+            <button
+              title="Link to material library"
+              className="p-1 rounded hover:bg-slate-100 text-slate-300 hover:text-amber-500 transition-colors"
+              onClick={() => {/* placeholder for material library hook */}}
+            >
+              <Package className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => onDelete(item.id)}
+              className="p-1 rounded hover:bg-rose-100 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
       </td>
     </tr>
   );
@@ -485,7 +492,7 @@ function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, marg
 
 // ─── Trade / Material Section ─────────────────────────────────────────────────
 
-function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onDeleteSection, materials, onAddToLibrary, sectionType = "trade", marginPct = 40, sectionMarginOverride, onSectionMarginChange }) {
+function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onDeleteSection, materials, onAddToLibrary, sectionType = "trade", marginPct = 40, sectionMarginOverride, onSectionMarginChange, locked = false }) {
   const [collapsed, setCollapsed] = useState(false);
   const effectiveSectionMargin = sectionMarginOverride != null ? Number(sectionMarginOverride) : marginPct;
   const tradeItems = items.filter(it => it.trade === trade);
@@ -513,7 +520,7 @@ function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onD
         </div>
         <div className="flex items-center gap-3">
           {/* Section-level margin override */}
-          {onSectionMarginChange && (
+          {onSectionMarginChange && !locked && (
             <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
               <span className="text-[10px] text-slate-400 uppercase tracking-wider">Margin</span>
               <div className="relative w-16">
@@ -546,7 +553,7 @@ function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onD
               <span>Sell: <strong className={isMaterial ? "text-sky-700" : "text-amber-700"}>{fmt(totalSell)}</strong></span>
             </div>
           )}
-          {isEmpty && (
+          {isEmpty && !locked && (
             <button
               onClick={() => onDeleteSection(trade, sectionType)}
               title="Delete section"
@@ -591,20 +598,23 @@ function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onD
                       materials={materials}
                       onAddToLibrary={onAddToLibrary}
                       marginPct={effectiveSectionMargin}
+                      locked={locked}
                     />
                   ))
                 )}
               </tbody>
             </table>
           </div>
-          <div className="px-4 py-2 border-t border-slate-100">
-            <button
-              onClick={() => onAddItem(trade, sectionType)}
-              className={cn("flex items-center gap-1.5 text-xs font-medium", isMaterial ? "text-sky-600 hover:text-sky-700" : "text-amber-600 hover:text-amber-700")}
-            >
-              <Plus className="w-3.5 h-3.5" /> Add line item
-            </button>
-          </div>
+          {!locked && (
+            <div className="px-4 py-2 border-t border-slate-100">
+              <button
+                onClick={() => onAddItem(trade, sectionType)}
+                className={cn("flex items-center gap-1.5 text-xs font-medium", isMaterial ? "text-sky-600 hover:text-sky-700" : "text-amber-600 hover:text-amber-700")}
+              >
+                <Plus className="w-3.5 h-3.5" /> Add line item
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -1379,6 +1389,10 @@ export default function EstimateDetail() {
   const [saving, setSaving]             = useState(false);
   const [saved, setSaved]               = useState(false);
   const [saveError, setSaveError]       = useState("");
+  const [showLockDialog, setShowLockDialog]   = useState(false);
+  const [showUnlockDialog, setShowUnlockDialog] = useState(false);
+  const [unlockInput, setUnlockInput]   = useState("");
+  const { user } = useAuth();
 
   // Track the live ID — starts as existingId, updated after first create
   const currentIdRef = useRef(existingId);
@@ -1691,10 +1705,33 @@ export default function EstimateDetail() {
     }
   };
 
+  const isLocked = !!estimate.is_locked;
+
+  const handleLock = async () => {
+    const payload = {
+      is_locked: true,
+      locked_at: new Date().toISOString(),
+      locked_by: user?.email || user?.full_name || "user",
+    };
+    setEstimate(e => ({ ...e, ...payload }));
+    setShowLockDialog(false);
+    await base44.entities.Estimate.update(currentIdRef.current, payload).catch(console.error);
+  };
+
+  const handleUnlock = async () => {
+    if (unlockInput !== "UNLOCK") return;
+    const payload = { is_locked: false, locked_at: null, locked_by: null };
+    setEstimate(e => ({ ...e, ...payload }));
+    setShowUnlockDialog(false);
+    setUnlockInput("");
+    await base44.entities.Estimate.update(currentIdRef.current, payload).catch(console.error);
+  };
+
   // Auto-save: 4 seconds after the last change, if there is something to save.
   // Direct closure call — each effect render captures the latest handleSave.
   useEffect(() => {
     if (!estimate.title && items.length === 0) return; // nothing to save yet
+    if (isLocked) return; // never auto-save a locked estimate
     const timerId = setTimeout(() => handleSave(), 4000);
     return () => clearTimeout(timerId);
   // handleSave is intentionally excluded — it's recreated each render so
@@ -1746,8 +1783,74 @@ export default function EstimateDetail() {
         />
       )}
 
+      {/* Lock confirmation dialog */}
+      {showLockDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                <Lock className="w-5 h-5 text-emerald-600" />
+              </div>
+              <div>
+                <p className="font-bold text-slate-900">Lock This Estimate?</p>
+                <p className="text-sm text-slate-500">Mark as signed and agreed upon</p>
+              </div>
+            </div>
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800">
+              <p className="font-semibold mb-1">This action cannot easily be undone.</p>
+              <p className="text-xs">Once locked, all line items and pricing are frozen. The estimate becomes the contract of record. Only an admin can unlock it by typing <strong>UNLOCK</strong>.</p>
+            </div>
+            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+              <Button variant="outline" size="sm" onClick={() => setShowLockDialog(false)}>Cancel</Button>
+              <Button size="sm" onClick={handleLock} className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5">
+                <Lock className="w-4 h-4" /> Lock & Sign Off
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unlock confirmation dialog */}
+      {showUnlockDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center">
+                <ShieldAlert className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <p className="font-bold text-slate-900">Admin Unlock</p>
+                <p className="text-sm text-slate-500">This estimate is signed and locked</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-600">Unlocking allows the estimate to be edited again. This should only be done if the contract needs to be revised and a new sign-off is obtained.</p>
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5 block">Type UNLOCK to confirm</label>
+              <input
+                autoFocus
+                value={unlockInput}
+                onChange={e => setUnlockInput(e.target.value)}
+                placeholder="UNLOCK"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono outline-none focus:ring-2 focus:ring-rose-300"
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+              <Button variant="outline" size="sm" onClick={() => { setShowUnlockDialog(false); setUnlockInput(""); }}>Cancel</Button>
+              <Button
+                size="sm"
+                onClick={handleUnlock}
+                disabled={unlockInput !== "UNLOCK"}
+                className="bg-rose-600 hover:bg-rose-700 text-white gap-1.5 disabled:opacity-40"
+              >
+                <LockOpen className="w-4 h-4" /> Unlock Estimate
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Sticky top bar */}
-      <div className="sticky top-0 z-30 bg-white border-b border-slate-200 shadow-sm">
+      <div className={cn("sticky top-0 z-30 border-b shadow-sm", isLocked ? "bg-emerald-50 border-emerald-200" : "bg-white border-slate-200")}>
         <div className="max-w-screen-xl mx-auto px-4 lg:px-6 py-3 flex items-center gap-3">
           <button onClick={() => navigate(createPageUrl("Estimates"))} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500">
             <ArrowLeft className="w-4 h-4" />
@@ -1756,24 +1859,32 @@ export default function EstimateDetail() {
           <input
             type="text"
             value={estimate.title}
-            onChange={e => { setEstimate(est => ({ ...est, title: e.target.value })); setSaved(false); }}
+            onChange={e => { if (isLocked) return; setEstimate(est => ({ ...est, title: e.target.value })); setSaved(false); }}
             placeholder="Estimate title…"
-            className="flex-1 min-w-0 text-lg font-bold text-slate-900 bg-transparent outline-none border-b border-transparent focus:border-amber-400 py-0.5"
+            readOnly={isLocked}
+            className={cn("flex-1 min-w-0 text-lg font-bold text-slate-900 bg-transparent outline-none border-b border-transparent py-0.5", !isLocked && "focus:border-amber-400")}
           />
+
+          {isLocked && (
+            <span className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 whitespace-nowrap border border-emerald-200">
+              <Lock className="w-3.5 h-3.5" /> Signed & Locked
+              {estimate.locked_by && <span className="text-emerald-500 font-normal">· {estimate.locked_by}</span>}
+            </span>
+          )}
 
           <select
             value={estimate.client_id}
+            disabled={isLocked}
             onChange={e => {
               const selected = clients.find(c => c.id === e.target.value);
               setEstimate(est => ({ ...est, client_id: e.target.value }));
-              // Snap company to the one assigned to this client (if any)
               if (selected?.company && allCompanyProfiles.length) {
                 const match = allCompanyProfiles.find(p => p.name === selected.company);
                 if (match) setSelectedCompanyId(match.id);
               }
               setSaved(false);
             }}
-            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-amber-300 min-w-[180px]"
+            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-amber-300 min-w-[180px] disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <option value="">— Select client —</option>
             {[...clients].sort((a, b) => (a.name || "").localeCompare(b.name || "")).map(c => (
@@ -1784,8 +1895,9 @@ export default function EstimateDetail() {
           {allCompanyProfiles.length > 1 && (
             <select
               value={selectedCompanyId || ""}
+              disabled={isLocked}
               onChange={e => { setSelectedCompanyId(e.target.value); setSaved(false); }}
-              className="text-sm border border-amber-300 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-amber-300 min-w-[160px]"
+              className="text-sm border border-amber-300 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-amber-300 min-w-[160px] disabled:opacity-60"
             >
               {allCompanyProfiles.map(cp => (
                 <option key={cp.id} value={cp.id}>{cp.invoice_company_name || cp.name}</option>
@@ -1795,8 +1907,9 @@ export default function EstimateDetail() {
 
           <select
             value={estimate.status}
+            disabled={isLocked}
             onChange={e => { setEstimate(est => ({ ...est, status: e.target.value })); setSaved(false); }}
-            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-amber-300"
+            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-amber-300 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <option value="draft">Draft</option>
             <option value="sent">Sent</option>
@@ -1808,8 +1921,9 @@ export default function EstimateDetail() {
           <input
             type="date"
             value={estimate.issue_date}
-            onChange={e => { setEstimate(est => ({ ...est, issue_date: e.target.value })); setSaved(false); }}
-            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-amber-300"
+            readOnly={isLocked}
+            onChange={e => { if (isLocked) return; setEstimate(est => ({ ...est, issue_date: e.target.value })); setSaved(false); }}
+            className={cn("text-sm border border-slate-200 rounded-lg px-3 py-1.5 outline-none", !isLocked && "focus:ring-2 focus:ring-amber-300", isLocked && "opacity-60 cursor-not-allowed")}
           />
 
           <Button
@@ -1828,21 +1942,55 @@ export default function EstimateDetail() {
             <Download className="w-4 h-4" /> PDF
           </Button>
 
-          <Button
-            size="sm"
-            onClick={handleSave}
-            disabled={saving}
-            className={cn("gap-1.5 min-w-[100px]", saved ? "bg-emerald-500 hover:bg-emerald-600" : "bg-gradient-to-r from-amber-500 to-orange-500")}
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-            {saving ? "Saving…" : saved ? "Saved" : "Save"}
-          </Button>
+          {isLocked ? (
+            <Button
+              size="sm"
+              onClick={() => setShowUnlockDialog(true)}
+              variant="outline"
+              className="gap-1.5 border-rose-200 text-rose-600 hover:bg-rose-50 whitespace-nowrap"
+            >
+              <LockOpen className="w-4 h-4" /> Unlock
+            </Button>
+          ) : (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowLockDialog(true)}
+                className="gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50 whitespace-nowrap"
+                title="Lock estimate once signed by client"
+              >
+                <Lock className="w-4 h-4" /> Lock
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSave}
+                disabled={saving}
+                className={cn("gap-1.5 min-w-[100px]", saved ? "bg-emerald-500 hover:bg-emerald-600" : "bg-gradient-to-r from-amber-500 to-orange-500")}
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+                {saving ? "Saving…" : saved ? "Saved" : "Save"}
+              </Button>
+            </>
+          )}
         </div>
       </div>
       {saveError && (
         <div className="max-w-screen-xl mx-auto px-4 lg:px-6 mt-2">
           <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-lg px-4 py-2">
             {saveError}
+          </div>
+        </div>
+      )}
+      {isLocked && (
+        <div className="max-w-screen-xl mx-auto px-4 lg:px-6 mt-3">
+          <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-800">
+            <Lock className="w-4 h-4 text-emerald-600 shrink-0" />
+            <div>
+              <span className="font-semibold">This estimate is locked.</span>
+              {" "}Line items and pricing are frozen as the signed contract of record.
+              {estimate.locked_at && <span className="text-emerald-600 ml-2 text-xs">Locked {new Date(estimate.locked_at).toLocaleDateString()}{estimate.locked_by ? ` by ${estimate.locked_by}` : ""}.</span>}
+            </div>
           </div>
         </div>
       )}
@@ -1875,6 +2023,7 @@ export default function EstimateDetail() {
               marginPct={effectiveMarginPct}
               sectionMarginOverride={sectionMargins[sec] ?? null}
               onSectionMarginChange={handleSectionMarginChange}
+              locked={isLocked}
             />
           ))}
 
@@ -1894,6 +2043,7 @@ export default function EstimateDetail() {
               marginPct={effectiveMarginPct}
               sectionMarginOverride={sectionMargins[trade] ?? null}
               onSectionMarginChange={handleSectionMarginChange}
+              locked={isLocked}
             />
           ))}
 
@@ -1913,29 +2063,32 @@ export default function EstimateDetail() {
               marginPct={effectiveMarginPct}
               sectionMarginOverride={sectionMargins[trade] ?? null}
               onSectionMarginChange={handleSectionMarginChange}
+              locked={isLocked}
             />
           ))}
 
-          <div className="flex flex-wrap gap-2 pt-2">
-            <button
-              onClick={() => setShowAddTrade(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-slate-300 text-sm text-slate-500 hover:border-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-all"
-            >
-              <Plus className="w-4 h-4" /> Add Trade Section
-            </button>
-            <button
-              onClick={() => setShowAddMaterial(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-sky-200 text-sm text-slate-500 hover:border-sky-400 hover:text-sky-600 hover:bg-sky-50 transition-all"
-            >
-              <Plus className="w-4 h-4" /> Add Material Section
-            </button>
-            <button
-              onClick={() => setShowPicker(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-slate-300 text-sm text-slate-500 hover:border-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-all"
-            >
-              <FileText className="w-4 h-4" /> Load Template
-            </button>
-          </div>
+          {!isLocked && (
+            <div className="flex flex-wrap gap-2 pt-2">
+              <button
+                onClick={() => setShowAddTrade(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-slate-300 text-sm text-slate-500 hover:border-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-all"
+              >
+                <Plus className="w-4 h-4" /> Add Trade Section
+              </button>
+              <button
+                onClick={() => setShowAddMaterial(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-sky-200 text-sm text-slate-500 hover:border-sky-400 hover:text-sky-600 hover:bg-sky-50 transition-all"
+              >
+                <Plus className="w-4 h-4" /> Add Material Section
+              </button>
+              <button
+                onClick={() => setShowPicker(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-slate-300 text-sm text-slate-500 hover:border-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-all"
+              >
+                <FileText className="w-4 h-4" /> Load Template
+              </button>
+            </div>
+          )}
 
           {/* Notes */}
           <div className="bg-white rounded-xl border border-slate-200 p-4 mt-4">

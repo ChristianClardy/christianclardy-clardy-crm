@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Plus, Search, FileText, Send, CheckCircle, XCircle, Clock, RefreshCw, Copy, Trash2, User } from "lucide-react";
+import { Plus, Search, FileText, Send, CheckCircle, XCircle, Clock, RefreshCw, Copy, Trash2, User, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -195,7 +195,12 @@ export default function Estimates() {
                         onClick={() => navigate(createPageUrl(`EstimateDetail?id=${est.id}`))}
                       >
                         <td className="px-5 py-3 font-mono text-xs text-slate-500">{est.estimate_number || "—"}</td>
-                        <td className="px-5 py-3 font-medium text-slate-900">{est.title}</td>
+                        <td className="px-5 py-3 font-medium text-slate-900">
+                          <div className="flex items-center gap-2">
+                            {est.is_locked && <Lock className="w-3.5 h-3.5 text-emerald-600 shrink-0" title="Signed & Locked" />}
+                            {est.title}
+                          </div>
+                        </td>
                         <td className="px-5 py-3 text-slate-500">{est.issue_date || "—"}</td>
                         <td className="px-5 py-3 text-right font-semibold text-slate-900">
                           ${Number(est.total || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
