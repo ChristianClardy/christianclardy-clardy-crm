@@ -1392,6 +1392,8 @@ export default function EstimateDetail() {
   const [showLockDialog, setShowLockDialog]   = useState(false);
   const [showUnlockDialog, setShowUnlockDialog] = useState(false);
   const [unlockInput, setUnlockInput]   = useState("");
+  const [amendments, setAmendments]     = useState([]);
+  const [parentEstimate, setParentEstimate] = useState(null);
   const { user } = useAuth();
 
   // Track the live ID — starts as existingId, updated after first create
@@ -1488,13 +1490,19 @@ export default function EstimateDetail() {
       const est = await base44.entities.Estimate.get(existingId);
       if (!est) return;
       setEstimate({
-        title:           est.title      || "",
-        client_id:       est.client_id  || "",
-        status:          est.status     || "draft",
-        issue_date:      est.issue_date || new Date().toISOString().slice(0, 10),
-        notes:           est.notes      || "",
-        margin_override: est.margin_override ?? null,
-        total_override:  est.total_override  ?? null,
+        title:            est.title      || "",
+        client_id:        est.client_id  || "",
+        status:           est.status     || "draft",
+        issue_date:       est.issue_date || new Date().toISOString().slice(0, 10),
+        notes:            est.notes      || "",
+        margin_override:  est.margin_override ?? null,
+        total_override:   est.total_override  ?? null,
+        is_locked:        est.is_locked  || false,
+        locked_at:        est.locked_at  || null,
+        locked_by:        est.locked_by  || null,
+        estimate_number:  est.estimate_number || null,
+        amendment_of:     est.amendment_of    || null,
+        amendment_number: est.amendment_number || null,
       });
       if (est.section_margins && typeof est.section_margins === "object") {
         setSectionMargins(est.section_margins);
@@ -1727,6 +1735,46 @@ export default function EstimateDetail() {
     await base44.entities.Estimate.update(currentIdRef.current, payload).catch(console.error);
   };
 
+  // Load amendments and parent when estimate is ready
+  useEffect(() => {
+    if (!existingId) return;
+    (async () => {
+      // Load amendments to this estimate
+      const all = await base44.entities.Estimate.list("-created_date").catch(() => []);
+      setAmendments(all.filter(e => e.amendment_of === existingId));
+    })();
+  }, [existingId]);
+
+  useEffect(() => {
+    if (!estimate.amendment_of) return;
+    base44.entities.Estimate.get(estimate.amendment_of).then(setParentEstimate).catch(() => {});
+  }, [estimate.amendment_of]);
+
+  const handleCreateAmendment = async () => {
+    if (!currentIdRef.current) return;
+    const amendNum = amendments.length + 1;
+    const baseTitle = estimate.amendment_of
+      ? (parentEstimate?.title || estimate.title)
+      : estimate.title;
+    const rootId = estimate.amendment_of || currentIdRef.current;
+    const created = await base44.entities.Estimate.create({
+      title:            `Amendment #${amendNum} — ${baseTitle}`,
+      client_id:        estimate.client_id  || null,
+      project_id:       estimate.project_id || null,
+      status:           "draft",
+      issue_date:       new Date().toISOString().slice(0, 10),
+      line_items:       items,
+      section_margins:  sectionMargins,
+      total:            estimate.total,
+      margin_percent:   estimate.margin_percent,
+      amendment_of:     rootId,
+      amendment_number: amendNum,
+      estimate_number:  `${estimate.estimate_number || estimate.amendment_of?.slice(0, 6)}-AMD${amendNum}`,
+    });
+    setAmendments(prev => [...prev, created]);
+    navigate(createPageUrl(`EstimateDetail?id=${created.id}`));
+  };
+
   // Auto-save: 4 seconds after the last change, if there is something to save.
   // Direct closure call — each effect render captures the latest handleSave.
   useEffect(() => {
@@ -1750,6 +1798,7 @@ export default function EstimateDetail() {
     : null) || company;
   const effectiveMarginPct = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
   const { totalCost, totalSell } = summaryTotals(items, effectiveMarginPct, sectionMargins);
+  const effectiveTotal = estimate.total_override != null ? Number(estimate.total_override) : totalSell;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -1943,14 +1992,25 @@ export default function EstimateDetail() {
           </Button>
 
           {isLocked ? (
-            <Button
-              size="sm"
-              onClick={() => setShowUnlockDialog(true)}
-              variant="outline"
-              className="gap-1.5 border-rose-200 text-rose-600 hover:bg-rose-50 whitespace-nowrap"
-            >
-              <LockOpen className="w-4 h-4" /> Unlock
-            </Button>
+            <>
+              <Button
+                size="sm"
+                onClick={handleCreateAmendment}
+                variant="outline"
+                className="gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-50 whitespace-nowrap"
+                title="Create an amendment to this signed estimate"
+              >
+                <Plus className="w-4 h-4" /> Amendment
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => setShowUnlockDialog(true)}
+                variant="outline"
+                className="gap-1.5 border-rose-200 text-rose-600 hover:bg-rose-50 whitespace-nowrap"
+              >
+                <LockOpen className="w-4 h-4" /> Unlock
+              </Button>
+            </>
           ) : (
             <>
               <Button
@@ -2103,9 +2163,81 @@ export default function EstimateDetail() {
           </div>
         </div>
 
-        {/* Right — summary */}
-        <div className="w-64 flex-shrink-0">
+        {/* Right — summary + paper trail */}
+        <div className="w-64 flex-shrink-0 space-y-4">
           <SummaryPanel items={items} estimate={estimate} onEstimateChange={handleEstimateChange} sectionMargins={sectionMargins} onClearAllOverrides={handleClearAllOverrides} />
+
+          {/* Paper Trail */}
+          {(parentEstimate || amendments.length > 0 || estimate.amendment_of) && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Paper Trail</p>
+              </div>
+              <div className="p-3 space-y-1.5">
+                {/* Original estimate link */}
+                {parentEstimate ? (
+                  <button
+                    onClick={() => navigate(createPageUrl(`EstimateDetail?id=${parentEstimate.id}`))}
+                    className="w-full text-left flex items-start gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 group"
+                  >
+                    <div className={cn("mt-0.5 w-2 h-2 rounded-full shrink-0", parentEstimate.is_locked ? "bg-emerald-500" : "bg-amber-400")} />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-slate-700 group-hover:text-amber-700 truncate">{parentEstimate.estimate_number || "Original"}</p>
+                      <p className="text-xs text-slate-400 truncate">{parentEstimate.title}</p>
+                      <p className="text-xs text-slate-400">${Number(parentEstimate.total || 0).toLocaleString()}</p>
+                    </div>
+                    {parentEstimate.is_locked && <Lock className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" />}
+                  </button>
+                ) : (
+                  <div className="flex items-start gap-2 px-2 py-2 rounded-lg bg-emerald-50 border border-emerald-100">
+                    <div className={cn("mt-0.5 w-2 h-2 rounded-full shrink-0", isLocked ? "bg-emerald-500" : "bg-amber-400")} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-slate-700 truncate">{estimate.estimate_number || "This estimate"} <span className="font-normal text-slate-400">(current)</span></p>
+                      <p className="text-xs text-slate-400">${Number(effectiveTotal || 0).toLocaleString()}</p>
+                    </div>
+                    {isLocked && <Lock className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" />}
+                  </div>
+                )}
+
+                {/* Amendments */}
+                {amendments.map((amd, i) => (
+                  <button
+                    key={amd.id}
+                    onClick={() => navigate(createPageUrl(`EstimateDetail?id=${amd.id}`))}
+                    className={cn(
+                      "w-full text-left flex items-start gap-2 px-2 py-2 rounded-lg ml-3 group",
+                      amd.id === existingId ? "bg-amber-50 border border-amber-100" : "hover:bg-slate-50"
+                    )}
+                  >
+                    <div className={cn("mt-0.5 w-2 h-2 rounded-full shrink-0", amd.is_locked ? "bg-emerald-500" : "bg-amber-400")} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-slate-700 group-hover:text-amber-700 truncate">
+                        AMD #{amd.amendment_number || i + 1}
+                        {amd.id === existingId && <span className="font-normal text-slate-400 ml-1">(current)</span>}
+                      </p>
+                      <p className="text-xs text-slate-400 truncate">{amd.title}</p>
+                      <p className="text-xs text-slate-400">${Number(amd.total || 0).toLocaleString()}</p>
+                    </div>
+                    {amd.is_locked && <Lock className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" />}
+                  </button>
+                ))}
+
+                {/* Current estimate when viewing an amendment */}
+                {parentEstimate && (
+                  <div className="flex items-start gap-2 px-2 py-2 rounded-lg bg-amber-50 border border-amber-100 ml-3">
+                    <div className={cn("mt-0.5 w-2 h-2 rounded-full shrink-0", isLocked ? "bg-emerald-500" : "bg-amber-400")} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-slate-700 truncate">
+                        AMD #{estimate.amendment_number} <span className="font-normal text-slate-400">(current)</span>
+                      </p>
+                      <p className="text-xs text-slate-400">${Number(effectiveTotal || 0).toLocaleString()}</p>
+                    </div>
+                    {isLocked && <Lock className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" />}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

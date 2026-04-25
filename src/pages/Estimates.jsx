@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Plus, Search, FileText, Send, CheckCircle, XCircle, Clock, RefreshCw, Copy, Trash2, User, Lock } from "lucide-react";
+import { Plus, Search, FileText, Send, CheckCircle, XCircle, Clock, RefreshCw, Copy, Trash2, User, Lock, GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -95,21 +95,26 @@ export default function Estimates() {
     e.estimate_number?.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Group by client, unassigned last
+  // Separate amendments from root estimates
+  const rootEstimates = filtered.filter(e => !e.amendment_of);
+  const amendmentMap = filtered
+    .filter(e => e.amendment_of)
+    .reduce((acc, e) => {
+      (acc[e.amendment_of] = acc[e.amendment_of] || []).push(e);
+      return acc;
+    }, {});
+
+  // Group root estimates by client, unassigned last
   const groups = [];
   const seen = new Set();
-  // Collect ordered client IDs preserving sort order
-  for (const est of filtered) {
+  for (const est of rootEstimates) {
     const key = est.client_id || "__none__";
-    if (!seen.has(key)) {
-      seen.add(key);
-      groups.push(key);
-    }
+    if (!seen.has(key)) { seen.add(key); groups.push(key); }
   }
   const grouped = groups.map(key => ({
     clientId: key === "__none__" ? null : key,
     clientName: key === "__none__" ? "Unassigned" : (clientMap[key]?.name || "Unknown"),
-    estimates: filtered.filter(e => (e.client_id || "__none__") === key),
+    estimates: rootEstimates.filter(e => (e.client_id || "__none__") === key),
   }));
 
   if (loading) return (
@@ -185,13 +190,14 @@ export default function Estimates() {
                   </tr>
                 </thead>
                 <tbody>
-                  {groupEsts.map(est => {
+                  {groupEsts.flatMap(est => {
                     const st = STATUS_STYLES[est.status] || STATUS_STYLES.draft;
                     const Icon = st.icon;
-                    return (
+                    const amds = (amendmentMap[est.id] || []).sort((a, b) => (a.amendment_number || 0) - (b.amendment_number || 0));
+                    const rows = [
                       <tr
                         key={est.id}
-                        className="border-b border-slate-100 last:border-0 hover:bg-amber-50/40 cursor-pointer transition-colors"
+                        className="border-b border-slate-100 hover:bg-amber-50/40 cursor-pointer transition-colors"
                         onClick={() => navigate(createPageUrl(`EstimateDetail?id=${est.id}`))}
                       >
                         <td className="px-5 py-3 font-mono text-xs text-slate-500">{est.estimate_number || "—"}</td>
@@ -199,6 +205,9 @@ export default function Estimates() {
                           <div className="flex items-center gap-2">
                             {est.is_locked && <Lock className="w-3.5 h-3.5 text-emerald-600 shrink-0" title="Signed & Locked" />}
                             {est.title}
+                            {amds.length > 0 && (
+                              <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">{amds.length} amd</span>
+                            )}
                           </div>
                         </td>
                         <td className="px-5 py-3 text-slate-500">{est.issue_date || "—"}</td>
@@ -212,24 +221,56 @@ export default function Estimates() {
                         </td>
                         <td className="px-5 py-3 text-center">
                           <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={(e) => handleDuplicate(e, est)}
-                              title="Duplicate estimate"
-                              className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors"
-                            >
+                            <button onClick={(e) => handleDuplicate(e, est)} title="Duplicate" className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors">
                               <Copy className="w-3.5 h-3.5" />
                             </button>
-                            <button
-                              onClick={(e) => handleDelete(e, est)}
-                              title="Delete estimate"
-                              className="p-1.5 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
-                            >
+                            <button onClick={(e) => handleDelete(e, est)} title="Delete" className="p-1.5 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors">
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </td>
-                      </tr>
-                    );
+                      </tr>,
+                      ...amds.map(amd => {
+                        const ast = STATUS_STYLES[amd.status] || STATUS_STYLES.draft;
+                        const AIcon = ast.icon;
+                        return (
+                          <tr
+                            key={amd.id}
+                            className="border-b border-slate-100 hover:bg-amber-50/40 cursor-pointer transition-colors bg-amber-50/20"
+                            onClick={() => navigate(createPageUrl(`EstimateDetail?id=${amd.id}`))}
+                          >
+                            <td className="pl-10 pr-5 py-2.5 font-mono text-xs text-amber-600">
+                              <div className="flex items-center gap-1.5">
+                                <GitBranch className="w-3 h-3 text-amber-400" />
+                                {amd.estimate_number || `AMD-${amd.amendment_number}`}
+                              </div>
+                            </td>
+                            <td className="px-5 py-2.5 text-sm text-slate-700">
+                              <div className="flex items-center gap-2">
+                                {amd.is_locked && <Lock className="w-3 h-3 text-emerald-600 shrink-0" />}
+                                <span className="text-xs font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded mr-1">AMD #{amd.amendment_number}</span>
+                                {amd.title}
+                              </div>
+                            </td>
+                            <td className="px-5 py-2.5 text-xs text-slate-400">{amd.issue_date || "—"}</td>
+                            <td className="px-5 py-2.5 text-right text-sm font-semibold text-slate-700">
+                              ${Number(amd.total || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-5 py-2.5 text-center">
+                              <span className={cn("inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full", ast.className)}>
+                                <AIcon className="w-3 h-3" /> {ast.label}
+                              </span>
+                            </td>
+                            <td className="px-5 py-2.5 text-center">
+                              <button onClick={(e) => handleDelete(e, amd)} title="Delete" className="p-1.5 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      }),
+                    ];
+                    return rows;
                   })}
                 </tbody>
               </table>
