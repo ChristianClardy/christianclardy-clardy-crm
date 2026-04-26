@@ -81,6 +81,7 @@ export default function ProjectDetail() {
 
   const [project, setProject] = useState(null);
   const [client, setClient] = useState(null);
+  const [clients, setClients] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [activeTab, setActiveTab] = useState(["overview", "timeline", "appointments", "permits", "sheet", "photos", "files", "collaboration", "cashflow", "financials", "accounting"].includes(requestedTab) ? requestedTab : "overview");
   const [sheetRows, setSheetRows] = useState([]);
@@ -93,11 +94,17 @@ export default function ProjectDetail() {
   useEffect(() => {
     if (projectId) loadData();
     loadCompanies();
+    loadClients();
   }, [projectId]);
 
   const loadCompanies = async () => {
     const data = await base44.entities.CompanyProfile.list("name", 200);
     setCompanies(data.filter((company) => company.is_active !== false));
+  };
+
+  const loadClients = async () => {
+    const data = await base44.entities.Client.list("name", 500);
+    setClients(data || []);
   };
 
   const loadData = async () => {
@@ -182,30 +189,29 @@ export default function ProjectDetail() {
           </Link>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl lg:text-3xl font-bold text-slate-900 tracking-tight">
-              {project.name}
+              {client?.name || project.name}
             </h1>
             <Badge className={cn("font-medium", status.class)}>{status.label}</Badge>
           </div>
-          {(client || project.company_id) && (
-            <div className="mt-2 flex flex-wrap items-center gap-3">
-              {client && (
-                <>
-                  <Link
-                    to={createPageUrl(`ClientDetail?id=${client.id}`)}
-                    className="text-amber-600 hover:text-amber-700 font-medium"
-                  >
-                    {client.name}
-                  </Link>
-                  <ClientWorkflowControl client={client} onUpdated={loadData} />
-                </>
-              )}
-              {project.company_id && (
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                  {companies.find((company) => company.id === project.company_id)?.name || "Company"}
-                </span>
-              )}
-            </div>
-          )}
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            {project.name && project.name !== client?.name && (
+              <span className="text-slate-500 text-sm">{project.name}</span>
+            )}
+            {client && (
+              <Link
+                to={createPageUrl(`ClientDetail?id=${client.id}`)}
+                className="text-amber-600 hover:text-amber-700 text-sm font-medium"
+              >
+                View Client
+              </Link>
+            )}
+            {client && <ClientWorkflowControl client={client} onUpdated={loadData} />}
+            {project.company_id && (
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                {companies.find((company) => company.id === project.company_id)?.name || "Company"}
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setIsEditDialogOpen(true)}>
@@ -556,10 +562,35 @@ export default function ProjectDetail() {
           </DialogHeader>
           <form onSubmit={handleUpdateProject} className="space-y-4">
             <div>
-              <Label>Project Name</Label>
+              <Label>Client *</Label>
+              <Select
+                value={formData.client_id || "__none__"}
+                onValueChange={(v) => {
+                  const selected = clients.find(c => c.id === v);
+                  setFormData(f => ({
+                    ...f,
+                    client_id: v === "__none__" ? "" : v,
+                    name: selected ? selected.name : f.name,
+                  }));
+                }}
+              >
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue placeholder="Select client from CRM" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No client</SelectItem>
+                  {clients.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Project Name / Description</Label>
               <Input
                 value={formData.name || ""}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="e.g. Kitchen Addition, Patio Cover"
                 className="mt-1.5"
               />
             </div>

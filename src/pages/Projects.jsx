@@ -343,6 +343,7 @@ export default function Projects() {
                     setFormData(f => ({
                       ...f,
                       client_id: value,
+                      name: client?.name || f.name,
                       description: f.description || client?.notes || "",
                       address: f.address || client?.address || "",
                     }));
