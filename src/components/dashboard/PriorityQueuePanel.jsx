@@ -64,6 +64,7 @@ export default function PriorityQueuePanel() {
       due_date: newTask.due_date || null,
       priority: newTask.priority,
       completed: false,
+      created_by: user?.email || "",
     });
     setNewTask(emptyTask);
     await loadItems();
