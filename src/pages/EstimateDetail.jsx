@@ -361,8 +361,9 @@ function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, marg
   const hasCost = Number(item.cost_per_unit) > 0;
   const calcSell = sellFromCost(Number(item.cost_per_unit) || 0, marginPct);
 
+  const isMaterialItem = item.sectionType === "material";
   return (
-    <tr className={cn("border-b border-slate-100 group", locked ? "bg-slate-50/50" : "hover:bg-amber-50/20")}>
+    <tr className={cn("border-b border-slate-100 group", locked ? "bg-slate-50/50" : isMaterialItem ? "bg-sky-50/40 hover:bg-sky-50" : "hover:bg-amber-50/20")}>
       <td className="pl-3 pr-1 py-2 w-6 text-slate-300"><GripVertical className="w-3.5 h-3.5" /></td>
       <td className="px-2 py-1.5 min-w-[200px]">
         <DescriptionCell
@@ -606,13 +607,21 @@ function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onD
             </table>
           </div>
           {!locked && (
-            <div className="px-4 py-2 border-t border-slate-100">
+            <div className="px-4 py-2 border-t border-slate-100 flex items-center gap-4">
               <button
                 onClick={() => onAddItem(trade, sectionType)}
                 className={cn("flex items-center gap-1.5 text-xs font-medium", isMaterial ? "text-sky-600 hover:text-sky-700" : "text-amber-600 hover:text-amber-700")}
               >
-                <Plus className="w-3.5 h-3.5" /> Add line item
+                <Plus className="w-3.5 h-3.5" /> Add {isMaterial ? "item" : "labor item"}
               </button>
+              {!isMaterial && (
+                <button
+                  onClick={() => onAddItem(trade, "material")}
+                  className="flex items-center gap-1.5 text-xs font-medium text-sky-600 hover:text-sky-700"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add material item
+                </button>
+              )}
             </div>
           )}
         </>
@@ -865,8 +874,16 @@ async function exportPDF(estimate, clientName, items, company, marginPct = 40, s
     return yy + 8;
   };
 
-  // Group by trade
-  const trades = [...new Set(items.map(i => i.trade))];
+  // Group by normalized trade (combines "Masonry" + "Masonry Materials" → "Masonry")
+  const normKey = t => (t || "").replace(/\s+materials?$/i, "").trim().toLowerCase();
+  const tradeGroupMap = {};
+  for (const item of items) {
+    const key = normKey(item.trade);
+    if (!tradeGroupMap[key]) tradeGroupMap[key] = { display: (item.sectionType !== "material") ? item.trade : item.trade.replace(/\s+materials?$/i, "").trim(), items: [] };
+    if (item.sectionType !== "material") tradeGroupMap[key].display = item.trade; // prefer labor name
+    tradeGroupMap[key].items.push(item);
+  }
+  const tradeGroups = Object.values(tradeGroupMap).filter(g => g.items.length > 0);
   const rawTotals = summaryTotals(items, marginPct, sectionMargins);
   // Honor total_override if set
   const hasOverride = estimate.total_override != null && estimate.total_override !== "";
@@ -877,8 +894,8 @@ async function exportPDF(estimate, clientName, items, company, marginPct = 40, s
 
   y += 20;
 
-  for (const trade of trades) {
-    const tradeItems = items.filter(i => i.trade === trade);
+  for (const group of tradeGroups) {
+    const { display: trade, items: tradeItems } = group;
     if (!tradeItems.length) continue;
 
     if (y > 680) { doc.addPage(); y = 50; }
@@ -1040,7 +1057,15 @@ function ClientEstimateModal({ estimate, client, items, company, onClose, sectio
   const previewMarginPct = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
   const { totalCost: previewCost, totalSell: previewCalcTotal } = summaryTotals(items, previewMarginPct, sectionMargins);
   const totalSell = estimate.total_override != null ? Number(estimate.total_override) : previewCalcTotal;
-  const trades = [...new Set(items.map(i => i.trade).filter(Boolean))];
+  const normKeyPreview = t => (t || "").replace(/\s+materials?$/i, "").trim().toLowerCase();
+  const previewGroupMap = {};
+  for (const item of items) {
+    const key = normKeyPreview(item.trade);
+    if (!previewGroupMap[key]) previewGroupMap[key] = { display: item.trade.replace(/\s+materials?$/i, "").trim(), items: [] };
+    if (item.sectionType !== "material") previewGroupMap[key].display = item.trade;
+    previewGroupMap[key].items.push(item);
+  }
+  const trades = Object.values(previewGroupMap).filter(g => g.items.length > 0);
   const companyName = company?.invoice_company_name || company?.name || "Clardy.io";
   const accentHex = company?.invoice_accent_color || company?.color || "#b5965a";
 
@@ -1170,8 +1195,7 @@ function ClientEstimateModal({ estimate, client, items, company, onClose, sectio
           {/* Line items */}
           <div className="px-8 py-6 space-y-5">
             {opts.showTradeHeaders ? (
-              trades.map(trade => {
-                const tradeItems = items.filter(i => i.trade === trade);
+              trades.map(({ display: trade, items: tradeItems }) => {
                 const tradeSell = tradeItems.reduce((s, it) => s + itemTotals(it, previewMarginPct).total_sell, 0);
                 return (
                   <div key={trade} className="rounded overflow-hidden border border-slate-200">

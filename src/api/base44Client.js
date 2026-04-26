@@ -74,7 +74,7 @@ const TABLE_OPTIONAL_FIELDS = {
   estimates: new Set(['section_margins','is_locked','locked_at','locked_by','amendment_of','amendment_number']),
   leads: new Set(['property_address']),
   payments: new Set(['acculynx_job_id','acculynx_payment_id','payment_id','source','collected_to_date','remaining_balance']),
-  projects: new Set(['collected_to_date','remaining_balance']),
+  projects: new Set(['collected_to_date','remaining_balance','linked_estimate_ids']),
   draws: new Set(['retainage_percent','retainage_held','retainage_released','percent_of_contract','linked_task_id']),
   sub_invoices: new Set([]),
   todo_items: new Set(['created_by','assigned_to','notes']),
