@@ -56,13 +56,11 @@ function EstimatePickerDialog({ open, onClose, clientId, alreadyLinkedIds, onLin
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !clientId) return;
     setLoading(true);
     base44.entities.Estimate.list("-created_date", 500).then(all => {
-      // Show estimates for this client (or all if no client), excluding already linked
       const filtered = all.filter(e =>
-        !alreadyLinkedIds.includes(e.id) &&
-        (!clientId || e.client_id === clientId)
+        e.client_id === clientId && !alreadyLinkedIds.includes(e.id)
       );
       setEstimates(filtered);
       setLoading(false);
@@ -83,44 +81,49 @@ function EstimatePickerDialog({ open, onClose, clientId, alreadyLinkedIds, onLin
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
-          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-            <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-            <input autoFocus value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search by title or number…"
-              className="text-sm bg-transparent outline-none w-full text-slate-700 placeholder:text-slate-400" />
-          </div>
-          {loading ? (
-            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-amber-500" /></div>
-          ) : shown.length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-6 italic">
-              {clientId ? "No unlinked estimates found for this client." : "No estimates found."}
-            </p>
-          ) : (
-            <div className="max-h-80 overflow-y-auto space-y-1 border border-slate-100 rounded-xl p-1">
-              {shown.map(e => (
-                <button key={e.id} onClick={() => { onLink(e); onClose(); }}
-                  className="w-full text-left px-3 py-3 rounded-lg hover:bg-amber-50 transition-colors group">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-slate-400">{e.estimate_number || "—"}</span>
-                        {e.is_locked && <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-1.5 rounded-full">Signed</span>}
-                        {e.amendment_of && <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 px-1.5 rounded-full">AMD</span>}
-                      </div>
-                      <p className="text-sm font-medium text-slate-800 mt-0.5 truncate">{e.title}</p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-bold text-slate-900">{fmt(e.total || 0)}</p>
-                      <p className="text-xs text-slate-400 capitalize">{e.status || "draft"}</p>
-                    </div>
-                  </div>
-                </button>
-              ))}
+          {!clientId ? (
+            <div className="py-8 text-center">
+              <p className="text-sm font-medium text-slate-600">No client assigned to this project.</p>
+              <p className="text-xs text-slate-400 mt-1">Assign a client on the Overview tab first, then link estimates here.</p>
             </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <input autoFocus value={search} onChange={e => setSearch(e.target.value)}
+                  placeholder="Search by title or number…"
+                  className="text-sm bg-transparent outline-none w-full text-slate-700 placeholder:text-slate-400" />
+              </div>
+              {loading ? (
+                <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-amber-500" /></div>
+              ) : shown.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-6 italic">No unlinked estimates found for this client.</p>
+              ) : (
+                <div className="max-h-80 overflow-y-auto space-y-1 border border-slate-100 rounded-xl p-1">
+                  {shown.map(e => (
+                    <button key={e.id} onClick={() => { onLink(e); onClose(); }}
+                      className="w-full text-left px-3 py-3 rounded-lg hover:bg-amber-50 transition-colors group">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs text-slate-400">{e.estimate_number || "—"}</span>
+                            {e.is_locked && <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-1.5 rounded-full">Signed</span>}
+                            {e.amendment_of && <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 px-1.5 rounded-full">AMD</span>}
+                          </div>
+                          <p className="text-sm font-medium text-slate-800 mt-0.5 truncate">{e.title}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-sm font-bold text-slate-900">{fmt(e.total || 0)}</p>
+                          <p className="text-xs text-slate-400 capitalize">{e.status || "draft"}</p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-slate-400 italic">Showing estimates for this project's client only.</p>
+            </>
           )}
-          <p className="text-xs text-slate-400 italic">
-            {clientId ? "Showing estimates for this project's client." : "Showing all estimates — assign a client to the project to filter."}
-          </p>
         </div>
       </DialogContent>
     </Dialog>
