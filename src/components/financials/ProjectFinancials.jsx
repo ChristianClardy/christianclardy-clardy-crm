@@ -182,6 +182,14 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
     { id: newId(), name: "Subcontractors", collapsed: false, items: [{ id: newId(), description: "Sub Work",      budgeted: 0, actual: 0, notes: "" }] },
   ]);
 
+  // Safely parse linked_estimate_ids — Supabase JSONB may return string or array
+  const getLinkedIds = () => {
+    const raw = project.linked_estimate_ids;
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    try { const p = JSON.parse(raw); return Array.isArray(p) ? p : []; } catch { return []; }
+  };
+
   // Load job cost breakdown + linked estimates
   useEffect(() => {
     (async () => {
@@ -193,8 +201,8 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
       }
 
       // Load linked estimates
-      const linkedIds = project.linked_estimate_ids;
-      if (linkedIds?.length) {
+      const linkedIds = getLinkedIds();
+      if (linkedIds.length) {
         const ests = await Promise.all(
           linkedIds.map(id => base44.entities.Estimate.get(id).catch(() => null))
         );
@@ -223,7 +231,7 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
 
   // ── Estimate link/unlink ────────────────────────────────────────────────────
   const handleLinkEstimate = async (est) => {
-    const current = project.linked_estimate_ids || [];
+    const current = getLinkedIds();
     if (current.includes(est.id)) return;
     const next = [...current, est.id];
     await base44.entities.Project.update(project.id, { linked_estimate_ids: next });
@@ -243,7 +251,7 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
 
   const handleUnlinkEstimate = async (estId) => {
     if (!confirm("Unlink this estimate? The budget sections it created will remain but can be manually deleted.")) return;
-    const next = (project.linked_estimate_ids || []).filter(id => id !== estId);
+    const next = getLinkedIds().filter(id => id !== estId);
     await base44.entities.Project.update(project.id, { linked_estimate_ids: next });
     setLinkedEstimates(prev => prev.filter(e => e.id !== estId));
     if (onUpdateProject) onUpdateProject();
