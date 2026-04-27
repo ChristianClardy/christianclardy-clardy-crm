@@ -103,6 +103,22 @@ function parseSortField(sortField) {
   return { field, ascending: !desc };
 }
 
+// ─── Multi-tenant org scope ──────────────────────────────────────────────────
+// Set by TenantContext after login. Auto-injected into every write and
+// every read query so data is always scoped to the active organization.
+let _currentOrgId = null;
+
+// Tables that are global / shared across all orgs (public lookup data).
+const GLOBAL_TABLES = new Set(['municipalities']);
+
+export function setCurrentOrgId(id) {
+  _currentOrgId = id;
+}
+
+export function getCurrentOrgId() {
+  return _currentOrgId;
+}
+
 // ─── Centralised error reporter ──────────────────────────────────────────────
 // Shows a visible alert so save failures are never silent.
 function reportError(op, table, error) {
@@ -115,10 +131,13 @@ function reportError(op, table, error) {
 
 // ─── Entity factory ──────────────────────────────────────────────────────────
 function createEntity(tableName) {
+  const needsOrg = () => _currentOrgId && !GLOBAL_TABLES.has(tableName);
+
   return {
     /** list(sortField?, limit?) → array */
     async list(sortField, limit) {
       let query = supabase.from(tableName).select('*');
+      if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
       const sort = parseSortField(sortField);
       if (sort) query = query.order(sort.field, { ascending: sort.ascending });
       if (limit) query = query.limit(limit);
@@ -130,6 +149,7 @@ function createEntity(tableName) {
     /** filter(filterObj, sortField?, limit?) → array */
     async filter(filterObj, sortField, limit) {
       let query = supabase.from(tableName).select('*');
+      if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
       for (const [key, val] of Object.entries(filterObj ?? {})) {
         if (val !== undefined && val !== null && val !== "null" && val !== "undefined") query = query.eq(key, val);
       }
@@ -143,7 +163,9 @@ function createEntity(tableName) {
 
     /** get(id) → single record */
     async get(id) {
-      const { data, error } = await supabase.from(tableName).select('*').eq('id', id).single();
+      let query = supabase.from(tableName).select('*').eq('id', id);
+      if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
+      const { data, error } = await query.single();
       if (error) reportError('get', tableName, error);
       return mapDates(data);
     },
@@ -151,6 +173,10 @@ function createEntity(tableName) {
     /** create(record) → created record */
     async create(record) {
       const payload = cleanForWrite(record);
+      // Auto-inject organization_id so every new record is scoped to the active org
+      if (needsOrg() && !payload.organization_id) {
+        payload.organization_id = _currentOrgId;
+      }
       let { data, error } = await supabase.from(tableName).insert(payload).select().single();
       // If a column is missing from the schema cache, strip optional fields and retry once
       if (error?.message?.includes('schema cache') || error?.message?.includes('Could not find')) {
@@ -167,13 +193,17 @@ function createEntity(tableName) {
     /** update(id, record) → updated record */
     async update(id, record) {
       const payload = cleanForWrite(record);
-      let { data, error } = await supabase.from(tableName).update(payload).eq('id', id).select().single();
+      let query = supabase.from(tableName).update(payload).eq('id', id);
+      if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
+      let { data, error } = await query.select().single();
       // If a column is missing from the schema cache, strip optional fields and retry once
       if (error?.message?.includes('schema cache') || error?.message?.includes('Could not find')) {
         const optional = TABLE_OPTIONAL_FIELDS[tableName];
         if (optional) {
           const stripped = Object.fromEntries(Object.entries(payload).filter(([k]) => !optional.has(k)));
-          ({ data, error } = await supabase.from(tableName).update(stripped).eq('id', id).select().single());
+          let q2 = supabase.from(tableName).update(stripped).eq('id', id);
+          if (needsOrg()) q2 = q2.eq('organization_id', _currentOrgId);
+          ({ data, error } = await q2.select().single());
         }
       }
       if (error) reportError('update', tableName, error);
@@ -182,7 +212,9 @@ function createEntity(tableName) {
 
     /** delete(id) */
     async delete(id) {
-      const { error } = await supabase.from(tableName).delete().eq('id', id);
+      let query = supabase.from(tableName).delete().eq('id', id);
+      if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
+      const { error } = await query;
       if (error) reportError('delete', tableName, error);
     },
 
@@ -191,9 +223,10 @@ function createEntity(tableName) {
      * Fires callback whenever any row in the table changes.
      */
     subscribe(callback) {
+      const filter = needsOrg() ? `organization_id=eq.${_currentOrgId}` : undefined;
       const channel = supabase
         .channel(`${tableName}-${Date.now()}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: tableName }, callback)
+        .on('postgres_changes', { event: '*', schema: 'public', table: tableName, filter }, callback)
         .subscribe();
       return () => supabase.removeChannel(channel);
     },

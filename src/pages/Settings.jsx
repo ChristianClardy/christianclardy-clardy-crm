@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import CompanyManager from "@/components/company/CompanyManager";
+import OrganizationTab from "@/components/settings/OrganizationTab";
 import { useAuth } from "@/lib/AuthContext";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -746,13 +747,14 @@ function DocuSignTab() {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 const ALL_TABS = [
-  { key: "team",        label: "Team Members",        icon: Users,          adminOnly: false },
-  { key: "permissions", label: "Roles & Permissions", icon: ShieldCheck,    adminOnly: false },
-  { key: "companies",   label: "Companies",           icon: Building2,      adminOnly: false },
-  { key: "invite",      label: "Invite & Logins",     icon: UserPlus,       adminOnly: false },
-  { key: "calendar",    label: "Calendar Feed",        icon: CalendarDays,   adminOnly: false },
-  { key: "appearance",  label: "Appearance",           icon: Palette,        adminOnly: false },
-  { key: "docusign",    label: "DocuSign",             icon: FileSignature,  adminOnly: false },
+  { key: "organization", label: "Organization",        icon: Building2,      adminOnly: false },
+  { key: "team",         label: "Team Members",        icon: Users,          adminOnly: false },
+  { key: "permissions",  label: "Roles & Permissions", icon: ShieldCheck,    adminOnly: false },
+  { key: "companies",    label: "Companies",           icon: Building2,      adminOnly: false },
+  { key: "invite",       label: "Invite & Logins",     icon: UserPlus,       adminOnly: false },
+  { key: "calendar",     label: "Calendar Feed",       icon: CalendarDays,   adminOnly: false },
+  { key: "appearance",   label: "Appearance",          icon: Palette,        adminOnly: false },
+  { key: "docusign",     label: "DocuSign",            icon: FileSignature,  adminOnly: false },
 ];
 
 export default function Settings() {
@@ -789,6 +791,7 @@ export default function Settings() {
         </div>
       </div>
 
+      {activeTab === "organization" && <OrganizationTab />}
       {activeTab === "team"        && <TeamTab />}
       {activeTab === "permissions" && <PermissionsTab />}
       {activeTab === "companies"   && <CompanyManager />}

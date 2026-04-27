@@ -5,7 +5,9 @@ import { pagesConfig } from './pages.config'
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
+import { TenantProvider, useTenant } from '@/lib/TenantContext';
 import { ThemeProvider } from '@/lib/ThemeContext';
+import Onboarding from './pages/Onboarding';
 import Login from './pages/Login';
 import SetPassword from './pages/SetPassword';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
@@ -42,13 +44,14 @@ const isInviteFlow = (() => {
 })();
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, authError, navigateToLogin } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated } = useAuth();
+  const { loading: tenantLoading, needsOnboarding } = useTenant();
 
   // Invite link clicked — show password-set screen regardless of auth state
   if (isInviteFlow) return <SetPassword />;
 
-  // Show loading spinner while checking app public settings or auth
-  if (isLoadingPublicSettings || isLoadingAuth) {
+  // Show loading spinner while checking auth or tenant
+  if (isLoadingPublicSettings || isLoadingAuth || (isAuthenticated && tenantLoading)) {
     return (
       <div className="fixed inset-0 flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
@@ -56,14 +59,19 @@ const AuthenticatedApp = () => {
     );
   }
 
-  // Not authenticated — send to login (but allow the login page itself to render)
-  if (!isLoadingAuth && !isAuthenticated) {
+  // Not authenticated — send to login
+  if (!isAuthenticated) {
     return (
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="*" element={<Login />} />
       </Routes>
     );
+  }
+
+  // Authenticated but no org — show onboarding
+  if (needsOnboarding) {
+    return <Onboarding />;
   }
 
   // Render the main app
@@ -110,12 +118,14 @@ function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <QueryClientProvider client={queryClientInstance}>
-          <Router>
-            <AuthenticatedApp />
-          </Router>
-          <Toaster />
-        </QueryClientProvider>
+        <TenantProvider>
+          <QueryClientProvider client={queryClientInstance}>
+            <Router>
+              <AuthenticatedApp />
+            </Router>
+            <Toaster />
+          </QueryClientProvider>
+        </TenantProvider>
       </AuthProvider>
     </ThemeProvider>
   )

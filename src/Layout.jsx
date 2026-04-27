@@ -25,11 +25,13 @@ import NotificationBell from "@/components/notifications/NotificationBell";
 import CompanyScopeSwitcher from "@/components/company/CompanyScopeSwitcher";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/ThemeContext";
+import { useTenant } from "@/lib/TenantContext";
 
 export default function Layout({ children, currentPageName }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
+  const { organization } = useTenant();
 
   const navigation = [
     { name: "Dashboard", href: createPageUrl("Dashboard"), icon: LayoutDashboard },
@@ -62,7 +64,12 @@ export default function Layout({ children, currentPageName }) {
             <div className="w-8 h-8 rounded flex items-center justify-center" style={{ backgroundColor: "var(--brand-gold)" }}>
               <HardHat className="w-4 h-4" style={{ color: "#f5f0eb" }} />
             </div>
-            <span className="text-sm font-bold" style={{ color: "#f5f0eb", letterSpacing: "0.08em" }}>Clardy.io</span>
+            <div>
+              <span className="text-sm font-bold" style={{ color: "#f5f0eb", letterSpacing: "0.08em" }}>Clardy.io</span>
+              {organization?.name && (
+                <p className="text-xs truncate max-w-[140px]" style={{ color: "var(--brand-gold-light)", opacity: 0.75 }}>{organization.name}</p>
+              )}
+            </div>
           </div>
         </div>
         {showCloseButton && (
