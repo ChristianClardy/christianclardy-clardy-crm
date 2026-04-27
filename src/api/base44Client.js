@@ -78,6 +78,7 @@ const TABLE_OPTIONAL_FIELDS = {
   draws: new Set(['retainage_percent','retainage_held','retainage_released','percent_of_contract','linked_task_id']),
   sub_invoices: new Set([]),
   todo_items: new Set(['created_by','assigned_to','notes']),
+  materials: new Set(['is_active','item_code','manufacturer','manufacturer_part','cost_method','standard_cost','average_cost','last_purchase_price','waste_factor','lead_time_days','min_stock_qty','reorder_point','on_hand_qty','location_code','weight_per_unit','weight_unit','vendor_prices','gl_account','tax_category','taxable','cost_center','price_history']),
   subcontractors: new Set(['trade_type','vendor_type']),
   company_profiles: new Set(['invoice_company_name','invoice_logo_url','invoice_header_title','invoice_accent_color','invoice_intro_text','invoice_footer_text','invoice_scope_label','color']),
   clients: new Set(['first_name','last_name','customer_number']),
