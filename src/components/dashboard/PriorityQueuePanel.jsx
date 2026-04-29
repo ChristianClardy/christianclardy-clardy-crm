@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ const emptyTask = {
 
 export default function PriorityQueuePanel() {
   const [user, setUser] = useState(null);
+  const userRef = useRef(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -35,21 +36,27 @@ export default function PriorityQueuePanel() {
   const [emailSubject, setEmailSubject] = useState("Priority Queue");
 
   const loadItems = async () => {
-    const me = await base44.auth.me();
     const todoItems = await base44.entities.TodoItem.list("-updated_date", 200);
-    const visibleItems = (todoItems || []).filter((item) => item.created_by === me.email || item.assigned_to === me.full_name);
-
-    setUser(me);
-    setRecipientEmail(me.email || "");
-    setEmailSubject(`${me.full_name || "My"} Priority Queue`);
+    const me = userRef.current;
+    const visibleItems = me
+      ? (todoItems || []).filter((item) => item.created_by === me.email || item.assigned_to === me.full_name || item.assigned_to === me.email)
+      : (todoItems || []);
     setItems(visibleItems);
     setLoading(false);
   };
 
   useEffect(() => {
-    loadItems();
-    const unsubscribe = base44.entities.TodoItem.subscribe(() => loadItems());
-    return () => unsubscribe();
+    let unsubscribe;
+    (async () => {
+      const me = await base44.auth.me();
+      userRef.current = me;
+      setUser(me);
+      setRecipientEmail(me.email || "");
+      setEmailSubject(`${me.full_name || "My"} Priority Queue`);
+      await loadItems();
+      unsubscribe = base44.entities.TodoItem.subscribe(() => loadItems());
+    })();
+    return () => unsubscribe?.();
   }, []);
 
   const activeCount = useMemo(() => items.filter((item) => !item.completed).length, [items]);
@@ -72,6 +79,7 @@ export default function PriorityQueuePanel() {
 
   const handleToggleComplete = async (item) => {
     await base44.entities.TodoItem.update(item.id, { completed: !item.completed });
+    await loadItems();
   };
 
   const handleEditItem = (item) => {
@@ -94,6 +102,7 @@ export default function PriorityQueuePanel() {
     });
     setEditingItem(null);
     setEditForm({ ...emptyTask, notes: "" });
+    await loadItems();
   };
 
   const handlePrint = () => {
