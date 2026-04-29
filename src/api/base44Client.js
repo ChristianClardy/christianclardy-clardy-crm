@@ -131,11 +131,18 @@ function reportError(op, table, error) {
 
 // ─── Entity factory ──────────────────────────────────────────────────────────
 function createEntity(tableName) {
-  const needsOrg = () => _currentOrgId && !GLOBAL_TABLES.has(tableName);
+  const isGlobal = GLOBAL_TABLES.has(tableName);
+  const needsOrg = () => _currentOrgId && !isGlobal;
+  const warnIfNoOrg = (op) => {
+    if (!isGlobal && !_currentOrgId) {
+      console.warn(`[base44] ${op} on "${tableName}" called before org loaded — results may be unscoped`);
+    }
+  };
 
   return {
     /** list(sortField?, limit?) → array */
     async list(sortField, limit) {
+      warnIfNoOrg('list');
       let query = supabase.from(tableName).select('*');
       if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
       const sort = parseSortField(sortField);
@@ -148,6 +155,7 @@ function createEntity(tableName) {
 
     /** filter(filterObj, sortField?, limit?) → array */
     async filter(filterObj, sortField, limit) {
+      warnIfNoOrg('filter');
       let query = supabase.from(tableName).select('*');
       if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
       for (const [key, val] of Object.entries(filterObj ?? {})) {

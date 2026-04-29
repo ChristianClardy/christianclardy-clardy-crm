@@ -37,6 +37,7 @@ module.exports = async function handler(req, res) {
     const entity_type = Array.isArray(fields.entity_type) ? fields.entity_type[0] : fields.entity_type;
     const entity_id = Array.isArray(fields.entity_id) ? fields.entity_id[0] : fields.entity_id;
     const uploaded_by = Array.isArray(fields.uploaded_by) ? fields.uploaded_by[0] : (fields.uploaded_by || 'Team Member');
+    const organization_id = Array.isArray(fields.organization_id) ? fields.organization_id[0] : fields.organization_id;
 
     const ext = file.originalFilename?.split('.').pop() || 'bin';
     const path = `uploads/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
@@ -86,6 +87,7 @@ module.exports = async function handler(req, res) {
             file_type: mimeType,
             file_size: file.size,
             uploaded_by,
+            ...(organization_id ? { organization_id } : {}),
           }),
         }
       );
