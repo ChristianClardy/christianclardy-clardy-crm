@@ -666,7 +666,7 @@ function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {}, 
     onClearAllOverrides?.();
   };
   const setTotal = (val) => {
-    onEstimateChange({ total_override: val === "" ? null : Number(val), margin_override: null });
+    onEstimateChange({ total_override: val === "" ? null : Number(val) });
   };
   const resetOverride = () => onEstimateChange({ total_override: null, margin_override: null });
 
