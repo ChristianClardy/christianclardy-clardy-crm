@@ -656,19 +656,30 @@ function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {}, 
   // Final display total (manual override wins)
   const hasOverride   = estimate.total_override != null && estimate.total_override !== "";
   const displayTotal  = hasOverride ? Number(estimate.total_override) : calcTotal;
-  const displayProfit = calcTotal - totalCost;
-  const displayMargin = calcTotal > 0 ? (displayProfit / calcTotal) * 100 : 0;
+  const displayProfit = displayTotal - totalCost;
+  const displayMargin = displayTotal > 0 ? (displayProfit / displayTotal) * 100 : 0;
+  const overrideScale = (hasOverride && calcTotal > 0) ? displayTotal / calcTotal : 1;
 
   const setMargin = (val) => {
     const clamped = Math.min(95, Math.max(0, Number(val) || 0));
     onEstimateChange({ margin_override: clamped, total_override: null });
-    // Global margin overrides everything — clear all per-item and per-section overrides
     onClearAllOverrides?.();
   };
   const setTotal = (val) => {
     onEstimateChange({ total_override: val === "" ? null : Number(val) });
   };
   const resetOverride = () => onEstimateChange({ total_override: null, margin_override: null });
+
+  // On Enter: bake the override into a global margin so sections distribute proportionally
+  const applyOverride = () => {
+    if (!hasOverride || totalCost <= 0) return;
+    const overrideVal = Number(estimate.total_override);
+    if (!overrideVal || overrideVal <= 0) return;
+    const effectiveMargin = ((overrideVal - totalCost) / overrideVal) * 100;
+    const clamped = parseFloat(Math.min(95, Math.max(0, effectiveMargin)).toFixed(4));
+    onEstimateChange({ margin_override: clamped, total_override: null });
+    onClearAllOverrides?.();
+  };
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4 sticky top-6">
@@ -729,6 +740,7 @@ function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {}, 
             step={100}
             value={hasOverride ? estimate.total_override : ""}
             onChange={e => setTotal(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") applyOverride(); }}
             placeholder={calcTotal > 0 ? Number(calcTotal.toFixed(2)).toString() : "0.00"}
             className={cn(
               "w-full pl-6 pr-2 py-1.5 text-sm font-semibold border rounded-lg outline-none focus:ring-2 focus:ring-amber-300",
@@ -737,7 +749,7 @@ function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {}, 
           />
         </div>
         {hasOverride && (
-          <p className="text-[10px] text-amber-600">Manual override active</p>
+          <p className="text-[10px] text-amber-600">Override active — press Enter to distribute across sections</p>
         )}
       </div>
 
@@ -745,7 +757,7 @@ function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {}, 
       <div className="border-t border-slate-100 pt-3 space-y-2">
         <div className="flex justify-between text-sm">
           <span className="text-slate-500">Total Sell</span>
-          <span className="font-bold text-slate-900">{fmt(calcTotal)}</span>
+          <span className="font-bold text-slate-900">{fmt(displayTotal)}</span>
         </div>
         <div className="flex justify-between text-sm">
           <span className="text-slate-500">Gross Profit</span>
@@ -766,7 +778,10 @@ function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {}, 
           const t = itemTotals(it, marginPct);
           bySection[it.trade] = (bySection[it.trade] || 0) + t.total_sell;
         }
-        const sorted = Object.entries(bySection).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
+        // Scale section values proportionally when override is active
+        const sorted = Object.entries(bySection)
+          .map(([sec, sell]) => [sec, sell * overrideScale])
+          .filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
         if (!sorted.length) return null;
         return (
           <div className="border-t border-slate-100 pt-3 space-y-1.5">
