@@ -14,11 +14,14 @@ module.exports = async function handler(req, res) {
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-    const { entity_type, entity_id, filename, url, file_type, file_size, uploaded_by, category } = body;
+    const { entity_type, entity_id, filename, url, file_type, file_size, uploaded_by, category, organization_id } = body;
 
     if (!entity_type || !entity_id || !url) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
+
+    const record = { entity_type, entity_id, filename, url, file_type, file_size, uploaded_by, category };
+    if (organization_id) record.organization_id = organization_id;
 
     const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/attachments`, {
       method: 'POST',
@@ -28,7 +31,7 @@ module.exports = async function handler(req, res) {
         'Content-Type': 'application/json',
         Prefer: 'return=representation',
       },
-      body: JSON.stringify({ entity_type, entity_id, filename, url, file_type, file_size, uploaded_by, category }),
+      body: JSON.stringify(record),
     });
 
     if (!insertRes.ok) {

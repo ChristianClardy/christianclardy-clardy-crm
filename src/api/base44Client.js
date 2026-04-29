@@ -313,6 +313,7 @@ const integrations = {
             file_size: file.size,
             uploaded_by: uploaded_by || 'Team Member',
             category: category || 'other',
+            organization_id: _currentOrgId || undefined,
           }),
         });
         if (!res.ok) {
