@@ -670,15 +670,9 @@ function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {}, 
   };
   const resetOverride = () => onEstimateChange({ total_override: null, margin_override: null });
 
-  // On Enter: bake the override into a global margin so sections distribute proportionally
-  const applyOverride = () => {
-    if (!hasOverride || totalCost <= 0) return;
-    const overrideVal = Number(estimate.total_override);
-    if (!overrideVal || overrideVal <= 0) return;
-    const effectiveMargin = ((overrideVal - totalCost) / overrideVal) * 100;
-    const clamped = parseFloat(Math.min(95, Math.max(0, effectiveMargin)).toFixed(4));
-    onEstimateChange({ margin_override: clamped, total_override: null });
-    onClearAllOverrides?.();
+  // On Enter: keep total_override as the exact amount — no margin conversion (avoids rounding)
+  const applyOverride = (inputEl) => {
+    inputEl?.blur();
   };
 
   return (
@@ -740,7 +734,7 @@ function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {}, 
             step={100}
             value={hasOverride ? estimate.total_override : ""}
             onChange={e => setTotal(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") applyOverride(); }}
+            onKeyDown={e => { if (e.key === "Enter") applyOverride(e.target); }}
             placeholder={calcTotal > 0 ? Number(calcTotal.toFixed(2)).toString() : "0.00"}
             className={cn(
               "w-full pl-6 pr-2 py-1.5 text-sm font-semibold border rounded-lg outline-none focus:ring-2 focus:ring-amber-300",
@@ -749,7 +743,7 @@ function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {}, 
           />
         </div>
         {hasOverride && (
-          <p className="text-[10px] text-amber-600">Override active — press Enter to distribute across sections</p>
+          <p className="text-[10px] text-amber-600">Final price override active — sections scale proportionally</p>
         )}
       </div>
 
