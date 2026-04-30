@@ -4,7 +4,7 @@ import { useTenant } from "@/lib/TenantContext";
 import { useAuth } from "@/lib/AuthContext";
 import {
   Building2, Save, Users, Mail, Trash2, Plus,
-  Copy, Check, Loader2, Shield, AlertTriangle,
+  Copy, Check, Loader2, AlertTriangle, Link,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +43,9 @@ export default function OrganizationTab() {
   const [inviteRole, setInviteRole] = useState("user");
   const [inviting, setInviting] = useState(false);
   const [copiedToken, setCopiedToken] = useState(null);
+  const [newInvite, setNewInvite] = useState(null); // { token, email } shown after creation
+  const [copiedNewToken, setCopiedNewToken] = useState(false);
+  const [copiedFormUrl, setCopiedFormUrl] = useState(false);
 
   useEffect(() => {
     if (organization?.id) loadMembers();
@@ -86,9 +89,7 @@ export default function OrganizationTab() {
       setInviteEmail("");
       setInviteOpen(false);
       loadMembers();
-      // Show token to copy
-      setCopiedToken(null);
-      alert(`Invite created! Share this token with ${data.email}:\n\n${data.token}\n\nThey will enter it on the onboarding screen.`);
+      setNewInvite({ token: data.token, email: data.email });
     } catch (err) {
       alert(err.message);
     } finally {
@@ -151,6 +152,37 @@ export default function OrganizationTab() {
           <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium capitalize">{organization.plan || "starter"} plan</span>
           <span className="text-xs text-slate-400">Created {new Date(organization.created_at).toLocaleDateString()}</span>
         </div>
+        {organization.slug && (
+          <div>
+            <Label className="text-xs text-slate-500">Public Lead Form URL</Label>
+            <div className="mt-1.5 flex items-center gap-2">
+              <code className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-md px-3 py-2 text-slate-600 truncate">
+                {`${window.location.origin}/lead-form?org=${organization.slug}`}
+              </code>
+              <button
+                onClick={async () => {
+                  await navigator.clipboard.writeText(`${window.location.origin}/lead-form?org=${organization.slug}`);
+                  setCopiedFormUrl(true);
+                  setTimeout(() => setCopiedFormUrl(false), 2000);
+                }}
+                className="p-2 rounded-md border border-slate-200 hover:bg-amber-50 hover:border-amber-300 transition-colors"
+                title="Copy URL"
+              >
+                {copiedFormUrl ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
+              </button>
+              <a
+                href={`/lead-form?org=${organization.slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 rounded-md border border-slate-200 hover:bg-amber-50 hover:border-amber-300 transition-colors"
+                title="Open form"
+              >
+                <Link className="w-3.5 h-3.5 text-slate-400" />
+              </a>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">Share this URL on your website or social media. Submissions go directly to your CRM.</p>
+          </div>
+        )}
         {isAdmin && (
           <Button onClick={handleSaveOrg} disabled={savingOrg || orgName.trim() === organization.name} size="sm" className="bg-gradient-to-r from-amber-500 to-orange-500 text-white gap-1.5">
             {savingOrg ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
@@ -308,6 +340,41 @@ export default function OrganizationTab() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* New invite token dialog */}
+      <Dialog open={!!newInvite} onOpenChange={open => { if (!open) setNewInvite(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Check className="w-4 h-4 text-emerald-500" /> Invite Created
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">
+              Share this token with <strong>{newInvite?.email}</strong>. They'll enter it on the onboarding screen after signing up.
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-sm font-mono bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-slate-800 break-all">
+                {newInvite?.token}
+              </code>
+              <button
+                onClick={async () => {
+                  await navigator.clipboard.writeText(newInvite?.token || "");
+                  setCopiedNewToken(true);
+                  setTimeout(() => setCopiedNewToken(false), 2000);
+                }}
+                className="shrink-0 p-2.5 rounded-lg border border-slate-200 hover:bg-amber-50 hover:border-amber-300 transition-colors"
+              >
+                {copiedNewToken
+                  ? <Check className="w-4 h-4 text-emerald-500" />
+                  : <Copy className="w-4 h-4 text-slate-400" />}
+              </button>
+            </div>
+            <p className="text-xs text-slate-400">Token expires in 7 days.</p>
+            <Button className="w-full" onClick={() => setNewInvite(null)}>Done</Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

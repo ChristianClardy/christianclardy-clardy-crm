@@ -23,6 +23,7 @@ const CONTACT_METHODS = ["phone", "email", "text"];
 export default function PublicLeadCaptureForm() {
   const urlParams = new URLSearchParams(window.location.search);
   const defaultSource = getLeadSourceFromQuery(urlParams.get("source"));
+  const orgParam = urlParams.get("org") || "";
 
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -45,12 +46,16 @@ export default function PublicLeadCaptureForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const response = await base44.functions
-      .invoke("createPublicLead", form)
-      .finally(() => setSubmitting(false));
-
-    if (response.data?.success) {
-      setSubmitted(true);
+    try {
+      const res = await fetch('/api/public-lead', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, org: orgParam }),
+      });
+      const data = await res.json();
+      if (data?.success) setSubmitted(true);
+    } finally {
+      setSubmitting(false);
     }
   };
 
