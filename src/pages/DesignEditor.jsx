@@ -346,30 +346,158 @@ function Palette({ onAdd }) {
   );
 }
 
+// ─── Haversine distance in feet ───────────────────────────────────────────────
+
+function haversineDistFt(lat1, lon1, lat2, lon2) {
+  const R = 20902231; // Earth radius in feet
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 // ─── Lot setup dialog ─────────────────────────────────────────────────────────
 
-function LotSetup({ lotW, lotH, scale, onApply, onClose }) {
+function LotSetup({ lotW, lotH, scale, designAddress, onApply, onClose }) {
   const [w, setW] = useState(pxToFt(lotW, scale) || 80);
   const [h, setH] = useState(pxToFt(lotH, scale) || 100);
+  const [address, setAddress] = useState(designAddress || "");
+  const [lookupStatus, setLookupStatus] = useState(null); // null | "loading" | "found" | "notfound" | "error"
+  const [lookupInfo, setLookupInfo] = useState(null);
+
+  const lookupAddress = async () => {
+    if (!address.trim()) return;
+    setLookupStatus("loading");
+    setLookupInfo(null);
+    try {
+      // Step 1: Geocode the address
+      const geoRes = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address.trim())}&addressdetails=1&limit=1`,
+        { headers: { "Accept-Language": "en-US,en" } }
+      );
+      const geoData = await geoRes.json();
+      if (!geoData.length) { setLookupStatus("notfound"); return; }
+
+      const { lat, lon, boundingbox, display_name } = geoData[0];
+      const numLat = parseFloat(lat);
+      const numLon = parseFloat(lon);
+
+      // Step 2: Query Overpass for parcel / residential lot polygon
+      const overpassQuery = `[out:json][timeout:15];(way(around:40,${numLat},${numLon})[landuse~"residential|grass|garden"];way(around:40,${numLat},${numLon})["boundary"="lot"];);out geom;`;
+      let widthFt, depthFt, source = "property bounds";
+
+      try {
+        const ovRes = await fetch("https://overpass-api.de/api/interpreter", {
+          method: "POST",
+          body: overpassQuery,
+        });
+        const ovData = await ovRes.json();
+
+        if (ovData.elements?.length > 0) {
+          const geom = ovData.elements[0].geometry;
+          if (geom?.length > 2) {
+            const lats = geom.map(p => p.lat);
+            const lons = geom.map(p => p.lon);
+            const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+            const minLon = Math.min(...lons), maxLon = Math.max(...lons);
+            widthFt = Math.round(haversineDistFt(numLat, minLon, numLat, maxLon));
+            depthFt = Math.round(haversineDistFt(minLat, numLon, maxLat, numLon));
+            source = "parcel data";
+          }
+        }
+      } catch {
+        // Overpass failed — fall through to bounding box
+      }
+
+      // Fall back to geocoder bounding box if parcel not found
+      if (!widthFt || !depthFt) {
+        const [south, north, west, east] = boundingbox.map(Number);
+        const cLat = (south + north) / 2;
+        widthFt = Math.round(haversineDistFt(cLat, west, cLat, east));
+        depthFt = Math.round(haversineDistFt(south, numLon, north, numLon));
+        source = "address bounding box";
+      }
+
+      // Clamp to reasonable lot sizes (10–500 ft)
+      widthFt = Math.max(10, Math.min(widthFt, 500));
+      depthFt = Math.max(10, Math.min(depthFt, 500));
+
+      setW(widthFt);
+      setH(depthFt);
+      setLookupInfo({ display_name, source, widthFt, depthFt });
+      setLookupStatus("found");
+    } catch {
+      setLookupStatus("error");
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-5">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-5">
         <div>
           <p className="font-bold text-slate-900">Lot / Yard Dimensions</p>
-          <p className="text-xs text-slate-500 mt-0.5">Set the usable area for this design. You can resize anytime.</p>
+          <p className="text-xs text-slate-500 mt-0.5">Look up an address to auto-fill lot size, or enter dimensions manually.</p>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label className="text-xs text-slate-500 mb-1.5 block">Width (ft)</Label>
-            <Input type="number" min={10} value={w} onChange={e => setW(Number(e.target.value))} className="h-9" />
+
+        {/* Address lookup */}
+        <div>
+          <Label className="text-xs text-slate-500 mb-1.5 block">Property Address</Label>
+          <div className="flex gap-2">
+            <Input
+              value={address}
+              onChange={e => { setAddress(e.target.value); setLookupStatus(null); }}
+              onKeyDown={e => e.key === "Enter" && lookupAddress()}
+              placeholder="123 Main St, City, TX 75001"
+              className="h-9 text-sm flex-1"
+            />
+            <Button
+              type="button"
+              size="sm"
+              onClick={lookupAddress}
+              disabled={lookupStatus === "loading" || !address.trim()}
+              className="bg-slate-800 text-white hover:bg-slate-700 shrink-0 h-9 px-3"
+            >
+              {lookupStatus === "loading"
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <><Maximize2 className="w-3.5 h-3.5 mr-1" />Look Up</>
+              }
+            </Button>
           </div>
-          <div>
-            <Label className="text-xs text-slate-500 mb-1.5 block">Depth (ft)</Label>
-            <Input type="number" min={10} value={h} onChange={e => setH(Number(e.target.value))} className="h-9" />
-          </div>
+
+          {/* Lookup result feedback */}
+          {lookupStatus === "found" && lookupInfo && (
+            <div className="mt-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs space-y-0.5">
+              <p className="font-semibold text-emerald-800">
+                Found: {lookupInfo.widthFt}′ wide × {lookupInfo.depthFt}′ deep
+                <span className="font-normal text-emerald-600 ml-1">via {lookupInfo.source}</span>
+              </p>
+              <p className="text-emerald-600 truncate">{lookupInfo.display_name}</p>
+            </div>
+          )}
+          {lookupStatus === "notfound" && (
+            <p className="mt-2 text-xs text-amber-600">Address not found. Try adding city, state, or zip code.</p>
+          )}
+          {lookupStatus === "error" && (
+            <p className="mt-2 text-xs text-rose-500">Lookup failed — check your connection and try again.</p>
+          )}
         </div>
-        <p className="text-xs text-slate-400">{(w * h).toLocaleString()} sq ft total</p>
+
+        <div className="border-t border-slate-100 pt-4">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-3">Manual Override</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs text-slate-500 mb-1.5 block">Width (ft)</Label>
+              <Input type="number" min={10} value={w} onChange={e => setW(Number(e.target.value))} className="h-9" />
+            </div>
+            <div>
+              <Label className="text-xs text-slate-500 mb-1.5 block">Depth (ft)</Label>
+              <Input type="number" min={10} value={h} onChange={e => setH(Number(e.target.value))} className="h-9" />
+            </div>
+          </div>
+          <p className="text-xs text-slate-400 mt-2">{(w * h).toLocaleString()} sq ft total</p>
+        </div>
+
         <div className="flex justify-end gap-2 pt-1 border-t border-slate-100">
           <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
           <Button size="sm" onClick={() => onApply(ftToPx(w, scale), ftToPx(h, scale))}
@@ -417,6 +545,9 @@ export default function DesignEditor() {
         setLotW(d.canvas_data.lotW || ftToPx(80, DEFAULT_SCALE));
         setLotH(d.canvas_data.lotH || ftToPx(100, DEFAULT_SCALE));
         setScale(d.canvas_data.scale || DEFAULT_SCALE);
+      } else {
+        // New canvas — open lot setup so user can look up address
+        setShowLotSetup(true);
       }
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -765,6 +896,7 @@ export default function DesignEditor() {
       {showLotSetup && (
         <LotSetup
           lotW={lotW} lotH={lotH} scale={scale}
+          designAddress={design?.address || ""}
           onApply={(w, h) => { setLotW(w); setLotH(h); setShowLotSetup(false); }}
           onClose={() => setShowLotSetup(false)}
         />
