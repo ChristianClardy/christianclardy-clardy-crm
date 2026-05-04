@@ -24,6 +24,7 @@ import PublicLeadForm from './pages/PublicLeadForm';
 import InvoiceDesigner from './pages/InvoiceDesigner';
 import Settings from './pages/Settings';
 import MaterialLibraryPage from './pages/MaterialLibrary';
+import DesignEditor from './pages/DesignEditor';
 import DesignPortal from './pages/DesignPortal';
 import DocuSignCallback from './pages/DocuSignCallback';
 
@@ -109,6 +110,7 @@ const AuthenticatedApp = () => {
       <Route path="/Settings" element={<LayoutWrapper currentPageName="Settings"><Settings /></LayoutWrapper>} />
       <Route path="/MaterialLibrary" element={<LayoutWrapper currentPageName="MaterialLibrary"><MaterialLibraryPage /></LayoutWrapper>} />
       <Route path="/DesignPortal" element={<LayoutWrapper currentPageName="DesignPortal"><DesignPortal /></LayoutWrapper>} />
+      <Route path="/DesignEditor" element={<LayoutWrapper currentPageName="DesignPortal"><DesignEditor /></LayoutWrapper>} />
       <Route path="/DocuSignCallback" element={<DocuSignCallback />} />
       <Route path="/lead-form" element={<PublicLeadForm />} />
       <Route path="*" element={<PageNotFound />} />
