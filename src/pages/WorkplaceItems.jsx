@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import TemplateRowEditor from "@/components/templates/TemplateRowEditor";
-import MaterialLibrary from "@/components/workspace/MaterialLibrary";
 import EstimateTemplates from "@/components/workspace/EstimateTemplates";
 
 const BASIC_CONSTRUCTION_TEMPLATE = [
@@ -296,7 +295,7 @@ Organize into logical phases/sections. Include 5-10 tasks per section. Be specif
     <div className="p-6 lg:p-8 max-w-6xl mx-auto space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Workspace Items</h1>
-        <p className="text-slate-500 mt-1">Manage templates, materials, and workspace settings</p>
+        <p className="text-slate-500 mt-1">Manage project and estimate templates</p>
       </div>
 
       {/* Section Tabs */}
@@ -304,7 +303,6 @@ Organize into logical phases/sections. Include 5-10 tasks per section. Be specif
         {[
           { key: "project_templates", label: "Project Schedule Templates" },
           { key: "estimate_templates", label: "Estimate Templates" },
-          { key: "materials", label: "Material Library" },
         ].map(tab => (
           <button key={tab.key} onClick={() => setActiveSection(tab.key)}
             className={cn("text-sm px-4 py-2 rounded-lg font-medium transition-all", activeSection === tab.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
@@ -312,9 +310,6 @@ Organize into logical phases/sections. Include 5-10 tasks per section. Be specif
           </button>
         ))}
       </div>
-
-      {/* Material Library */}
-      {activeSection === "materials" && <MaterialLibrary />}
 
       {/* Estimate Templates */}
       {activeSection === "estimate_templates" && <EstimateTemplates />}

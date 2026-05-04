@@ -43,17 +43,18 @@ const MODULES = [
   { key: "calendar",        label: "Calendar",         description: "Scheduling and events" },
   { key: "reports",         label: "Reports & WIP",    description: "Financial and operational reports" },
   { key: "subcontractors",  label: "Subcontractors",   description: "Manage subcontractor contacts" },
-  { key: "municipalities",  label: "Municipalities",   description: "Permit portal credentials" },
-  { key: "settings",        label: "Team & Settings",  description: "Manage users and permissions" },
+  { key: "municipalities",  label: "Municipalities",        description: "Permit portal credentials" },
+  { key: "material_library", label: "Material Library",     description: "Add, edit, and delete items in the Material Library" },
+  { key: "settings",        label: "Team & Settings",       description: "Manage users and permissions" },
 ];
 
 const DEFAULT_PERMISSIONS = {
-  admin:           { dashboard: true,  sales_dashboard: true,  crm: true,  projects: true,  estimates: true,  payments: true,  documents: true,  calendar: true,  reports: true,  subcontractors: true,  municipalities: true,  settings: true  },
-  project_manager: { dashboard: true,  sales_dashboard: true,  crm: true,  projects: true,  estimates: true,  payments: true,  documents: true,  calendar: true,  reports: true,  subcontractors: true,  municipalities: true,  settings: false },
-  office:          { dashboard: true,  sales_dashboard: true,  crm: true,  projects: false, estimates: true,  payments: true,  documents: true,  calendar: true,  reports: true,  subcontractors: false, municipalities: false, settings: false },
-  foreman:         { dashboard: true,  sales_dashboard: false, crm: false, projects: true,  estimates: false, payments: false, documents: true,  calendar: true,  reports: false, subcontractors: false, municipalities: false, settings: false },
-  laborer:         { dashboard: false, sales_dashboard: false, crm: false, projects: true,  estimates: false, payments: false, documents: false, calendar: false, reports: false, subcontractors: false, municipalities: false, settings: false },
-  other:           { dashboard: true,  sales_dashboard: false, crm: false, projects: false, estimates: false, payments: false, documents: false, calendar: false, reports: false, subcontractors: false, municipalities: false, settings: false },
+  admin:           { dashboard: true,  sales_dashboard: true,  crm: true,  projects: true,  estimates: true,  payments: true,  documents: true,  calendar: true,  reports: true,  subcontractors: true,  municipalities: true,  material_library: true,  settings: true  },
+  project_manager: { dashboard: true,  sales_dashboard: true,  crm: true,  projects: true,  estimates: true,  payments: true,  documents: true,  calendar: true,  reports: true,  subcontractors: true,  municipalities: true,  material_library: true,  settings: false },
+  office:          { dashboard: true,  sales_dashboard: true,  crm: true,  projects: false, estimates: true,  payments: true,  documents: true,  calendar: true,  reports: true,  subcontractors: false, municipalities: false, material_library: true,  settings: false },
+  foreman:         { dashboard: true,  sales_dashboard: false, crm: false, projects: true,  estimates: false, payments: false, documents: true,  calendar: true,  reports: false, subcontractors: false, municipalities: false, material_library: false, settings: false },
+  laborer:         { dashboard: false, sales_dashboard: false, crm: false, projects: true,  estimates: false, payments: false, documents: false, calendar: false, reports: false, subcontractors: false, municipalities: false, material_library: false, settings: false },
+  other:           { dashboard: true,  sales_dashboard: false, crm: false, projects: false, estimates: false, payments: false, documents: false, calendar: false, reports: false, subcontractors: false, municipalities: false, material_library: false, settings: false },
 };
 
 const EMPTY_EMPLOYEE = {
@@ -684,6 +685,13 @@ function DocuSignTab() {
                 </div>
               ) : null)}
             </div>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Webhook URL</p>
+              <p className="text-xs text-slate-500">Configure this in DocuSign Connect to auto-sync signature status:</p>
+              <code className="block text-xs font-mono text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2 break-all">
+                {window.location.origin}/api/docusign-webhook
+              </code>
+            </div>
             <Button
               onClick={handleDisconnect}
               disabled={disconnecting}
@@ -754,7 +762,7 @@ const ALL_TABS = [
   { key: "invite",       label: "Invite & Logins",     icon: UserPlus,       adminOnly: false },
   { key: "calendar",     label: "Calendar Feed",       icon: CalendarDays,   adminOnly: false },
   { key: "appearance",   label: "Appearance",          icon: Palette,        adminOnly: false },
-  { key: "docusign",     label: "DocuSign",            icon: FileSignature,  adminOnly: false },
+  { key: "docusign",     label: "DocuSign",            icon: FileSignature,  adminOnly: true  },
 ];
 
 export default function Settings() {

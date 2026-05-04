@@ -47,6 +47,8 @@ const TABLE_MAP = {
   Notification:           'notifications',
   ChatMessage:            'chat_messages',
   SubInvoice:             'sub_invoices',
+  DocuSignEnvelope:       'docusign_envelopes',
+  Design:                 'designs',
 };
 
 // ─── Field name compatibility ────────────────────────────────────────────────
@@ -382,4 +384,6 @@ export const {
   Notification,
   ChatMessage,
   SubInvoice,
+  DocuSignEnvelope,
+  Design,
 } = entities;

@@ -1,21 +1,24 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { base44 } from "@/api/base44Client";
+import { base44, getCurrentOrgId } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
   ArrowLeft, Save, Download, Plus, Trash2, ChevronDown, ChevronRight,
   Package, FileText, Loader2, Check, GripVertical, Eye, Mail, X,
-  Lock, LockOpen, ShieldAlert,
+  Lock, LockOpen, ShieldAlert, Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { jsPDF } from "jspdf";
+import { supabase } from "@/lib/supabase";
 import { getSelectedCompanyScope } from "@/lib/companyScope";
 import { useAuth } from "@/lib/AuthContext";
+import DocuSignEnvelopes from "@/components/docusign/DocuSignEnvelopes";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -810,7 +813,7 @@ async function loadImageAsDataUrl(src) {
   }
 }
 
-async function exportPDF(estimate, clientName, items, company, marginPct = 40, sectionMargins = {}) {
+async function exportPDF(estimate, clientName, items, company, marginPct = 40, sectionMargins = {}, returnBlob = false) {
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const W = 612, ML = 50, MR = 562, TW = MR - ML;
   let y = 50;
@@ -965,6 +968,7 @@ async function exportPDF(estimate, clientName, items, company, marginPct = 40, s
     doc.text(lines, ML, y);
   }
 
+  if (returnBlob) return doc.output('blob');
   doc.save(`Estimate - ${estimate.title || "draft"}.pdf`);
 }
 
@@ -1425,6 +1429,10 @@ export default function EstimateDetail() {
   const [showLockDialog, setShowLockDialog]   = useState(false);
   const [showUnlockDialog, setShowUnlockDialog] = useState(false);
   const [unlockInput, setUnlockInput]   = useState("");
+  const [showSendDialog, setShowSendDialog] = useState(false);
+  const [sendSigners, setSendSigners]     = useState([{ name: "", email: "" }]);
+  const [sendStatus, setSendStatus]       = useState(null); // null | "uploading" | "sending" | "sent" | "error"
+  const [sendError, setSendError]         = useState("");
   const [amendments, setAmendments]     = useState([]);
   const [parentEstimate, setParentEstimate] = useState(null);
   const { user } = useAuth();
@@ -1808,6 +1816,53 @@ export default function EstimateDetail() {
     navigate(createPageUrl(`EstimateDetail?id=${created.id}`));
   };
 
+  const handleSendForSignature = async () => {
+    if (!currentIdRef.current) return;
+    setSendStatus("uploading");
+    setSendError("");
+    try {
+      // Generate PDF blob
+      const blob = await exportPDF(
+        estimate, clientName, items, effectiveCompany,
+        effectiveMarginPct, sectionMargins, true
+      );
+      const fileName = `Estimate - ${estimate.title || "draft"}.pdf`;
+      const file = new File([blob], fileName, { type: "application/pdf" });
+
+      // Upload to Supabase Storage
+      const { file_url } = await base44.integrations.Core.UploadFile({
+        file,
+        entity_type: "estimate",
+        entity_id: currentIdRef.current,
+        uploaded_by: user?.full_name || user?.email || "Team Member",
+        category: "estimate",
+      });
+
+      setSendStatus("sending");
+
+      // Send via DocuSign
+      const res = await fetch("/api/docusign-send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          file_url,
+          file_name: fileName,
+          signers: sendSigners.filter(s => s.email),
+          organization_id: getCurrentOrgId() || undefined,
+          entity_type: "estimate",
+          entity_id: currentIdRef.current,
+          sent_by: user?.id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to send envelope.");
+      setSendStatus("sent");
+    } catch (err) {
+      setSendError(err.message);
+      setSendStatus("error");
+    }
+  };
+
   // Auto-save: 4 seconds after the last change, if there is something to save.
   // Direct closure call — each effect render captures the latest handleSave.
   useEffect(() => {
@@ -1931,6 +1986,92 @@ export default function EstimateDetail() {
         </div>
       )}
 
+      {/* Send for Signature dialog */}
+      <Dialog open={showSendDialog} onOpenChange={open => { if (!open) setShowSendDialog(false); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Send className="w-4 h-4 text-[#1A2B3C]" /> Send Estimate for Signature
+            </DialogTitle>
+          </DialogHeader>
+
+          {sendStatus === "sent" ? (
+            <div className="py-4 text-center space-y-3">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center mx-auto">
+                <Check className="w-5 h-5 text-emerald-600" />
+              </div>
+              <p className="font-semibold text-slate-900">Sent for Signature</p>
+              <p className="text-sm text-slate-500">DocuSign envelope created successfully.</p>
+              <DocuSignEnvelopes entityType="estimate" entityId={currentIdRef.current} className="text-left" />
+              <Button size="sm" onClick={() => setShowSendDialog(false)} className="bg-slate-900 text-white">Done</Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-slate-500">
+                A PDF of this estimate will be generated and sent to the recipient(s) via DocuSign.
+              </p>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Recipients</Label>
+                {sendSigners.map((s, i) => (
+                  <div key={i} className="flex gap-2 items-start">
+                    <div className="flex-1 space-y-1.5">
+                      <Input
+                        placeholder="Recipient name"
+                        value={s.name}
+                        onChange={e => setSendSigners(prev => prev.map((x, idx) => idx === i ? { ...x, name: e.target.value } : x))}
+                        className="h-8 text-sm"
+                      />
+                      <Input
+                        type="email"
+                        placeholder="Email address"
+                        value={s.email}
+                        onChange={e => setSendSigners(prev => prev.map((x, idx) => idx === i ? { ...x, email: e.target.value } : x))}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    {sendSigners.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setSendSigners(prev => prev.filter((_, idx) => idx !== i))}
+                        className="mt-1 p-1.5 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-500"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setSendSigners(prev => [...prev, { name: "", email: "" }])}
+                  className="text-xs font-medium text-amber-700 hover:text-amber-800 flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3" /> Add another signer
+                </button>
+              </div>
+
+              {sendStatus === "error" && (
+                <p className="text-sm text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{sendError}</p>
+              )}
+
+              <div className="flex justify-end gap-2 pt-1 border-t border-slate-200">
+                <Button variant="outline" size="sm" onClick={() => setShowSendDialog(false)}>Cancel</Button>
+                <Button
+                  size="sm"
+                  disabled={!sendSigners.some(s => s.email) || sendStatus === "uploading" || sendStatus === "sending"}
+                  onClick={handleSendForSignature}
+                  className="bg-[#1A2B3C] hover:bg-[#243647] text-white gap-1.5"
+                >
+                  {sendStatus === "uploading" ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating PDF…</> :
+                   sendStatus === "sending"   ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</> :
+                   <><Send className="w-4 h-4" /> Send for Signature</>}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Sticky top bar */}
       <div className={cn("sticky top-0 z-30 border-b shadow-sm", isLocked ? "bg-emerald-50 border-emerald-200" : "bg-white border-slate-200")}>
         <div className="max-w-screen-xl mx-auto px-4 lg:px-6 py-3 flex items-center gap-3">
@@ -2022,6 +2163,14 @@ export default function EstimateDetail() {
             className="gap-1.5"
           >
             <Download className="w-4 h-4" /> PDF
+          </Button>
+
+          <Button
+            variant="outline" size="sm"
+            onClick={() => { setSendStatus(null); setSendError(""); setSendSigners([{ name: "", email: "" }]); setShowSendDialog(true); }}
+            className="gap-1.5 border-[#1A2B3C] text-[#1A2B3C] hover:bg-[#1A2B3C]/5"
+          >
+            <Send className="w-4 h-4" /> Sign
           </Button>
 
           {isLocked ? (
@@ -2270,6 +2419,14 @@ export default function EstimateDetail() {
                 )}
               </div>
             </div>
+          )}
+
+          {/* DocuSign envelope history */}
+          {currentIdRef.current && (
+            <DocuSignEnvelopes
+              entityType="estimate"
+              entityId={currentIdRef.current}
+            />
           )}
         </div>
       </div>

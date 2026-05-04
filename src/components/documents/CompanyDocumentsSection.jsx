@@ -14,6 +14,8 @@ import {
   Search as SearchIcon, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getCurrentOrgId } from "@/api/base44Client";
+import DocuSignEnvelopes from "@/components/docusign/DocuSignEnvelopes";
 
 export const DOC_TYPES = [
   "Contract",
@@ -100,9 +102,12 @@ function SendModal({ doc, docusignConnected, onClose }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          file_url: doc.file_upload,
-          file_name: doc.document_name,
+          file_url:        doc.file_upload,
+          file_name:       doc.document_name,
           signers,
+          organization_id: getCurrentOrgId() || undefined,
+          entity_type:     "document",
+          entity_id:       doc.id,
         }),
       });
       const data = await res.json();
@@ -134,10 +139,11 @@ function SendModal({ doc, docusignConnected, onClose }) {
         </div>
 
         {mode === "sent" && (
-          <div className="py-6 text-center space-y-3">
+          <div className="py-4 text-center space-y-3">
             <CheckCircle className="w-10 h-10 text-emerald-500 mx-auto" />
             <p className="font-semibold text-slate-900">Sent for Signature</p>
-            <p className="text-sm text-slate-500">{result?.message}</p>
+            <p className="text-sm text-slate-500">The envelope has been sent via DocuSign.</p>
+            <DocuSignEnvelopes entityType="document" entityId={doc.id} className="text-left" />
             <Button onClick={onClose} size="sm" className="bg-slate-900 text-white">Done</Button>
           </div>
         )}

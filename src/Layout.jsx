@@ -9,6 +9,7 @@ import {
   Menu,
   X,
   Wrench,
+  Package,
   FileText,
   Building2,
   CheckSquare,
@@ -18,7 +19,8 @@ import {
   CalendarDays,
   Sun,
   Moon,
-  ShieldCheck
+  ShieldCheck,
+  Compass,
 } from "lucide-react";
 import { useState } from "react";
 import NotificationBell from "@/components/notifications/NotificationBell";
@@ -41,11 +43,13 @@ export default function Layout({ children, currentPageName }) {
     { name: "Calendar", href: createPageUrl("Calendar"), icon: CalendarDays },
     { name: "Subcontractors", href: createPageUrl("Subcontractors"), icon: Wrench },
     { name: "Municipalities", href: createPageUrl("Municipalities"), icon: Building2 },
+    { name: "Design Portal", href: createPageUrl("DesignPortal"), icon: Compass },
     { name: "Estimates", href: createPageUrl("Estimates"), icon: Receipt },
     { name: "Payments", href: createPageUrl("Payments"), icon: DollarSign },
     { name: "Finance", href: createPageUrl("FinanceDashboard"), icon: FileBarChart2 },
     { name: "Documents", href: createPageUrl("Documents"), icon: FolderOpen },
     { name: "Reports", href: createPageUrl("Reports"), icon: FileText },
+    { name: "Material Library", href: createPageUrl("MaterialLibrary"), icon: Package },
     { name: "Workspace Items", href: createPageUrl("WorkplaceItems"), icon: Wrench },
     { name: "Settings", href: createPageUrl("Settings"), icon: ShieldCheck },
   ];

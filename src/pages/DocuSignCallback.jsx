@@ -47,12 +47,9 @@ export default function DocuSignCallback() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to connect DocuSign.");
 
-      // Persist tokens in company_profiles.settings.docusign
-      const { data: profile, error: dbError } = await supabase
-        .from("company_profiles")
-        .select("id, settings")
-        .limit(1)
-        .single();
+      // Persist tokens in company_profiles.settings.docusign (org-scoped)
+      const profileQuery = supabase.from("company_profiles").select("id, settings").limit(1);
+      const { data: profile, error: dbError } = await profileQuery.single();
 
       if (dbError || !profile) throw new Error("Could not load company profile.");
 

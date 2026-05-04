@@ -315,7 +315,7 @@ function PriceHistoryPanel({ history, currentCost, onAddEntry }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function MaterialLibrary() {
+export default function MaterialLibrary({ canManage = true }) {
   const [libType, setLibType] = useState("material");
   const [materials, setMaterials] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -578,12 +578,16 @@ export default function MaterialLibrary() {
             <Sparkles className="w-4 h-4" /> Clean Duplicates
             {dupCount > 0 && <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">{dupCount}</span>}
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} className="gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50">
-            <Upload className="w-4 h-4" /> Import
-          </Button>
-          <Button onClick={openNew} size="sm" className="bg-gradient-to-r from-amber-500 to-orange-500 text-white gap-1">
-            <Plus className="w-4 h-4" /> Add {isLabor ? "Labor Rate" : "Material"}
-          </Button>
+          {canManage && (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} className="gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50">
+                <Upload className="w-4 h-4" /> Import
+              </Button>
+              <Button onClick={openNew} size="sm" className="bg-gradient-to-r from-amber-500 to-orange-500 text-white gap-1">
+                <Plus className="w-4 h-4" /> Add {isLabor ? "Labor Rate" : "Material"}
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -692,10 +696,14 @@ export default function MaterialLibrary() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-0.5">
-                          <button onClick={() => openEdit(m)} title="Edit" className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700"><Edit2 className="w-3.5 h-3.5" /></button>
                           <button onClick={() => setHistoryOpen(m.id)} title="Price history" className="p-1.5 rounded hover:bg-amber-50 text-slate-400 hover:text-amber-600"><History className="w-3.5 h-3.5" /></button>
-                          <button onClick={() => handleToggleActive(m)} title={m.is_active !== false ? "Deactivate" : "Activate"} className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700"><Archive className="w-3.5 h-3.5" /></button>
-                          <button onClick={() => handleDelete(m.id)} title="Delete" className="p-1.5 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                          {canManage && (
+                            <>
+                              <button onClick={() => openEdit(m)} title="Edit" className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700"><Edit2 className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => handleToggleActive(m)} title={m.is_active !== false ? "Deactivate" : "Activate"} className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700"><Archive className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => handleDelete(m.id)} title="Delete" className="p-1.5 rounded hover:bg-rose-50 text-slate-400 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
