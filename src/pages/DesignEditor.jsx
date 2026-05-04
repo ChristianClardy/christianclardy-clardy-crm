@@ -2,13 +2,13 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Stage, Layer, Rect, Ellipse, Line, Text, Transformer, Group } from "react-konva";
+import { Stage, Layer, Rect, Ellipse, Line, Text, Transformer, Group, Image as KonvaImage } from "react-konva";
 import {
   ArrowLeft, Save, Trash2, RotateCcw, ZoomIn, ZoomOut, Grid3X3,
   Maximize2, Check, Loader2, Copy, FlipHorizontal, ChevronDown,
   Sun, Layers, Fence, UtensilsCrossed, Waves, TreePine, Compass,
   Square, Circle, Minus, Move, MousePointer, Receipt, LayoutPanelLeft,
-  ChevronRight, RulerIcon,
+  ChevronRight, RulerIcon, Map,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -363,8 +363,9 @@ function LotSetup({ lotW, lotH, scale, designAddress, onApply, onClose }) {
   const [w, setW] = useState(pxToFt(lotW, scale) || 80);
   const [h, setH] = useState(pxToFt(lotH, scale) || 100);
   const [address, setAddress] = useState(designAddress || "");
-  const [lookupStatus, setLookupStatus] = useState(null); // null | "loading" | "found" | "notfound" | "error"
+  const [lookupStatus, setLookupStatus] = useState(null);
   const [lookupInfo, setLookupInfo] = useState(null);
+  const [foundCoords, setFoundCoords] = useState(null); // { lat, lon }
 
   const lookupAddress = async () => {
     if (!address.trim()) return;
@@ -425,6 +426,7 @@ function LotSetup({ lotW, lotH, scale, designAddress, onApply, onClose }) {
 
       setW(widthFt);
       setH(depthFt);
+      setFoundCoords({ lat: numLat, lon: numLon });
       setLookupInfo({ display_name, source, widthFt, depthFt });
       setLookupStatus("found");
     } catch {
@@ -500,7 +502,7 @@ function LotSetup({ lotW, lotH, scale, designAddress, onApply, onClose }) {
 
         <div className="flex justify-end gap-2 pt-1 border-t border-slate-100">
           <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-          <Button size="sm" onClick={() => onApply(ftToPx(w, scale), ftToPx(h, scale))}
+          <Button size="sm" onClick={() => onApply(ftToPx(w, scale), ftToPx(h, scale), foundCoords)}
             className="bg-gradient-to-r from-amber-500 to-orange-500 text-white">
             Apply
           </Button>
@@ -530,9 +532,41 @@ export default function DesignEditor() {
   const [showLotSetup, setShowLotSetup] = useState(false);
   const [stagePos, setStagePos]   = useState({ x: 60, y: 60 });
   const [activePanel, setActivePanel] = useState("palette"); // "palette" | "props"
+  const [geoCoords, setGeoCoords] = useState(null); // { lat, lon }
+  const [showSatellite, setShowSatellite] = useState(false);
+  const [satImg, setSatImg] = useState(null);
+  const [satLoading, setSatLoading] = useState(false);
 
   const stageRef  = useRef();
   const layerRef  = useRef();
+
+  // ── Satellite imagery ───────────────────────────────────────────────────────
+
+  const buildSatUrl = useCallback((lat, lon, wPx, hPx) => {
+    const lotWFt = pxToFt(wPx, scale);
+    const lotHFt = pxToFt(hPx, scale);
+    const latDegPerFt = 1 / 364000;
+    const lonDegPerFt = 1 / (364000 * Math.cos(lat * Math.PI / 180));
+    const halfW = (lotWFt / 2) * lonDegPerFt;
+    const halfH = (lotHFt / 2) * latDegPerFt;
+    const west = lon - halfW, east = lon + halfW;
+    const south = lat - halfH, north = lat + halfH;
+    const imgW = Math.min(Math.round(wPx * 2), 2048);
+    const imgH = Math.min(Math.round(hPx * 2), 2048);
+    return `https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/export?bbox=${west},${south},${east},${north}&bboxSR=4326&size=${imgW},${imgH}&imageSR=4326&format=png&f=image`;
+  }, [scale]);
+
+  useEffect(() => {
+    if (!geoCoords || !showSatellite) return;
+    setSatLoading(true);
+    setSatImg(null);
+    const url = buildSatUrl(geoCoords.lat, geoCoords.lon, lotW, lotH);
+    const img = new window.Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => { setSatImg(img); setSatLoading(false); };
+    img.onerror = () => { setSatImg(null); setSatLoading(false); };
+    img.src = url;
+  }, [geoCoords, showSatellite, lotW, lotH, buildSatUrl]);
 
   // ── Load ──────────────────────────────────────────────────────────────────
 
@@ -545,6 +579,7 @@ export default function DesignEditor() {
         setLotW(d.canvas_data.lotW || ftToPx(80, DEFAULT_SCALE));
         setLotH(d.canvas_data.lotH || ftToPx(100, DEFAULT_SCALE));
         setScale(d.canvas_data.scale || DEFAULT_SCALE);
+        if (d.canvas_data.geoCoords) setGeoCoords(d.canvas_data.geoCoords);
       } else {
         // New canvas — open lot setup so user can look up address
         setShowLotSetup(true);
@@ -564,12 +599,12 @@ export default function DesignEditor() {
     if (!designId) return;
     setSaving(true);
     await base44.entities.Design.update(designId, {
-      canvas_data: { elements, lotW, lotH, scale },
+      canvas_data: { elements, lotW, lotH, scale, geoCoords },
     });
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
-  }, [designId, elements, lotW, lotH, scale]);
+  }, [designId, elements, lotW, lotH, scale, geoCoords]);
 
   // Ctrl/Cmd+S to save
   useEffect(() => {
@@ -649,13 +684,14 @@ export default function DesignEditor() {
     const gridPx = ftToPx(GRID_FT, scale);
     const cols = Math.ceil(lotW / gridPx);
     const rows = Math.ceil(lotH / gridPx);
+    const stroke = showSatellite ? "rgba(255,255,255,0.12)" : "#00000015";
     for (let i = 0; i <= cols; i++) {
       const x = i * gridPx;
-      lines.push(<Line key={`v${i}`} points={[x, 0, x, lotH]} stroke="#00000015" strokeWidth={1} listening={false} />);
+      lines.push(<Line key={`v${i}`} points={[x, 0, x, lotH]} stroke={stroke} strokeWidth={1} listening={false} />);
     }
     for (let i = 0; i <= rows; i++) {
       const y = i * gridPx;
-      lines.push(<Line key={`h${i}`} points={[0, y, lotW, y]} stroke="#00000015" strokeWidth={1} listening={false} />);
+      lines.push(<Line key={`h${i}`} points={[0, y, lotW, y]} stroke={stroke} strokeWidth={1} listening={false} />);
     }
     return lines;
   };
@@ -705,6 +741,24 @@ export default function DesignEditor() {
           title="Toggle grid"
         >
           <Grid3X3 className="w-4 h-4" />
+        </button>
+
+        {/* Satellite toggle */}
+        <button
+          onClick={() => {
+            if (!geoCoords) { setShowLotSetup(true); return; }
+            setShowSatellite(s => !s);
+          }}
+          className={cn(
+            "flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors",
+            showSatellite && geoCoords
+              ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
+              : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+          )}
+          title={geoCoords ? "Toggle satellite view" : "Look up address first to enable satellite view"}
+        >
+          <Map className="w-3.5 h-3.5" />
+          {satLoading ? "Loading…" : "Satellite"}
         </button>
 
         {/* Lot setup */}
@@ -790,12 +844,22 @@ export default function DesignEditor() {
               onMouseDown={e => { if (e.target === e.target.getStage()) setSelectedId(null); }}
             >
               <Layer ref={layerRef}>
+                {/* Satellite imagery (below everything) */}
+                {showSatellite && satImg && (
+                  <KonvaImage
+                    x={40} y={40}
+                    width={lotW} height={lotH}
+                    image={satImg}
+                    listening={false}
+                  />
+                )}
+
                 {/* Lot boundary */}
                 <Rect
                   x={40} y={40}
                   width={lotW} height={lotH}
-                  fill="#f8f5f0"
-                  stroke="#94a3b8"
+                  fill={showSatellite ? undefined : "#f8f5f0"}
+                  stroke={showSatellite ? "rgba(255,255,255,0.6)" : "#94a3b8"}
                   strokeWidth={2}
                   dash={[8, 4]}
                   listening={false}
@@ -806,7 +870,7 @@ export default function DesignEditor() {
                   x={44} y={44}
                   text={`Lot: ${pxToFt(lotW, scale)}′ × ${pxToFt(lotH, scale)}′  (${(pxToFt(lotW, scale) * pxToFt(lotH, scale)).toLocaleString()} sq ft)`}
                   fontSize={10}
-                  fill="#94a3b8"
+                  fill={showSatellite ? "rgba(255,255,255,0.75)" : "#94a3b8"}
                   fontFamily="system-ui"
                   listening={false}
                 />
@@ -897,7 +961,11 @@ export default function DesignEditor() {
         <LotSetup
           lotW={lotW} lotH={lotH} scale={scale}
           designAddress={design?.address || ""}
-          onApply={(w, h) => { setLotW(w); setLotH(h); setShowLotSetup(false); }}
+          onApply={(w, h, coords) => {
+            setLotW(w); setLotH(h);
+            if (coords) { setGeoCoords(coords); setShowSatellite(true); }
+            setShowLotSetup(false);
+          }}
           onClose={() => setShowLotSetup(false)}
         />
       )}
