@@ -76,6 +76,45 @@ function TypeChip({ typeKey, small = false }) {
 
 // ─── New / Edit dialog ────────────────────────────────────────────────────────
 
+function ClientPicker({ clients, value, onChange, onSelectClient }) {
+  const [query, setQuery] = useState(value || "");
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => { setQuery(value || ""); }, [value]);
+
+  const matches = query.trim()
+    ? clients.filter(c => (c.name || "").toLowerCase().includes(query.toLowerCase()))
+    : clients.slice(0, 8);
+
+  return (
+    <div className="relative">
+      <Input
+        placeholder="Search client name…"
+        value={query}
+        autoComplete="off"
+        onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && matches.length > 0 && (
+        <div className="absolute z-50 top-full mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+          {matches.map(c => (
+            <button
+              key={c.id}
+              type="button"
+              onMouseDown={() => { onSelectClient(c); setOpen(false); }}
+              className="flex flex-col w-full text-left px-3 py-2 hover:bg-amber-50 transition-colors"
+            >
+              <span className="text-sm font-medium text-slate-800">{c.name}</span>
+              {c.address && <span className="text-xs text-slate-400 truncate">{c.address}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DesignDialog({ open, initial, clients, estimates, onClose, onSaved }) {
   const [form, setForm] = useState(initial || EMPTY_FORM);
   const [saving, setSaving] = useState(false);
@@ -147,15 +186,16 @@ function DesignDialog({ open, initial, clients, estimates, onClose, onSaved }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label className="text-xs uppercase tracking-wide text-slate-500 mb-1.5 block">Client Name</Label>
-              <Input
-                placeholder="Client or lead name"
+              <ClientPicker
+                clients={clients}
                 value={form.client_name}
-                onChange={e => setForm(f => ({ ...f, client_name: e.target.value }))}
-                list="client-suggestions"
+                onChange={val => setForm(f => ({ ...f, client_name: val }))}
+                onSelectClient={c => setForm(f => ({
+                  ...f,
+                  client_name: c.name || "",
+                  address: f.address || c.address || "",
+                }))}
               />
-              <datalist id="client-suggestions">
-                {clients.map(c => <option key={c.id} value={c.name || c.full_name} />)}
-              </datalist>
             </div>
             <div>
               <Label className="text-xs uppercase tracking-wide text-slate-500 mb-1.5 block">Property Address</Label>
