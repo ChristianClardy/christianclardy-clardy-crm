@@ -655,6 +655,8 @@ export default function DesignEditor() {
   const [lotD, setLotD]               = useState(DEFAULT_LOT_D);
   const [geoCoords, setGeoCoords]     = useState(null);
   const [showSat, setShowSat]         = useState(false);
+  const [satUrl, setSatUrl]           = useState(null);
+  const [satLoading, setSatLoading]   = useState(false);
   const [showLotSetup, setShowLotSetup] = useState(false);
   const [activePanel, setActivePanel] = useState("elements");
   const [saving, setSaving]           = useState(false);
@@ -699,8 +701,8 @@ export default function DesignEditor() {
     if(!mount) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87CEEB);
-    scene.fog = new THREE.Fog(0xadd8e6,300,900);
+    // No background — HTML satellite image shows through the transparent canvas
+    scene.fog = new THREE.FogExp2(0x87CEEB, 0.002);
     sceneRef.current = scene;
 
     const W = mount.clientWidth, H = mount.clientHeight;
@@ -708,9 +710,10 @@ export default function DesignEditor() {
     camera.position.set(0,90,110); camera.lookAt(0,0,0);
     cameraRef.current = camera;
 
-    const renderer = new THREE.WebGLRenderer({antialias:true});
+    const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
     renderer.setSize(W,H);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+    renderer.setClearColor(0x000000, 0);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -738,7 +741,7 @@ export default function DesignEditor() {
     scene.add(new THREE.HemisphereLight(0x87CEEB,0x4a7c59,0.6));
 
     // Ground
-    buildAndAddGround(scene,DEFAULT_LOT_W,DEFAULT_LOT_D,null);
+    buildAndAddGround(scene,DEFAULT_LOT_W,DEFAULT_LOT_D);
 
     // Drag
     const dragPlane = new THREE.Plane(new THREE.Vector3(0,1,0),0);
@@ -857,41 +860,53 @@ export default function DesignEditor() {
   },[]);
 
   // ── Ground builder ────────────────────────────────────────────────────────
-  function buildAndAddGround(scene,w,d,satTex){
+  function buildAndAddGround(scene,w,d){
     if(groundGroupRef.current){
-      groundGroupRef.current.traverse(o=>{if(o.isMesh){o.geometry.dispose();o.material.dispose();}});
+      groundGroupRef.current.traverse(o=>{if(o.isMesh||o.isLine){o.geometry?.dispose();o.material?.dispose();}});
       scene.remove(groundGroupRef.current);
     }
     const g=new THREE.Group();
-    // Far ground
-    const farMat=new THREE.MeshStandardMaterial({map:grassTexture(),roughness:0.95});
-    const far=new THREE.Mesh(new THREE.PlaneGeometry(w*10,d*10),farMat);
-    far.rotation.x=-Math.PI/2; far.position.y=-0.05; far.receiveShadow=true; g.add(far);
-    // Lot surface — satellite covers 3× lot area so use 3× plane to match
-    const satW = satTex ? w*3 : w;
-    const satD = satTex ? d*3 : d;
-    const lotMat=satTex
-      ? new THREE.MeshStandardMaterial({map:satTex,roughness:0.8,metalness:0})
-      : new THREE.MeshStandardMaterial({map:grassTexture(),roughness:0.9,color:0xaaddaa});
-    const lot=new THREE.Mesh(new THREE.PlaneGeometry(satW,satD),lotMat);
-    lot.rotation.x=-Math.PI/2; lot.receiveShadow=true; g.add(lot);
-    // Boundary
-    const bnd=new THREE.LineSegments(
-      new THREE.EdgesGeometry(new THREE.BoxGeometry(w,0.01,d)),
-      new THREE.LineBasicMaterial({color:0xF59E0B,linewidth:3})
-    );
-    bnd.position.y=0.08; g.add(bnd);
+    // Invisible hit plane — needed for drag raycasting
+    const hitMat=new THREE.MeshBasicMaterial({visible:false,side:THREE.DoubleSide});
+    const hit=new THREE.Mesh(new THREE.PlaneGeometry(w*20,d*20),hitMat);
+    hit.rotation.x=-Math.PI/2; hit.name="ground_hit"; g.add(hit);
+    // Lot boundary outline
+    const pts=[
+      new THREE.Vector3(-w/2,0.1,-d/2),new THREE.Vector3(w/2,0.1,-d/2),
+      new THREE.Vector3(w/2,0.1,d/2),new THREE.Vector3(-w/2,0.1,d/2),
+      new THREE.Vector3(-w/2,0.1,-d/2),
+    ];
+    const bndGeo=new THREE.BufferGeometry().setFromPoints(pts);
+    g.add(new THREE.Line(bndGeo,new THREE.LineBasicMaterial({color:0xF59E0B})));
     // Corner markers
     const mMat=new THREE.MeshBasicMaterial({color:0xF59E0B});
     [[w/2,-d/2],[w/2,d/2],[-w/2,-d/2],[-w/2,d/2]].forEach(([cx,cz])=>{
-      const m=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.2,1.5,8),mMat);
-      m.position.set(cx,0.75,cz); g.add(m);
+      const m=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.3,2,8),mMat);
+      m.position.set(cx,1,cz); g.add(m);
     });
     scene.add(g);
     groundGroupRef.current=g;
   }
 
-  // ── Sync lot / satellite ──────────────────────────────────────────────────
+  // ── Fetch satellite as blob URL for HTML <img> background ────────────────
+  useEffect(()=>{
+    if(!showSat||!geoCoords){setSatUrl(null);return;}
+    setSatLoading(true);
+    const url=`/api/satellite?lat=${geoCoords.lat}&lon=${geoCoords.lon}&w=${lotW}&d=${lotD}`;
+    let revoke=null;
+    fetch(url)
+      .then(r=>{if(!r.ok)throw new Error("proxy failed");return r.blob();})
+      .then(blob=>{
+        if(revoke)URL.revokeObjectURL(revoke);
+        revoke=URL.createObjectURL(blob);
+        setSatUrl(revoke);
+      })
+      .catch(()=>setSatUrl(null))
+      .finally(()=>setSatLoading(false));
+    return ()=>{ if(revoke)URL.revokeObjectURL(revoke); };
+  },[showSat,geoCoords,lotW,lotD]);
+
+  // ── Sync lot → scene ground ───────────────────────────────────────────────
   useEffect(()=>{
     const scene=sceneRef.current; if(!scene)return;
     lotRef.current={w:lotW,d:lotD};
@@ -902,18 +917,8 @@ export default function DesignEditor() {
       cam.position.set(0,eye,eye*0.9);
       cam.lookAt(0,0,0);
     }
-    if(showSat&&geoCoords){
-      const url=`/api/satellite?lat=${geoCoords.lat}&lon=${geoCoords.lon}&w=${lotW}&d=${lotD}`;
-      const loader=new THREE.TextureLoader();
-      loader.load(url,tex=>{
-        tex.colorSpace=THREE.SRGBColorSpace;
-        tex.needsUpdate=true;
-        buildAndAddGround(scene,lotW,lotD,tex);
-      },undefined,()=>buildAndAddGround(scene,lotW,lotD,null));
-    } else {
-      buildAndAddGround(scene,lotW,lotD,null);
-    }
-  },[lotW,lotD,geoCoords,showSat]);
+    buildAndAddGround(scene,lotW,lotD);
+  },[lotW,lotD]);
 
   // ── Sync elements → scene ─────────────────────────────────────────────────
   useEffect(()=>{
@@ -1080,10 +1085,28 @@ export default function DesignEditor() {
         </div>
 
         {/* 3D Canvas */}
-        <div className="flex-1 relative overflow-hidden">
-          <div ref={mountRef} className="w-full h-full"/>
+        <div className="flex-1 relative overflow-hidden bg-slate-800">
+          {/* Satellite photo as HTML background — never goes through Three.js */}
+          {satUrl && (
+            <img
+              src={satUrl}
+              alt="aerial"
+              className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
+              style={{opacity:0.92}}
+            />
+          )}
+          {!satUrl && (
+            <div className="absolute inset-0 bg-gradient-to-br from-green-900/60 to-green-800/40 pointer-events-none"/>
+          )}
+          {satLoading && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/70 text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-2 z-10">
+              <Loader2 className="w-3.5 h-3.5 animate-spin"/>Loading aerial photo…
+            </div>
+          )}
+          {/* Transparent Three.js canvas for 3D structures */}
+          <div ref={mountRef} className="absolute inset-0 w-full h-full"/>
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white text-[10px] px-4 py-1.5 rounded-full pointer-events-none select-none backdrop-blur-sm">
-            Scroll: zoom · Left drag: orbit · Right drag: pan · Click element to drag
+            Scroll: zoom · Left drag: orbit · Right drag: pan · Click element to select/drag
           </div>
         </div>
 
