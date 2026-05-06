@@ -133,7 +133,7 @@ const AuthenticatedApp = () => {
       <Route path="/DesignEditor" element={
         <DesignEditorBoundary>
           <Suspense fallback={<div className="fixed inset-0 flex items-center justify-center"><div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" /></div>}>
-            <LayoutWrapper currentPageName="DesignPortal"><DesignEditor /></LayoutWrapper>
+            <DesignEditor />
           </Suspense>
         </DesignEditorBoundary>
       } />
