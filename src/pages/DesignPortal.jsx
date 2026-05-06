@@ -77,22 +77,19 @@ function TypeChip({ typeKey, small = false }) {
 // ─── New / Edit dialog ────────────────────────────────────────────────────────
 
 function ClientPicker({ clients, value, onChange, onSelectClient }) {
-  const [query, setQuery] = useState(value || "");
   const [open, setOpen] = useState(false);
 
-  useEffect(() => { setQuery(value || ""); }, [value]);
-
-  const matches = query.trim()
-    ? clients.filter(c => (c.name || "").toLowerCase().includes(query.toLowerCase()))
+  const matches = value?.trim()
+    ? clients.filter(c => (c.name || "").toLowerCase().includes(value.toLowerCase()))
     : clients.slice(0, 8);
 
   return (
     <div className="relative">
       <Input
         placeholder="Search client name…"
-        value={query}
+        value={value || ""}
         autoComplete="off"
-        onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
+        onChange={e => { onChange(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
       />
