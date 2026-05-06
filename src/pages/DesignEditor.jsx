@@ -714,8 +714,8 @@ export default function DesignEditor() {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.1;
+    renderer.toneMapping = THREE.LinearToneMapping;
+    renderer.toneMappingExposure = 1.0;
     mount.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
@@ -867,11 +867,13 @@ export default function DesignEditor() {
     const farMat=new THREE.MeshStandardMaterial({map:grassTexture(),roughness:0.95});
     const far=new THREE.Mesh(new THREE.PlaneGeometry(w*10,d*10),farMat);
     far.rotation.x=-Math.PI/2; far.position.y=-0.05; far.receiveShadow=true; g.add(far);
-    // Lot surface
+    // Lot surface — satellite covers 3× lot area so use 3× plane to match
+    const satW = satTex ? w*3 : w;
+    const satD = satTex ? d*3 : d;
     const lotMat=satTex
-      ? new THREE.MeshStandardMaterial({map:satTex,roughness:0.8})
+      ? new THREE.MeshStandardMaterial({map:satTex,roughness:0.8,metalness:0})
       : new THREE.MeshStandardMaterial({map:grassTexture(),roughness:0.9,color:0xaaddaa});
-    const lot=new THREE.Mesh(new THREE.PlaneGeometry(w,d),lotMat);
+    const lot=new THREE.Mesh(new THREE.PlaneGeometry(satW,satD),lotMat);
     lot.rotation.x=-Math.PI/2; lot.receiveShadow=true; g.add(lot);
     // Boundary
     const bnd=new THREE.LineSegments(
@@ -893,11 +895,19 @@ export default function DesignEditor() {
   useEffect(()=>{
     const scene=sceneRef.current; if(!scene)return;
     lotRef.current={w:lotW,d:lotD};
+    // Reposition camera to frame the lot
+    const cam=cameraRef.current;
+    if(cam){
+      const eye=Math.max(lotW,lotD)*1.4;
+      cam.position.set(0,eye,eye*0.9);
+      cam.lookAt(0,0,0);
+    }
     if(showSat&&geoCoords){
       const url=`/api/satellite?lat=${geoCoords.lat}&lon=${geoCoords.lon}&w=${lotW}&d=${lotD}`;
       const loader=new THREE.TextureLoader();
       loader.load(url,tex=>{
         tex.colorSpace=THREE.SRGBColorSpace;
+        tex.needsUpdate=true;
         buildAndAddGround(scene,lotW,lotD,tex);
       },undefined,()=>buildAndAddGround(scene,lotW,lotD,null));
     } else {
