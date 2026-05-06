@@ -742,9 +742,10 @@ export default function DesignEditor() {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.LinearToneMapping;
-    // Size canvas to fill mount — must happen before appendChild
-    renderer.setSize(W, H);
+    renderer.setSize(W, H, false);  // false = don't set canvas CSS size
     mount.appendChild(renderer.domElement);
+    // Force canvas to fill mount div regardless of pixel size
+    renderer.domElement.style.cssText = 'width:100%;height:100%;display:block;';
     rendererRef.current = renderer;
 
     // OrbitControls
@@ -841,7 +842,7 @@ export default function DesignEditor() {
       const H2=mount.clientHeight||mount.offsetHeight||600;
       if(!W2||!H2) return;
       camera.aspect = W2/H2; camera.updateProjectionMatrix();
-      renderer.setSize(W2, H2);
+      renderer.setSize(W2, H2, false);
     };
     window.addEventListener("resize", onResize);
     // Trigger once in case initial size was wrong
