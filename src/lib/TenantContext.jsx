@@ -16,24 +16,41 @@ export function TenantProvider({ children }) {
     if (!user?.id) { setLoading(false); return; }
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      // Step 1: get membership row
+      const { data: mem, error: memErr } = await supabase
         .from('organization_members')
-        .select('*, organizations(*)')
+        .select('*')
         .eq('user_id', user.id)
         .eq('status', 'active')
         .maybeSingle();
 
-      if (!error && data?.organizations) {
-        setOrganization(data.organizations);
-        setMembership(data);
-        setCurrentOrgId(data.organization_id);
-        setNeedsOnboarding(false);
-      } else {
+      if (memErr || !mem?.organization_id) {
         setOrganization(null);
         setMembership(null);
         setCurrentOrgId(null);
         setNeedsOnboarding(true);
+        return;
       }
+
+      // Step 2: get org details separately (avoids needing a FK constraint)
+      const { data: org, error: orgErr } = await supabase
+        .from('organizations')
+        .select('*')
+        .eq('id', mem.organization_id)
+        .maybeSingle();
+
+      if (orgErr || !org) {
+        setOrganization(null);
+        setMembership(null);
+        setCurrentOrgId(null);
+        setNeedsOnboarding(true);
+        return;
+      }
+
+      setOrganization(org);
+      setMembership(mem);
+      setCurrentOrgId(mem.organization_id);
+      setNeedsOnboarding(false);
     } catch {
       setNeedsOnboarding(true);
     } finally {
