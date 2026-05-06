@@ -17,7 +17,7 @@ module.exports = async function handler(req, res) {
 
   const bbox = `${numLon - halfW},${numLat - halfD},${numLon + halfW},${numLat + halfD}`;
   const url  = `https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/export` +
-    `?bbox=${bbox}&bboxSR=4326&size=2048,2048&imageSR=4326&format=png&f=image`;
+    `?bbox=${bbox}&bboxSR=4326&size=1024,1024&imageSR=4326&format=png&f=image`;
 
   try {
     const upstream = await fetch(url);
