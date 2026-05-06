@@ -687,9 +687,7 @@ export default function DesignEditor() {
   const mountRef       = useRef(null);
   const rendererRef    = useRef(null);
   const sceneRef       = useRef(null);
-  const orthoCamRef    = useRef(null);
-  const perspCamRef    = useRef(null);
-  const cameraRef      = useRef(null);  // active camera
+  const cameraRef      = useRef(null);
   const controlsRef    = useRef(null);
   const groupsRef      = useRef({});
   const groundGroupRef = useRef(null);
@@ -718,96 +716,80 @@ export default function DesignEditor() {
     }).catch(()=>setLoading(false));
   },[designId]);
 
-  // ── Three.js init (runs once) ─────────────────────────────────────────────
+  // ── Three.js init (runs once on mount) ───────────────────────────────────
   useEffect(()=>{
     const mount = mountRef.current;
     if(!mount) return;
 
-    // Scene
+    // Scene with sky background
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x1a2a1a);
+    scene.background = new THREE.Color(0x87CEEB);
+    scene.fog = new THREE.Fog(0x87CEEB, 500, 1500);
     sceneRef.current = scene;
 
-    const W = mount.clientWidth||800, H = mount.clientHeight||600;
-    const aspect = W/H;
+    // Single perspective camera — avoids orthographic degenerate-direction issues
+    const W = mount.clientWidth || mount.offsetWidth || 800;
+    const H = mount.clientHeight || mount.offsetHeight || 600;
+    const camera = new THREE.PerspectiveCamera(50, W/H, 0.5, 5000);
+    camera.position.set(0, 200, 180);
+    camera.lookAt(0, 0, 0);
+    cameraRef.current = camera;
 
-    // ── Orthographic camera (top-down design view) ─────────────────────────
-    const orthoH = Math.max(DEFAULT_LOT_W, DEFAULT_LOT_D) * 3;
-    const ortho = new THREE.OrthographicCamera(
-      -orthoH*aspect, orthoH*aspect, orthoH, -orthoH, 0.1, 5000
-    );
-    ortho.position.set(0, 500, 0.001);
-    ortho.lookAt(0, 0, 0);
-    ortho._size = orthoH;
-    orthoCamRef.current = ortho;
-
-    // ── Perspective camera (3D rendering view) ─────────────────────────────
-    const persp = new THREE.PerspectiveCamera(50, aspect, 0.1, 5000);
-    persp.position.set(0, 180, 220);
-    persp.lookAt(0, 0, 0);
-    perspCamRef.current = persp;
-
-    // Default: top-down
-    cameraRef.current = ortho;
-
-    // ── Renderer ──────────────────────────────────────────────────────────
+    // Renderer
     const renderer = new THREE.WebGLRenderer({antialias:true});
-    renderer.setSize(W, H);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.LinearToneMapping;
-    renderer.toneMappingExposure = 1.0;
+    // Size canvas to fill mount — must happen before appendChild
+    renderer.setSize(W, H);
     mount.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // ── OrbitControls ─────────────────────────────────────────────────────
-    const controls = new OrbitControls(ortho, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
+    // OrbitControls
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true; controls.dampingFactor = 0.08;
     controls.screenSpacePanning = true;
-    controls.minPolarAngle = 0;
     controls.maxPolarAngle = Math.PI / 2.05;
-    controls.zoomSpeed = 1.2;
+    controls.zoomSpeed = 1.4;
     controlsRef.current = controls;
 
-    // ── Lighting ──────────────────────────────────────────────────────────
-    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
-    const sun = new THREE.DirectionalLight(0xfff5e0, 1.8);
+    // Lighting
+    scene.add(new THREE.AmbientLight(0xffffff, 1.1));
+    const sun = new THREE.DirectionalLight(0xfff5e0, 1.6);
     sun.position.set(120, 200, 100); sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = -250; sun.shadow.camera.right = 250;
-    sun.shadow.camera.top  =  250; sun.shadow.camera.bottom = -250;
-    sun.shadow.camera.far  = 600;
+    sun.shadow.camera.left=-250; sun.shadow.camera.right=250;
+    sun.shadow.camera.top=250;  sun.shadow.camera.bottom=-250;
+    sun.shadow.camera.far=600;
     scene.add(sun);
-    scene.add(new THREE.HemisphereLight(0x87CEEB, 0x4a7c59, 0.5));
+    scene.add(new THREE.HemisphereLight(0x87CEEB, 0x4a7c59, 0.4));
 
-    // ── Ground ────────────────────────────────────────────────────────────
     buildAndAddGround(scene, DEFAULT_LOT_W, DEFAULT_LOT_D);
 
-    // ── Drag / click ──────────────────────────────────────────────────────
+    // Drag / click
     const dragPlane = new THREE.Plane(new THREE.Vector3(0,1,0), 0);
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     let dragging=false, dragId=null;
     const dragOffset = new THREE.Vector3();
 
-    const ndcFromEvent = e => {
+    const ndc = e => {
       const r = renderer.domElement.getBoundingClientRect();
       mouse.x =  ((e.clientX-r.left)/r.width )*2-1;
       mouse.y = -((e.clientY-r.top )/r.height)*2+1;
     };
     const planeHit = () => {
-      raycaster.setFromCamera(mouse, cameraRef.current);
+      raycaster.setFromCamera(mouse, camera);
       const pt = new THREE.Vector3();
       return raycaster.ray.intersectPlane(dragPlane, pt) ? pt : null;
     };
 
     const onPointerDown = e => {
       if(e.button!==0) return;
-      ndcFromEvent(e);
-      raycaster.setFromCamera(mouse, cameraRef.current);
+      ndc(e);
+      raycaster.setFromCamera(mouse, camera);
       const meshes=[];
       Object.values(groupsRef.current).forEach(g=>g.traverse(c=>{if(c.isMesh&&c.name!=="selection_ring")meshes.push(c);}));
       const hits = raycaster.intersectObjects(meshes, false);
@@ -833,18 +815,15 @@ export default function DesignEditor() {
         }
       } else { setSelectedId(null); selectedIdRef.current=null; }
     };
-
     const onPointerMove = e => {
-      if(!dragging||!dragId) return;
-      ndcFromEvent(e);
+      if(!dragging||!dragId) return; ndc(e);
       const pt=planeHit(); const gr=groupsRef.current[dragId];
       if(pt&&gr){
         let nx=pt.x+dragOffset.x, nz=pt.z+dragOffset.z;
-        if(snapRef.current){ const s=2; nx=Math.round(nx/s)*s; nz=Math.round(nz/s)*s; }
+        if(snapRef.current){const s=2;nx=Math.round(nx/s)*s;nz=Math.round(nz/s)*s;}
         gr.position.x=nx; gr.position.z=nz;
       }
     };
-
     const onPointerUp = () => {
       if(dragging&&dragId){
         const gr=groupsRef.current[dragId];
@@ -853,24 +832,20 @@ export default function DesignEditor() {
       dragging=false; dragId=null; controls.enabled=true;
       renderer.domElement.style.cursor="auto";
     };
-
     renderer.domElement.addEventListener("pointerdown", onPointerDown);
     renderer.domElement.addEventListener("pointermove", onPointerMove);
     renderer.domElement.addEventListener("pointerup",   onPointerUp);
 
     const onResize = () => {
-      if(!mount) return;
-      const W2=mount.clientWidth, H2=mount.clientHeight, a=W2/H2;
+      const W2=mount.clientWidth||mount.offsetWidth||800;
+      const H2=mount.clientHeight||mount.offsetHeight||600;
+      if(!W2||!H2) return;
+      camera.aspect = W2/H2; camera.updateProjectionMatrix();
       renderer.setSize(W2, H2);
-      // Update ortho
-      const oc=orthoCamRef.current, s=oc._size;
-      oc.left=-s*a; oc.right=s*a; oc.top=s; oc.bottom=-s;
-      oc.updateProjectionMatrix();
-      // Update persp
-      perspCamRef.current.aspect=a;
-      perspCamRef.current.updateProjectionMatrix();
     };
     window.addEventListener("resize", onResize);
+    // Trigger once in case initial size was wrong
+    setTimeout(onResize, 100);
 
     const animate = () => {
       animIdRef.current = requestAnimationFrame(animate);
@@ -880,7 +855,7 @@ export default function DesignEditor() {
         const ring=g.getObjectByName("selection_ring");
         if(ring) ring.visible = id===sel;
       });
-      renderer.render(scene, cameraRef.current);
+      renderer.render(scene, camera);
     };
     animate();
 
@@ -895,129 +870,89 @@ export default function DesignEditor() {
     };
   },[]);
 
-  // ── Switch view mode ──────────────────────────────────────────────────────
+  // ── Top / 3D view preset ─────────────────────────────────────────────────
   useEffect(()=>{
-    const controls=controlsRef.current;
-    const renderer=rendererRef.current;
-    const scene=sceneRef.current;
-    if(!controls||!renderer||!scene) return;
-    const target = controls.target.clone();
+    const cam=cameraRef.current; const controls=controlsRef.current;
+    if(!cam||!controls) return;
+    const {w,d}=lotRef.current;
+    const dist=Math.max(w,d);
     if(viewMode==="top"){
-      // Orthographic top-down
-      const oc=orthoCamRef.current;
-      oc.position.set(target.x, 500, target.z+0.001);
-      oc.lookAt(target);
-      controls.object = oc;
-      cameraRef.current = oc;
-      // Show satellite plane if present
-      if(satMeshRef.current) satMeshRef.current.visible=true;
-      scene.background = new THREE.Color(0x1a2a1a);
-      scene.fog = null;
+      // High angle looking straight down-ish (slight tilt to avoid gimbal)
+      cam.position.set(0, dist*2.8, dist*0.3);
+      cam.lookAt(0,0,0);
     } else {
-      // Perspective 3D
-      const pc=perspCamRef.current;
-      const dist=Math.max(lotRef.current.w, lotRef.current.d)*1.8;
-      pc.position.set(target.x, dist*0.8, target.z+dist);
-      pc.lookAt(target);
-      controls.object = pc;
-      cameraRef.current = pc;
-      scene.background = new THREE.Color(0x87CEEB);
-      scene.fog = new THREE.Fog(0x87CEEB, 400, 1200);
+      // 45° angle for full 3D view
+      cam.position.set(0, dist*1.2, dist*1.6);
+      cam.lookAt(0,0,0);
     }
-    controls.target.copy(target);
+    controls.target.set(0,0,0);
     controls.update();
   },[viewMode]);
 
   // ── Ground builder ────────────────────────────────────────────────────────
   function buildAndAddGround(scene, w, d){
     if(groundGroupRef.current){
-      groundGroupRef.current.traverse(o=>{
-        if(o.isMesh||o.isLine){o.geometry?.dispose(); o.material?.dispose();}
-      });
+      groundGroupRef.current.traverse(o=>{if(o.isMesh||o.isLine){o.geometry?.dispose();o.material?.dispose();}});
       scene.remove(groundGroupRef.current);
     }
-    const g = new THREE.Group();
-    // Base ground (dark grass for top view context)
-    const gMat = new THREE.MeshLambertMaterial({color:0x2d4a1e});
-    const gMesh = new THREE.Mesh(new THREE.PlaneGeometry(w*20, d*20), gMat);
-    gMesh.rotation.x = -Math.PI/2; gMesh.position.y=-0.5; gMesh.receiveShadow=true; g.add(gMesh);
-    // Hit plane (invisible, for raycasting)
-    const hit = new THREE.Mesh(
-      new THREE.PlaneGeometry(w*20, d*20),
-      new THREE.MeshBasicMaterial({visible:false, side:THREE.DoubleSide})
-    );
-    hit.rotation.x=-Math.PI/2; hit.name="ground_hit"; g.add(hit);
-    // Lot boundary
-    const pts=[
-      new THREE.Vector3(-w/2,.2,-d/2), new THREE.Vector3(w/2,.2,-d/2),
-      new THREE.Vector3(w/2,.2,d/2),   new THREE.Vector3(-w/2,.2,d/2),
-      new THREE.Vector3(-w/2,.2,-d/2),
-    ];
-    g.add(new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints(pts),
-      new THREE.LineBasicMaterial({color:0xF59E0B, linewidth:2})
-    ));
+    const g=new THREE.Group();
+    // Visible grass ground
+    const gMesh=new THREE.Mesh(new THREE.PlaneGeometry(w*30,d*30),new THREE.MeshLambertMaterial({color:0x3a5c2a}));
+    gMesh.rotation.x=-Math.PI/2; gMesh.position.y=-0.1; gMesh.receiveShadow=true; g.add(gMesh);
+    // Invisible hit plane for raycasting
+    const hit=new THREE.Mesh(new THREE.PlaneGeometry(w*30,d*30),new THREE.MeshBasicMaterial({visible:false,side:THREE.DoubleSide}));
+    hit.rotation.x=-Math.PI/2; g.add(hit);
+    // Lot boundary line
+    const pts=[new THREE.Vector3(-w/2,.2,-d/2),new THREE.Vector3(w/2,.2,-d/2),new THREE.Vector3(w/2,.2,d/2),new THREE.Vector3(-w/2,.2,d/2),new THREE.Vector3(-w/2,.2,-d/2)];
+    g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineBasicMaterial({color:0xF59E0B})));
     // Corner posts
-    const mMat = new THREE.MeshBasicMaterial({color:0xF59E0B});
     [[w/2,-d/2],[w/2,d/2],[-w/2,-d/2],[-w/2,d/2]].forEach(([cx,cz])=>{
-      const m = new THREE.Mesh(new THREE.CylinderGeometry(.4,.4,3,8), mMat);
+      const m=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,3,8),new THREE.MeshBasicMaterial({color:0xF59E0B}));
       m.position.set(cx,1.5,cz); g.add(m);
     });
-    scene.add(g);
-    groundGroupRef.current = g;
+    scene.add(g); groundGroupRef.current=g;
   }
 
-  // ── Load satellite into scene ─────────────────────────────────────────────
+  // ── Load satellite image into scene ───────────────────────────────────────
   useEffect(()=>{
-    const scene=sceneRef.current; if(!scene||!geoCoords) return;
+    const scene=sceneRef.current;
+    if(!scene||!geoCoords) return;
     setSatLoading(true); setSatLoaded(false);
     const url=`/api/satellite?lat=${geoCoords.lat}&lon=${geoCoords.lon}&w=${lotW}&d=${lotD}`;
-    // Satellite plane size matches proxy coverage (max of 1.5x lot or ~440ft)
     const latDPF=1/364000;
     const lonDPF=1/(364000*Math.cos(geoCoords.lat*Math.PI/180));
-    const halfWDeg=Math.max(lotW*1.5*lonDPF, 0.0012);
-    const halfDDeg=Math.max(lotD*1.5*latDPF, 0.0012);
-    const planeW=(halfWDeg*2)/lonDPF;
-    const planeD=(halfDDeg*2)/latDPF;
-
+    const planeW=(Math.max(lotW*1.5*lonDPF,0.0012)*2)/lonDPF;
+    const planeD=(Math.max(lotD*1.5*latDPF,0.0012)*2)/latDPF;
     fetchSatTexture(url).then(tex=>{
-      // Remove old satellite mesh
-      if(satMeshRef.current){ scene.remove(satMeshRef.current); satMeshRef.current.geometry?.dispose(); satMeshRef.current.material?.dispose(); }
+      if(satMeshRef.current){scene.remove(satMeshRef.current);satMeshRef.current.geometry?.dispose();satMeshRef.current.material?.dispose();}
       const mesh=new THREE.Mesh(
-        new THREE.PlaneGeometry(planeW, planeD),
-        new THREE.MeshBasicMaterial({map:tex, side:THREE.DoubleSide})
+        new THREE.PlaneGeometry(planeW,planeD),
+        new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide})
       );
-      mesh.rotation.x=-Math.PI/2; mesh.position.y=-0.2; mesh.name="satellite_plane";
-      scene.add(mesh);
-      satMeshRef.current=mesh;
-      setSatLoaded(true);
-      // Reset ortho camera size to frame the satellite image
-      const oc=orthoCamRef.current;
-      const mount=mountRef.current;
-      if(oc&&mount){
-        const newSize=Math.max(planeW,planeD)*0.6;
-        oc._size=newSize;
-        const a=mount.clientWidth/mount.clientHeight;
-        oc.left=-newSize*a; oc.right=newSize*a; oc.top=newSize; oc.bottom=-newSize;
-        oc.updateProjectionMatrix();
-        if(controlsRef.current){ controlsRef.current.target.set(0,0,0); controlsRef.current.update(); }
+      mesh.rotation.x=-Math.PI/2; mesh.position.y=0; mesh.name="satellite_plane";
+      scene.add(mesh); satMeshRef.current=mesh;
+      // Frame camera on satellite coverage
+      const cam=cameraRef.current; const controls=controlsRef.current;
+      if(cam&&controls){
+        const dist=Math.max(planeW,planeD);
+        cam.position.set(0,dist*1.5,dist*0.4);
+        cam.lookAt(0,0,0);
+        controls.target.set(0,0,0); controls.update();
       }
-    }).catch(()=>{ setSatLoaded(false); }).finally(()=>setSatLoading(false));
-  },[geoCoords, lotW, lotD]);
+      setSatLoaded(true);
+    }).catch(()=>setSatLoaded(false)).finally(()=>setSatLoading(false));
+  },[geoCoords,lotW,lotD]);
 
   // ── Sync lot → scene ─────────────────────────────────────────────────────
   useEffect(()=>{
     const scene=sceneRef.current; if(!scene) return;
     lotRef.current={w:lotW,d:lotD};
     buildAndAddGround(scene,lotW,lotD);
-    // Frame orthographic camera on the lot
-    const oc=orthoCamRef.current; const mount=mountRef.current;
-    if(oc&&mount){
-      const newSize=Math.max(lotW,lotD)*2.2;
-      oc._size=newSize;
-      const a=mount.clientWidth/mount.clientHeight;
-      oc.left=-newSize*a; oc.right=newSize*a; oc.top=newSize; oc.bottom=-newSize;
-      oc.updateProjectionMatrix();
+    const cam=cameraRef.current; const controls=controlsRef.current;
+    if(cam&&controls&&!satMeshRef.current){
+      const dist=Math.max(lotW,lotD);
+      cam.position.set(0,dist*2,dist*1.5);
+      cam.lookAt(0,0,0); controls.target.set(0,0,0); controls.update();
     }
   },[lotW,lotD]);
 
