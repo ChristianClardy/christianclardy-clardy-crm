@@ -16,7 +16,7 @@ export function TenantProvider({ children }) {
     if (!user?.id) { setLoading(false); return; }
     setLoading(true);
     try {
-      // Step 1: get membership row
+      // Get membership row — this is the only hard requirement
       const { data: mem, error: memErr } = await supabase
         .from('organization_members')
         .select('*')
@@ -32,20 +32,16 @@ export function TenantProvider({ children }) {
         return;
       }
 
-      // Step 2: get org details separately (avoids needing a FK constraint)
-      const { data: org, error: orgErr } = await supabase
-        .from('organizations')
-        .select('*')
-        .eq('id', mem.organization_id)
-        .maybeSingle();
-
-      if (orgErr || !org) {
-        setOrganization(null);
-        setMembership(null);
-        setCurrentOrgId(null);
-        setNeedsOnboarding(true);
-        return;
-      }
+      // Try to get org name — fall back to minimal object if table is inaccessible
+      let org = { id: mem.organization_id, name: 'My Organization' };
+      try {
+        const { data: orgData } = await supabase
+          .from('organizations')
+          .select('*')
+          .eq('id', mem.organization_id)
+          .maybeSingle();
+        if (orgData) org = orgData;
+      } catch {}
 
       setOrganization(org);
       setMembership(mem);
