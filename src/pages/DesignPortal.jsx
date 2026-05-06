@@ -105,10 +105,11 @@ function DesignDialog({ open, initial, clients, estimates, onClose, onSaved }) {
       };
       if (initial?.id) {
         await base44.entities.Design.update(initial.id, payload);
+        onSaved(null);
       } else {
-        await base44.entities.Design.create(payload);
+        const created = await base44.entities.Design.create(payload);
+        onSaved(created?.id || null);
       }
-      onSaved();
       onClose();
     } finally {
       setSaving(false);
@@ -330,22 +331,24 @@ function DesignCard({ design, linkedEstimate, onEdit, onDelete, onOpenEstimate, 
         </p>
       </div>
 
-      {/* Actions — appear on hover */}
-      <div className="border-t border-slate-100 px-4 py-2.5 flex items-center justify-between bg-slate-50 opacity-0 group-hover:opacity-100 transition-opacity">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onOpenEditor}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-600 hover:text-amber-800 transition-colors"
-          >
-            <Compass className="w-3.5 h-3.5" /> Open Designer
-          </button>
-          <button
-            onClick={onEdit}
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 transition-colors"
-          >
-            <Pencil className="w-3.5 h-3.5" /> Edit
-          </button>
-        </div>
+      {/* Open Designer — always visible primary action */}
+      <div className="px-5 pb-4">
+        <button
+          onClick={onOpenEditor}
+          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-sm font-semibold rounded-xl py-2.5 transition-all shadow-sm hover:shadow-md"
+        >
+          <Compass className="w-4 h-4" /> Open 2D Designer
+        </button>
+      </div>
+
+      {/* Secondary actions — edit / delete on hover */}
+      <div className="border-t border-slate-100 px-4 py-2 flex items-center justify-between bg-slate-50 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={onEdit}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-900 transition-colors"
+        >
+          <Pencil className="w-3.5 h-3.5" /> Edit Details
+        </button>
         <button
           onClick={onDelete}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-rose-400 hover:text-rose-600 transition-colors"
@@ -390,6 +393,11 @@ export default function DesignPortal() {
 
   const openNew  = () => { setEditing(null); setDialogOpen(true); };
   const openEdit = (d) => { setEditing(d);   setDialogOpen(true); };
+
+  const handleSaved = (newId) => {
+    loadData();
+    if (newId) navigate(createPageUrl(`DesignEditor?id=${newId}`));
+  };;
 
   const handleDelete = async (id) => {
     if (!confirm("Delete this design?")) return;
@@ -534,7 +542,7 @@ export default function DesignPortal() {
         clients={clients}
         estimates={estimates}
         onClose={() => setDialogOpen(false)}
-        onSaved={loadData}
+        onSaved={handleSaved}
       />
     </div>
   );
