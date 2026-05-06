@@ -3,6 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { pagesConfig } from './pages.config'
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { TenantProvider, useTenant } from '@/lib/TenantContext';
@@ -24,9 +25,11 @@ import PublicLeadForm from './pages/PublicLeadForm';
 import InvoiceDesigner from './pages/InvoiceDesigner';
 import Settings from './pages/Settings';
 import MaterialLibraryPage from './pages/MaterialLibrary';
-import DesignEditor from './pages/DesignEditor';
 import DesignPortal from './pages/DesignPortal';
 import DocuSignCallback from './pages/DocuSignCallback';
+
+// Lazy-load DesignEditor so Konva (canvas lib) only loads when that route is visited
+const DesignEditor = lazy(() => import('./pages/DesignEditor'));
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -110,7 +113,11 @@ const AuthenticatedApp = () => {
       <Route path="/Settings" element={<LayoutWrapper currentPageName="Settings"><Settings /></LayoutWrapper>} />
       <Route path="/MaterialLibrary" element={<LayoutWrapper currentPageName="MaterialLibrary"><MaterialLibraryPage /></LayoutWrapper>} />
       <Route path="/DesignPortal" element={<LayoutWrapper currentPageName="DesignPortal"><DesignPortal /></LayoutWrapper>} />
-      <Route path="/DesignEditor" element={<LayoutWrapper currentPageName="DesignPortal"><DesignEditor /></LayoutWrapper>} />
+      <Route path="/DesignEditor" element={
+        <Suspense fallback={<div className="fixed inset-0 flex items-center justify-center"><div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" /></div>}>
+          <LayoutWrapper currentPageName="DesignPortal"><DesignEditor /></LayoutWrapper>
+        </Suspense>
+      } />
       <Route path="/DocuSignCallback" element={<DocuSignCallback />} />
       <Route path="/lead-form" element={<PublicLeadForm />} />
       <Route path="*" element={<PageNotFound />} />
