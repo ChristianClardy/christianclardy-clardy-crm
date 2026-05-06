@@ -8,7 +8,7 @@ import {
   ArrowLeft, Save, Check, Loader2, Trash2, Copy, RotateCw,
   Sun, Layers, Fence, UtensilsCrossed, Waves, TreePine, Compass,
   ChevronDown, RulerIcon, Maximize2, Map, DollarSign, FileText,
-  Grid3x3, Eye,
+  Grid3x3, Eye, Satellite, Box,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -643,39 +643,62 @@ function Palette({ onAdd }) {
 // ─── Main Editor ────────────────────────────────────────────────────────────
 const DEFAULT_LOT_W = 80, DEFAULT_LOT_D = 100;
 
+// Load satellite image as a THREE.Texture via fetch+blob (reliable cross-origin)
+async function fetchSatTexture(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error("satellite fetch failed");
+  const blob = await r.blob();
+  const objUrl = URL.createObjectURL(blob);
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const tex = new THREE.Texture(img);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.needsUpdate = true;
+      URL.revokeObjectURL(objUrl);
+      res(tex);
+    };
+    img.onerror = () => { URL.revokeObjectURL(objUrl); rej(); };
+    img.src = objUrl;
+  });
+}
+
 export default function DesignEditor() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const designId = params.get("id");
 
-  const [design, setDesign]           = useState(null);
-  const [elements, setElements]       = useState([]);
-  const [selectedId, setSelectedId]   = useState(null);
-  const [lotW, setLotW]               = useState(DEFAULT_LOT_W);
-  const [lotD, setLotD]               = useState(DEFAULT_LOT_D);
-  const [geoCoords, setGeoCoords]     = useState(null);
-  const [showSat, setShowSat]         = useState(false);
-  const [satUrl, setSatUrl]           = useState(null);
-  const [satLoading, setSatLoading]   = useState(false);
+  const [design, setDesign]             = useState(null);
+  const [elements, setElements]         = useState([]);
+  const [selectedId, setSelectedId]     = useState(null);
+  const [lotW, setLotW]                 = useState(DEFAULT_LOT_W);
+  const [lotD, setLotD]                 = useState(DEFAULT_LOT_D);
+  const [geoCoords, setGeoCoords]       = useState(null);
   const [showLotSetup, setShowLotSetup] = useState(false);
-  const [activePanel, setActivePanel] = useState("elements");
-  const [saving, setSaving]           = useState(false);
-  const [saved, setSaved]             = useState(false);
-  const [loading, setLoading]         = useState(true);
-  const [snapGrid, setSnapGrid]       = useState(false);
+  const [activePanel, setActivePanel]   = useState("elements");
+  const [saving, setSaving]             = useState(false);
+  const [saved, setSaved]               = useState(false);
+  const [loading, setLoading]           = useState(true);
+  const [snapGrid, setSnapGrid]         = useState(false);
+  const [viewMode, setViewMode]         = useState("top");   // "top" | "3d"
+  const [satLoading, setSatLoading]     = useState(false);
+  const [satLoaded, setSatLoaded]       = useState(false);
 
-  const mountRef      = useRef(null);
-  const rendererRef   = useRef(null);
-  const sceneRef      = useRef(null);
-  const cameraRef     = useRef(null);
-  const controlsRef   = useRef(null);
-  const groupsRef     = useRef({});
+  const mountRef       = useRef(null);
+  const rendererRef    = useRef(null);
+  const sceneRef       = useRef(null);
+  const orthoCamRef    = useRef(null);
+  const perspCamRef    = useRef(null);
+  const cameraRef      = useRef(null);  // active camera
+  const controlsRef    = useRef(null);
+  const groupsRef      = useRef({});
   const groundGroupRef = useRef(null);
-  const selectedIdRef = useRef(null);
-  const elementsRef   = useRef([]);
-  const lotRef        = useRef({w:DEFAULT_LOT_W,d:DEFAULT_LOT_D});
-  const animIdRef     = useRef(null);
-  const snapRef       = useRef(false);
+  const satMeshRef     = useRef(null);
+  const selectedIdRef  = useRef(null);
+  const elementsRef    = useRef([]);
+  const lotRef         = useRef({w:DEFAULT_LOT_W,d:DEFAULT_LOT_D});
+  const animIdRef      = useRef(null);
+  const snapRef        = useRef(false);
 
   useEffect(()=>{ snapRef.current=snapGrid; },[snapGrid]);
 
@@ -689,31 +712,48 @@ export default function DesignEditor() {
         setElements(els); elementsRef.current=els;
         const lw=d.canvas_data.lotW||DEFAULT_LOT_W, ld=d.canvas_data.lotD||DEFAULT_LOT_D;
         setLotW(lw); setLotD(ld); lotRef.current={w:lw,d:ld};
-        if(d.canvas_data.geoCoords){setGeoCoords(d.canvas_data.geoCoords);setShowSat(true);}
+        if(d.canvas_data.geoCoords) setGeoCoords(d.canvas_data.geoCoords);
       } else { setShowLotSetup(true); }
       setLoading(false);
     }).catch(()=>setLoading(false));
   },[designId]);
 
-  // ── Three.js init ─────────────────────────────────────────────────────────
+  // ── Three.js init (runs once) ─────────────────────────────────────────────
   useEffect(()=>{
     const mount = mountRef.current;
     if(!mount) return;
 
+    // Scene
     const scene = new THREE.Scene();
-    // No background — HTML satellite image shows through the transparent canvas
-    scene.fog = new THREE.FogExp2(0x87CEEB, 0.002);
+    scene.background = new THREE.Color(0x1a2a1a);
     sceneRef.current = scene;
 
-    const W = mount.clientWidth, H = mount.clientHeight;
-    const camera = new THREE.PerspectiveCamera(45,W/H,0.1,2000);
-    camera.position.set(0,90,110); camera.lookAt(0,0,0);
-    cameraRef.current = camera;
+    const W = mount.clientWidth||800, H = mount.clientHeight||600;
+    const aspect = W/H;
 
-    const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
-    renderer.setSize(W,H);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
-    renderer.setClearColor(0x000000, 0);
+    // ── Orthographic camera (top-down design view) ─────────────────────────
+    const orthoH = Math.max(DEFAULT_LOT_W, DEFAULT_LOT_D) * 3;
+    const ortho = new THREE.OrthographicCamera(
+      -orthoH*aspect, orthoH*aspect, orthoH, -orthoH, 0.1, 5000
+    );
+    ortho.position.set(0, 500, 0.001);
+    ortho.lookAt(0, 0, 0);
+    ortho._size = orthoH;
+    orthoCamRef.current = ortho;
+
+    // ── Perspective camera (3D rendering view) ─────────────────────────────
+    const persp = new THREE.PerspectiveCamera(50, aspect, 0.1, 5000);
+    persp.position.set(0, 180, 220);
+    persp.lookAt(0, 0, 0);
+    perspCamRef.current = persp;
+
+    // Default: top-down
+    cameraRef.current = ortho;
+
+    // ── Renderer ──────────────────────────────────────────────────────────
+    const renderer = new THREE.WebGLRenderer({antialias:true});
+    renderer.setSize(W, H);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -722,60 +762,61 @@ export default function DesignEditor() {
     mount.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    const controls = new OrbitControls(camera,renderer.domElement);
-    controls.enableDamping=true; controls.dampingFactor=0.06;
-    controls.minPolarAngle=0.05; controls.maxPolarAngle=Math.PI/2.05;
-    controls.screenSpacePanning=false;
+    // ── OrbitControls ─────────────────────────────────────────────────────
+    const controls = new OrbitControls(ortho, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.screenSpacePanning = true;
+    controls.minPolarAngle = 0;
+    controls.maxPolarAngle = Math.PI / 2.05;
+    controls.zoomSpeed = 1.2;
     controlsRef.current = controls;
 
-    // Lighting
-    scene.add(new THREE.AmbientLight(0xfff8f0,0.65));
-    const sun = new THREE.DirectionalLight(0xfff5e0,2.0);
-    sun.position.set(100,150,80); sun.castShadow=true;
-    sun.shadow.mapSize.set(4096,4096);
-    sun.shadow.camera.near=1; sun.shadow.camera.far=600;
-    [-180,180,-180,180].forEach((v,i)=>{ if(i<2)sun.shadow.camera.left=sun.shadow.camera.right=v; else sun.shadow.camera.top=sun.shadow.camera.bottom=v; });
-    sun.shadow.camera.left=-180; sun.shadow.camera.right=180;
-    sun.shadow.camera.top=180; sun.shadow.camera.bottom=-180;
+    // ── Lighting ──────────────────────────────────────────────────────────
+    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+    const sun = new THREE.DirectionalLight(0xfff5e0, 1.8);
+    sun.position.set(120, 200, 100); sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.left = -250; sun.shadow.camera.right = 250;
+    sun.shadow.camera.top  =  250; sun.shadow.camera.bottom = -250;
+    sun.shadow.camera.far  = 600;
     scene.add(sun);
-    scene.add(new THREE.HemisphereLight(0x87CEEB,0x4a7c59,0.6));
+    scene.add(new THREE.HemisphereLight(0x87CEEB, 0x4a7c59, 0.5));
 
-    // Ground
-    buildAndAddGround(scene,DEFAULT_LOT_W,DEFAULT_LOT_D);
+    // ── Ground ────────────────────────────────────────────────────────────
+    buildAndAddGround(scene, DEFAULT_LOT_W, DEFAULT_LOT_D);
 
-    // Drag
-    const dragPlane = new THREE.Plane(new THREE.Vector3(0,1,0),0);
+    // ── Drag / click ──────────────────────────────────────────────────────
+    const dragPlane = new THREE.Plane(new THREE.Vector3(0,1,0), 0);
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     let dragging=false, dragId=null;
     const dragOffset = new THREE.Vector3();
 
-    const ndcFromEvent = e=>{
-      const r=renderer.domElement.getBoundingClientRect();
-      mouse.x=((e.clientX-r.left)/r.width)*2-1;
-      mouse.y=-((e.clientY-r.top)/r.height)*2+1;
+    const ndcFromEvent = e => {
+      const r = renderer.domElement.getBoundingClientRect();
+      mouse.x =  ((e.clientX-r.left)/r.width )*2-1;
+      mouse.y = -((e.clientY-r.top )/r.height)*2+1;
     };
-    const planeHit = ()=>{
-      raycaster.setFromCamera(mouse,camera);
-      const pt=new THREE.Vector3();
-      return raycaster.ray.intersectPlane(dragPlane,pt)?pt:null;
+    const planeHit = () => {
+      raycaster.setFromCamera(mouse, cameraRef.current);
+      const pt = new THREE.Vector3();
+      return raycaster.ray.intersectPlane(dragPlane, pt) ? pt : null;
     };
 
-    const onPointerDown = e=>{
+    const onPointerDown = e => {
       if(e.button!==0) return;
       ndcFromEvent(e);
-      raycaster.setFromCamera(mouse,camera);
+      raycaster.setFromCamera(mouse, cameraRef.current);
       const meshes=[];
       Object.values(groupsRef.current).forEach(g=>g.traverse(c=>{if(c.isMesh&&c.name!=="selection_ring")meshes.push(c);}));
-      const hits=raycaster.intersectObjects(meshes,false);
+      const hits = raycaster.intersectObjects(meshes, false);
       if(hits.length){
-        let hitId=null;
-        let obj=hits[0].object;
+        let hitId=null, obj=hits[0].object;
         while(obj){
           if(obj.userData?.elementId){hitId=obj.userData.elementId;break;}
           for(const[id,gr] of Object.entries(groupsRef.current)){if(obj===gr){hitId=id;break;}}
-          if(hitId)break;
-          obj=obj.parent;
+          if(hitId)break; obj=obj.parent;
         }
         if(!hitId){
           outer: for(const[id,gr] of Object.entries(groupsRef.current)){
@@ -787,157 +828,214 @@ export default function DesignEditor() {
           setSelectedId(hitId); selectedIdRef.current=hitId; setActivePanel("props");
           dragging=true; dragId=hitId; controls.enabled=false;
           renderer.domElement.style.cursor="grabbing";
-          const pt=planeHit();
-          const gr=groupsRef.current[hitId];
-          if(pt&&gr) dragOffset.set(gr.position.x-pt.x,0,gr.position.z-pt.z);
+          const pt=planeHit(); const gr=groupsRef.current[hitId];
+          if(pt&&gr) dragOffset.set(gr.position.x-pt.x, 0, gr.position.z-pt.z);
         }
-      } else {
-        setSelectedId(null); selectedIdRef.current=null;
-      }
+      } else { setSelectedId(null); selectedIdRef.current=null; }
     };
 
-    const onPointerMove = e=>{
+    const onPointerMove = e => {
       if(!dragging||!dragId) return;
       ndcFromEvent(e);
-      const pt=planeHit();
-      const gr=groupsRef.current[dragId];
+      const pt=planeHit(); const gr=groupsRef.current[dragId];
       if(pt&&gr){
         let nx=pt.x+dragOffset.x, nz=pt.z+dragOffset.z;
-        if(snapRef.current){
-          const snap=2;
-          nx=Math.round(nx/snap)*snap;
-          nz=Math.round(nz/snap)*snap;
-        }
+        if(snapRef.current){ const s=2; nx=Math.round(nx/s)*s; nz=Math.round(nz/s)*s; }
         gr.position.x=nx; gr.position.z=nz;
       }
     };
 
-    const onPointerUp = ()=>{
+    const onPointerUp = () => {
       if(dragging&&dragId){
         const gr=groupsRef.current[dragId];
-        if(gr){
-          const x=gr.position.x, z=gr.position.z;
-          setElements(prev=>prev.map(el=>el.id===dragId?{...el,x,z}:el));
-        }
+        if(gr) setElements(prev=>prev.map(el=>el.id===dragId?{...el,x:gr.position.x,z:gr.position.z}:el));
       }
       dragging=false; dragId=null; controls.enabled=true;
       renderer.domElement.style.cursor="auto";
     };
 
-    renderer.domElement.addEventListener("pointerdown",onPointerDown);
-    renderer.domElement.addEventListener("pointermove",onPointerMove);
-    renderer.domElement.addEventListener("pointerup",onPointerUp);
+    renderer.domElement.addEventListener("pointerdown", onPointerDown);
+    renderer.domElement.addEventListener("pointermove", onPointerMove);
+    renderer.domElement.addEventListener("pointerup",   onPointerUp);
 
-    const onResize=()=>{
-      if(!mount)return;
-      camera.aspect=mount.clientWidth/mount.clientHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(mount.clientWidth,mount.clientHeight);
+    const onResize = () => {
+      if(!mount) return;
+      const W2=mount.clientWidth, H2=mount.clientHeight, a=W2/H2;
+      renderer.setSize(W2, H2);
+      // Update ortho
+      const oc=orthoCamRef.current, s=oc._size;
+      oc.left=-s*a; oc.right=s*a; oc.top=s; oc.bottom=-s;
+      oc.updateProjectionMatrix();
+      // Update persp
+      perspCamRef.current.aspect=a;
+      perspCamRef.current.updateProjectionMatrix();
     };
-    window.addEventListener("resize",onResize);
+    window.addEventListener("resize", onResize);
 
-    const animate=()=>{
-      animIdRef.current=requestAnimationFrame(animate);
+    const animate = () => {
+      animIdRef.current = requestAnimationFrame(animate);
       controls.update();
       const sel=selectedIdRef.current;
       Object.entries(groupsRef.current).forEach(([id,g])=>{
         const ring=g.getObjectByName("selection_ring");
-        if(ring)ring.visible=id===sel;
+        if(ring) ring.visible = id===sel;
       });
-      renderer.render(scene,camera);
+      renderer.render(scene, cameraRef.current);
     };
     animate();
 
-    return ()=>{
+    return () => {
       cancelAnimationFrame(animIdRef.current);
-      window.removeEventListener("resize",onResize);
-      renderer.domElement.removeEventListener("pointerdown",onPointerDown);
-      renderer.domElement.removeEventListener("pointermove",onPointerMove);
-      renderer.domElement.removeEventListener("pointerup",onPointerUp);
+      window.removeEventListener("resize", onResize);
+      renderer.domElement.removeEventListener("pointerdown", onPointerDown);
+      renderer.domElement.removeEventListener("pointermove", onPointerMove);
+      renderer.domElement.removeEventListener("pointerup",   onPointerUp);
       controls.dispose(); renderer.dispose();
-      if(mount.contains(renderer.domElement))mount.removeChild(renderer.domElement);
+      if(mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
     };
   },[]);
 
+  // ── Switch view mode ──────────────────────────────────────────────────────
+  useEffect(()=>{
+    const controls=controlsRef.current;
+    const renderer=rendererRef.current;
+    const scene=sceneRef.current;
+    if(!controls||!renderer||!scene) return;
+    const target = controls.target.clone();
+    if(viewMode==="top"){
+      // Orthographic top-down
+      const oc=orthoCamRef.current;
+      oc.position.set(target.x, 500, target.z+0.001);
+      oc.lookAt(target);
+      controls.object = oc;
+      cameraRef.current = oc;
+      // Show satellite plane if present
+      if(satMeshRef.current) satMeshRef.current.visible=true;
+      scene.background = new THREE.Color(0x1a2a1a);
+      scene.fog = null;
+    } else {
+      // Perspective 3D
+      const pc=perspCamRef.current;
+      const dist=Math.max(lotRef.current.w, lotRef.current.d)*1.8;
+      pc.position.set(target.x, dist*0.8, target.z+dist);
+      pc.lookAt(target);
+      controls.object = pc;
+      cameraRef.current = pc;
+      scene.background = new THREE.Color(0x87CEEB);
+      scene.fog = new THREE.Fog(0x87CEEB, 400, 1200);
+    }
+    controls.target.copy(target);
+    controls.update();
+  },[viewMode]);
+
   // ── Ground builder ────────────────────────────────────────────────────────
-  function buildAndAddGround(scene,w,d){
+  function buildAndAddGround(scene, w, d){
     if(groundGroupRef.current){
-      groundGroupRef.current.traverse(o=>{if(o.isMesh||o.isLine){o.geometry?.dispose();o.material?.dispose();}});
+      groundGroupRef.current.traverse(o=>{
+        if(o.isMesh||o.isLine){o.geometry?.dispose(); o.material?.dispose();}
+      });
       scene.remove(groundGroupRef.current);
     }
-    const g=new THREE.Group();
-    // Invisible hit plane — needed for drag raycasting
-    const hitMat=new THREE.MeshBasicMaterial({visible:false,side:THREE.DoubleSide});
-    const hit=new THREE.Mesh(new THREE.PlaneGeometry(w*20,d*20),hitMat);
+    const g = new THREE.Group();
+    // Base ground (dark grass for top view context)
+    const gMat = new THREE.MeshLambertMaterial({color:0x2d4a1e});
+    const gMesh = new THREE.Mesh(new THREE.PlaneGeometry(w*20, d*20), gMat);
+    gMesh.rotation.x = -Math.PI/2; gMesh.position.y=-0.5; gMesh.receiveShadow=true; g.add(gMesh);
+    // Hit plane (invisible, for raycasting)
+    const hit = new THREE.Mesh(
+      new THREE.PlaneGeometry(w*20, d*20),
+      new THREE.MeshBasicMaterial({visible:false, side:THREE.DoubleSide})
+    );
     hit.rotation.x=-Math.PI/2; hit.name="ground_hit"; g.add(hit);
-    // Lot boundary outline
+    // Lot boundary
     const pts=[
-      new THREE.Vector3(-w/2,0.1,-d/2),new THREE.Vector3(w/2,0.1,-d/2),
-      new THREE.Vector3(w/2,0.1,d/2),new THREE.Vector3(-w/2,0.1,d/2),
-      new THREE.Vector3(-w/2,0.1,-d/2),
+      new THREE.Vector3(-w/2,.2,-d/2), new THREE.Vector3(w/2,.2,-d/2),
+      new THREE.Vector3(w/2,.2,d/2),   new THREE.Vector3(-w/2,.2,d/2),
+      new THREE.Vector3(-w/2,.2,-d/2),
     ];
-    const bndGeo=new THREE.BufferGeometry().setFromPoints(pts);
-    g.add(new THREE.Line(bndGeo,new THREE.LineBasicMaterial({color:0xF59E0B})));
-    // Corner markers
-    const mMat=new THREE.MeshBasicMaterial({color:0xF59E0B});
+    g.add(new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineBasicMaterial({color:0xF59E0B, linewidth:2})
+    ));
+    // Corner posts
+    const mMat = new THREE.MeshBasicMaterial({color:0xF59E0B});
     [[w/2,-d/2],[w/2,d/2],[-w/2,-d/2],[-w/2,d/2]].forEach(([cx,cz])=>{
-      const m=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.3,2,8),mMat);
-      m.position.set(cx,1,cz); g.add(m);
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(.4,.4,3,8), mMat);
+      m.position.set(cx,1.5,cz); g.add(m);
     });
     scene.add(g);
-    groundGroupRef.current=g;
+    groundGroupRef.current = g;
   }
 
-  // ── Fetch satellite as blob URL for HTML <img> background ────────────────
+  // ── Load satellite into scene ─────────────────────────────────────────────
   useEffect(()=>{
-    if(!showSat||!geoCoords){setSatUrl(null);return;}
-    setSatLoading(true);
+    const scene=sceneRef.current; if(!scene||!geoCoords) return;
+    setSatLoading(true); setSatLoaded(false);
     const url=`/api/satellite?lat=${geoCoords.lat}&lon=${geoCoords.lon}&w=${lotW}&d=${lotD}`;
-    let revoke=null;
-    fetch(url)
-      .then(r=>{if(!r.ok)throw new Error("proxy failed");return r.blob();})
-      .then(blob=>{
-        if(revoke)URL.revokeObjectURL(revoke);
-        revoke=URL.createObjectURL(blob);
-        setSatUrl(revoke);
-      })
-      .catch(()=>setSatUrl(null))
-      .finally(()=>setSatLoading(false));
-    return ()=>{ if(revoke)URL.revokeObjectURL(revoke); };
-  },[showSat,geoCoords,lotW,lotD]);
+    // Satellite plane size matches proxy coverage (max of 1.5x lot or ~440ft)
+    const latDPF=1/364000;
+    const lonDPF=1/(364000*Math.cos(geoCoords.lat*Math.PI/180));
+    const halfWDeg=Math.max(lotW*1.5*lonDPF, 0.0012);
+    const halfDDeg=Math.max(lotD*1.5*latDPF, 0.0012);
+    const planeW=(halfWDeg*2)/lonDPF;
+    const planeD=(halfDDeg*2)/latDPF;
 
-  // ── Sync lot → scene ground ───────────────────────────────────────────────
+    fetchSatTexture(url).then(tex=>{
+      // Remove old satellite mesh
+      if(satMeshRef.current){ scene.remove(satMeshRef.current); satMeshRef.current.geometry?.dispose(); satMeshRef.current.material?.dispose(); }
+      const mesh=new THREE.Mesh(
+        new THREE.PlaneGeometry(planeW, planeD),
+        new THREE.MeshBasicMaterial({map:tex, side:THREE.DoubleSide})
+      );
+      mesh.rotation.x=-Math.PI/2; mesh.position.y=-0.2; mesh.name="satellite_plane";
+      scene.add(mesh);
+      satMeshRef.current=mesh;
+      setSatLoaded(true);
+      // Reset ortho camera size to frame the satellite image
+      const oc=orthoCamRef.current;
+      const mount=mountRef.current;
+      if(oc&&mount){
+        const newSize=Math.max(planeW,planeD)*0.6;
+        oc._size=newSize;
+        const a=mount.clientWidth/mount.clientHeight;
+        oc.left=-newSize*a; oc.right=newSize*a; oc.top=newSize; oc.bottom=-newSize;
+        oc.updateProjectionMatrix();
+        if(controlsRef.current){ controlsRef.current.target.set(0,0,0); controlsRef.current.update(); }
+      }
+    }).catch(()=>{ setSatLoaded(false); }).finally(()=>setSatLoading(false));
+  },[geoCoords, lotW, lotD]);
+
+  // ── Sync lot → scene ─────────────────────────────────────────────────────
   useEffect(()=>{
-    const scene=sceneRef.current; if(!scene)return;
+    const scene=sceneRef.current; if(!scene) return;
     lotRef.current={w:lotW,d:lotD};
-    // Reposition camera to frame the lot
-    const cam=cameraRef.current;
-    if(cam){
-      const eye=Math.max(lotW,lotD)*1.4;
-      cam.position.set(0,eye,eye*0.9);
-      cam.lookAt(0,0,0);
-    }
     buildAndAddGround(scene,lotW,lotD);
+    // Frame orthographic camera on the lot
+    const oc=orthoCamRef.current; const mount=mountRef.current;
+    if(oc&&mount){
+      const newSize=Math.max(lotW,lotD)*2.2;
+      oc._size=newSize;
+      const a=mount.clientWidth/mount.clientHeight;
+      oc.left=-newSize*a; oc.right=newSize*a; oc.top=newSize; oc.bottom=-newSize;
+      oc.updateProjectionMatrix();
+    }
   },[lotW,lotD]);
 
   // ── Sync elements → scene ─────────────────────────────────────────────────
   useEffect(()=>{
     elementsRef.current=elements;
-    const scene=sceneRef.current; if(!scene)return;
+    const scene=sceneRef.current; if(!scene) return;
     const cur=new Set(elements.map(e=>e.id));
-    // Remove deleted
     Object.keys(groupsRef.current).forEach(id=>{
-      if(!cur.has(id)){scene.remove(groupsRef.current[id]);delete groupsRef.current[id];}
+      if(!cur.has(id)){scene.remove(groupsRef.current[id]); delete groupsRef.current[id];}
     });
-    // Add new / rebuild on prop changes
     elements.forEach(el=>{
       if(!groupsRef.current[el.id]){
         const gr=buildStructureGroup(el);
-        gr.position.set(el.x??0,0,el.z??0);
+        gr.position.set(el.x??0, 0, el.z??0);
         gr.rotation.y=(el.rotation||0)*Math.PI/180;
         scene.add(gr); groupsRef.current[el.id]=gr;
       } else {
-        // Update rotation live
         groupsRef.current[el.id].rotation.y=(el.rotation||0)*Math.PI/180;
       }
     });
@@ -945,14 +1043,14 @@ export default function DesignEditor() {
 
   // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave=useCallback(async()=>{
-    if(!designId)return;
+    if(!designId) return;
     setSaving(true);
     try {
       await base44.entities.Design.update(designId,{
         canvas_data:{elements:elementsRef.current,lotW,lotD,geoCoords},
       });
       setSaved(true); setTimeout(()=>setSaved(false),2500);
-    } finally{setSaving(false);}
+    } finally{ setSaving(false); }
   },[designId,lotW,lotD,geoCoords]);
 
   useEffect(()=>{
@@ -973,7 +1071,7 @@ export default function DesignEditor() {
     const id=`el_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const {w,d}=lotRef.current;
     const el={id,type:item.type,label:item.label,color:item.color,w:item.w,d:item.d,rotation:0,
-      x:(Math.random()-0.5)*w*0.45, z:(Math.random()-0.5)*d*0.45};
+      x:(Math.random()-0.5)*w*0.4, z:(Math.random()-0.5)*d*0.4};
     setElements(prev=>[...prev,el]);
     setSelectedId(id); selectedIdRef.current=id; setActivePanel("props");
   };
@@ -982,10 +1080,7 @@ export default function DesignEditor() {
     setElements(prev=>prev.map(el=>el.id===id?{...el,...patch}:el));
     if(patch.color!==undefined||patch.w!==undefined||patch.d!==undefined){
       const scene=sceneRef.current;
-      if(scene&&groupsRef.current[id]){
-        scene.remove(groupsRef.current[id]);
-        delete groupsRef.current[id];
-      }
+      if(scene&&groupsRef.current[id]){scene.remove(groupsRef.current[id]); delete groupsRef.current[id];}
     }
   };
 
@@ -993,11 +1088,11 @@ export default function DesignEditor() {
     setElements(prev=>prev.filter(el=>el.id!==id));
     setSelectedId(null); selectedIdRef.current=null;
     const scene=sceneRef.current;
-    if(scene&&groupsRef.current[id]){scene.remove(groupsRef.current[id]);delete groupsRef.current[id];}
+    if(scene&&groupsRef.current[id]){scene.remove(groupsRef.current[id]); delete groupsRef.current[id];}
   };
 
   const duplicateElement=id=>{
-    const src=elementsRef.current.find(el=>el.id===id); if(!src)return;
+    const src=elementsRef.current.find(el=>el.id===id); if(!src) return;
     const newId=`el_${Date.now()}`;
     setElements(prev=>[...prev,{...src,id:newId,x:src.x+5,z:src.z+5}]);
     setSelectedId(newId); selectedIdRef.current=newId;
@@ -1013,16 +1108,16 @@ export default function DesignEditor() {
   );
 
   const PANELS=[
-    {key:"elements",label:"Elements",icon:Compass},
-    {key:"props",label:"Properties",icon:Fence},
-    {key:"estimate",label:"Estimate",icon:DollarSign},
+    {key:"elements", label:"Elements", icon:Compass},
+    {key:"props",    label:"Properties", icon:Fence},
+    {key:"estimate", label:"Estimate",  icon:DollarSign},
   ];
 
   return (
     <div className="fixed inset-0 flex flex-col overflow-hidden bg-slate-900" style={{fontFamily:"system-ui,sans-serif"}}>
 
       {/* Top bar */}
-      <div className="h-13 bg-slate-950 border-b border-slate-700 flex items-center px-4 gap-3 shrink-0 z-20">
+      <div className="h-13 bg-slate-950 border-b border-slate-700 flex items-center px-4 gap-2 shrink-0 z-20">
         <button onClick={()=>navigate(createPageUrl("DesignPortal"))}
           className="flex items-center gap-1.5 text-sm text-slate-300 hover:text-white transition-colors shrink-0">
           <ArrowLeft className="w-4 h-4"/> Back
@@ -1033,22 +1128,32 @@ export default function DesignEditor() {
           {design?.client_name&&<p className="text-[10px] text-slate-400 truncate">{design.client_name} · {design.address||""}</p>}
         </div>
 
-        {/* Tools */}
+        {/* View toggle */}
+        <div className="flex rounded-lg overflow-hidden border border-slate-600 shrink-0">
+          <button onClick={()=>setViewMode("top")}
+            className={cn("flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors",
+              viewMode==="top"?"bg-amber-500 text-white":"bg-slate-700 text-slate-300 hover:bg-slate-600")}>
+            <Eye className="w-3.5 h-3.5"/> Top View
+          </button>
+          <button onClick={()=>setViewMode("3d")}
+            className={cn("flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors border-l border-slate-600",
+              viewMode==="3d"?"bg-amber-500 text-white":"bg-slate-700 text-slate-300 hover:bg-slate-600")}>
+            <Box className="w-3.5 h-3.5"/> 3D View
+          </button>
+        </div>
+
         <button onClick={()=>setSnapGrid(s=>!s)}
           className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
             snapGrid?"bg-blue-600 text-white":"bg-slate-700 text-slate-300 hover:bg-slate-600")}>
           <Grid3x3 className="w-3.5 h-3.5"/> Snap
         </button>
 
-        <button onClick={()=>{if(!geoCoords){setShowLotSetup(true);return;}setShowSat(s=>!s);}}
-          className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
-            showSat&&geoCoords?"bg-emerald-600 text-white":"bg-slate-700 text-slate-300 hover:bg-slate-600")}>
-          <Eye className="w-3.5 h-3.5"/> {showSat&&geoCoords?"Aerial On":"Aerial"}
-        </button>
-
         <button onClick={()=>setShowLotSetup(true)}
-          className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white px-2.5 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 transition-colors">
-          <RulerIcon className="w-3.5 h-3.5"/> {lotW}′×{lotD}′
+          className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
+            geoCoords&&satLoaded?"bg-emerald-700 text-white":"bg-slate-700 text-slate-300 hover:bg-slate-600")}>
+          <RulerIcon className="w-3.5 h-3.5"/>
+          {satLoading ? <Loader2 className="w-3 h-3 animate-spin"/> : null}
+          {geoCoords&&satLoaded ? "Aerial ✓" : geoCoords ? "Aerial…" : `${lotW}′×${lotD}′`}
         </button>
 
         {totalCost>0&&(
@@ -1084,41 +1189,33 @@ export default function DesignEditor() {
           </div>
         </div>
 
-        {/* 3D Canvas */}
-        <div className="flex-1 relative overflow-hidden bg-slate-800">
-          {/* Satellite photo as HTML background — never goes through Three.js */}
-          {satUrl && (
-            <img
-              src={satUrl}
-              alt="aerial"
-              className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
-              style={{opacity:0.92}}
-            />
-          )}
-          {!satUrl && (
-            <div className="absolute inset-0 bg-gradient-to-br from-green-900/60 to-green-800/40 pointer-events-none"/>
-          )}
-          {satLoading && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/70 text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-2 z-10">
+        {/* Canvas viewport */}
+        <div className="flex-1 relative overflow-hidden">
+          <div ref={mountRef} className="w-full h-full"/>
+          {satLoading&&(
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/70 text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-2 pointer-events-none">
               <Loader2 className="w-3.5 h-3.5 animate-spin"/>Loading aerial photo…
             </div>
           )}
-          {/* Transparent Three.js canvas for 3D structures */}
-          <div ref={mountRef} className="absolute inset-0 w-full h-full"/>
+          {!geoCoords&&!satLoading&&(
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/60 text-slate-300 text-xs px-3 py-1.5 rounded-full pointer-events-none select-none">
+              Click the lot button above to enter an address and load the aerial photo
+            </div>
+          )}
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white text-[10px] px-4 py-1.5 rounded-full pointer-events-none select-none backdrop-blur-sm">
-            Scroll: zoom · Left drag: orbit · Right drag: pan · Click element to select/drag
+            {viewMode==="top"
+              ? "Scroll to zoom · Drag to pan · Click palette to add elements · Drag elements to move"
+              : "Scroll to zoom · Left drag to orbit · Right drag to pan · Click elements to select"}
           </div>
         </div>
 
         {/* Right layers */}
         <div className="w-40 bg-slate-950 border-l border-slate-700 flex flex-col shrink-0 text-white">
-          <div className="p-3 border-b border-slate-700">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Project</p>
-            <div className="space-y-2">
-              <div><p className="text-[10px] text-slate-500">Elements</p><p className="text-xl font-bold">{elements.length}</p></div>
-              <div><p className="text-[10px] text-slate-500">Lot</p><p className="text-xs font-semibold text-slate-300">{lotW}′ × {lotD}′</p></div>
-              {totalCost>0&&<div><p className="text-[10px] text-slate-500">Est. Total</p><p className="text-xs font-bold text-amber-400">${totalCost.toLocaleString()}</p></div>}
-            </div>
+          <div className="p-3 border-b border-slate-700 space-y-2">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Project</p>
+            <div><p className="text-[10px] text-slate-500">Elements</p><p className="text-xl font-bold">{elements.length}</p></div>
+            <div><p className="text-[10px] text-slate-500">Lot</p><p className="text-xs font-semibold text-slate-300">{lotW}′ × {lotD}′</p></div>
+            {totalCost>0&&<div><p className="text-[10px] text-slate-500">Est. Total</p><p className="text-xs font-bold text-amber-400">${totalCost.toLocaleString()}</p></div>}
           </div>
           <div className="flex-1 overflow-y-auto p-2">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600 px-1 py-1.5">Layers</p>
@@ -1138,8 +1235,8 @@ export default function DesignEditor() {
       {showLotSetup&&(
         <LotSetup lotW={lotW} lotD={lotD} designAddress={design?.address||""}
           onApply={(w,d,coords)=>{
-            setLotW(w);setLotD(d);lotRef.current={w,d};
-            if(coords){setGeoCoords(coords);setShowSat(true);}
+            setLotW(w); setLotD(d); lotRef.current={w,d};
+            if(coords) setGeoCoords(coords);
             setShowLotSetup(false);
           }}
           onClose={()=>setShowLotSetup(false)}
