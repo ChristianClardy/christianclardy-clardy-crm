@@ -3,7 +3,24 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { pagesConfig } from './pages.config'
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, Component } from 'react';
+
+class DesignEditorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  render() {
+    if (this.state.error) return (
+      <div className="fixed inset-0 flex items-center justify-center bg-slate-50 p-8 text-center">
+        <div>
+          <p className="text-lg font-semibold text-slate-800 mb-2">Design Editor failed to load</p>
+          <p className="text-sm text-slate-500 mb-4">{this.state.error?.message || "Unknown error"}</p>
+          <button onClick={() => window.history.back()} className="text-sm text-amber-600 underline">Go back</button>
+        </div>
+      </div>
+    );
+    return this.props.children;
+  }
+}
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { TenantProvider, useTenant } from '@/lib/TenantContext';
@@ -114,9 +131,11 @@ const AuthenticatedApp = () => {
       <Route path="/MaterialLibrary" element={<LayoutWrapper currentPageName="MaterialLibrary"><MaterialLibraryPage /></LayoutWrapper>} />
       <Route path="/DesignPortal" element={<LayoutWrapper currentPageName="DesignPortal"><DesignPortal /></LayoutWrapper>} />
       <Route path="/DesignEditor" element={
-        <Suspense fallback={<div className="fixed inset-0 flex items-center justify-center"><div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" /></div>}>
-          <LayoutWrapper currentPageName="DesignPortal"><DesignEditor /></LayoutWrapper>
-        </Suspense>
+        <DesignEditorBoundary>
+          <Suspense fallback={<div className="fixed inset-0 flex items-center justify-center"><div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" /></div>}>
+            <LayoutWrapper currentPageName="DesignPortal"><DesignEditor /></LayoutWrapper>
+          </Suspense>
+        </DesignEditorBoundary>
       } />
       <Route path="/DocuSignCallback" element={<DocuSignCallback />} />
       <Route path="/lead-form" element={<PublicLeadForm />} />

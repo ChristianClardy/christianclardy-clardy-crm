@@ -79,6 +79,7 @@ function TypeChip({ typeKey, small = false }) {
 function DesignDialog({ open, initial, clients, estimates, onClose, onSaved }) {
   const [form, setForm] = useState(initial || EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   useEffect(() => { setForm(initial || EMPTY_FORM); }, [initial]);
 
@@ -93,6 +94,7 @@ function DesignDialog({ open, initial, clients, estimates, onClose, onSaved }) {
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
+    setSaveError("");
     try {
       const payload = {
         title:         form.title,
@@ -111,6 +113,8 @@ function DesignDialog({ open, initial, clients, estimates, onClose, onSaved }) {
         onSaved(created?.id || null);
       }
       onClose();
+    } catch (err) {
+      setSaveError(err?.message || "Failed to save design. Make sure the designs table exists in Supabase.");
     } finally {
       setSaving(false);
     }
@@ -244,6 +248,9 @@ function DesignDialog({ open, initial, clients, estimates, onClose, onSaved }) {
             />
           </div>
 
+          {saveError && (
+            <p className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{saveError}</p>
+          )}
           <div className="flex justify-end gap-2 pt-1 border-t border-slate-100">
             <Button type="button" variant="outline" size="sm" onClick={onClose}>Cancel</Button>
             <Button
