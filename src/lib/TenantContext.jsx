@@ -22,6 +22,7 @@ export function TenantProvider({ children }) {
         .select('*')
         .eq('user_id', user.id)
         .eq('status', 'active')
+        .limit(1)
         .maybeSingle();
 
       if (memErr || !mem?.organization_id) {
