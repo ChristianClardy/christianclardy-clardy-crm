@@ -1037,12 +1037,6 @@ export default function DesignEditor() {
   const selectedEl=elements.find(el=>el.id===selectedId)||null;
   const totalCost=elements.reduce((s,el)=>s+calcElementCost(el).total,0);
 
-  if(loading) return (
-    <div className="fixed inset-0 flex items-center justify-center bg-slate-900">
-      <Loader2 className="w-8 h-8 animate-spin text-amber-500"/>
-    </div>
-  );
-
   const PANELS=[
     {key:"elements", label:"Elements", icon:Compass},
     {key:"props",    label:"Properties", icon:Fence},
@@ -1128,6 +1122,11 @@ export default function DesignEditor() {
         {/* Canvas viewport */}
         <div className="flex-1 relative overflow-hidden">
           <div ref={mountRef} className="w-full h-full"/>
+          {loading&&(
+            <div className="absolute inset-0 flex items-center justify-center bg-slate-900 z-30">
+              <Loader2 className="w-8 h-8 animate-spin text-amber-500"/>
+            </div>
+          )}
           {satLoading&&(
             <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/70 text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-2 pointer-events-none">
               <Loader2 className="w-3.5 h-3.5 animate-spin"/>Loading aerial photo…
