@@ -877,12 +877,16 @@ export default function DesignEditor() {
   const [satLoading, setSatLoading]     = useState(false);
   const [satLoaded, setSatLoaded]       = useState(false);
   const [svMode, setSvMode]             = useState(false);   // street view overlay mode
-  const [svHeading, setSvHeading]       = useState(180);     // compass heading (0=N,90=E,180=S,270=W)
-  const [svPitch, setSvPitch]           = useState(-5);      // tilt: 0=horizontal,-90=down
-  const [svFov, setSvFov]               = useState(90);      // field of view (zoom)
-  const [svUrl, setSvUrl]               = useState(null);    // current proxy image URL
+  const [svHeading, setSvHeading]       = useState(180);
+  const [svPitch, setSvPitch]           = useState(-5);
+  const [svFov, setSvFov]               = useState(90);
+  const [svUrl, setSvUrl]               = useState(null);
   const [svLoading, setSvLoading]       = useState(false);
   const [svError, setSvError]           = useState(null);
+  // Photo upload overlay mode — user's own photo as background
+  const [photoMode, setPhotoMode]       = useState(false);
+  const [photoUrl, setPhotoUrl]         = useState(null);    // blob URL of uploaded image
+  const photoInputRef                   = useRef(null);
 
   const needsRenderRef  = useRef(true);
   const invalidate      = () => { needsRenderRef.current = true; };
@@ -1151,6 +1155,42 @@ export default function DesignEditor() {
       setSvLoading(false);
     }
   },[geoCoords,svHeading,svPitch,svFov]);
+
+  // ── Photo upload: enter overlay mode with user's own photo ───────────────
+  const handlePhotoUpload = useCallback((e)=>{
+    const file = e.target.files?.[0]; if(!file) return;
+    if(photoUrl) URL.revokeObjectURL(photoUrl);
+    const url = URL.createObjectURL(file);
+    setPhotoUrl(url);
+    setPhotoMode(true);
+    setSvMode(false); // turn off street view if active
+  },[photoUrl]);
+
+  useEffect(()=>{
+    const scene=sceneRef.current; if(!scene) return;
+    const ground=groundGroupRef.current; const sat=satMeshRef.current;
+    const cam=cameraRef.current; const ctrl=controlsRef.current;
+    if(photoMode){
+      scene.background=null; scene.fog=null;
+      if(ground) ground.visible=false;
+      if(sat) sat.visible=false;
+      if(cam&&ctrl){
+        const {w,d,ox,oz}=lotRef.current;
+        cam.position.set(ox, 6, oz+d*0.55+20);
+        cam.lookAt(ox,3,oz-d*0.1);
+        ctrl.target.set(ox,3,oz-d*0.1);
+        ctrl.maxPolarAngle=Math.PI*0.85;
+        ctrl.update();
+      }
+      invalidate();
+    } else if(!svMode){
+      scene.background=new THREE.Color(0x87CEEB);
+      scene.fog=new THREE.Fog(0x87CEEB,500,1500);
+      if(ground) ground.visible=true;
+      if(sat) sat.visible=true;
+      invalidate();
+    }
+  },[photoMode]);
 
   // ── Street view: toggle Three.js transparent/opaque mode ─────────────────
   useEffect(()=>{
@@ -1453,7 +1493,20 @@ export default function DesignEditor() {
               ?"bg-sky-500 text-white border-sky-400"
               :"bg-slate-700 text-slate-300 hover:bg-slate-600 border-slate-600")}>
           <Camera className="w-3.5 h-3.5"/>
-          {svMode?"Exit Photo":"Street View"}
+          {svMode?"Exit Street View":"Street View"}
+        </button>
+
+        {/* Upload your own photo (backyard, front, etc.) */}
+        <input ref={photoInputRef} type="file" accept="image/*" className="hidden"
+          onChange={handlePhotoUpload}/>
+        <button
+          onClick={()=>{ if(photoMode){ setPhotoMode(false); } else { photoInputRef.current?.click(); } }}
+          className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors border",
+            photoMode
+              ?"bg-emerald-500 text-white border-emerald-400"
+              :"bg-slate-700 text-slate-300 hover:bg-slate-600 border-slate-600")}>
+          <Download className="w-3.5 h-3.5 rotate-180"/>
+          {photoMode?"Exit Photo":"Upload Photo"}
         </button>
 
         {totalCost>0&&(
@@ -1491,6 +1544,16 @@ export default function DesignEditor() {
 
         {/* Canvas viewport */}
         <div className="flex-1 relative overflow-hidden bg-slate-900">
+
+          {/* Uploaded photo background */}
+          {photoMode && photoUrl && (
+            <img src={photoUrl} className="absolute inset-0 w-full h-full object-cover z-0" alt="Property photo"/>
+          )}
+          {photoMode && !photoUrl && (
+            <div className="absolute inset-0 flex items-center justify-center z-0 bg-slate-800">
+              <p className="text-slate-400 text-sm">No photo loaded</p>
+            </div>
+          )}
 
           {/* Street view background photo — sits behind transparent Three.js canvas */}
           {svMode && svUrl && (
@@ -1584,7 +1647,12 @@ export default function DesignEditor() {
           )}
           {svMode&&svUrl&&(
             <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-sky-600/90 text-white text-xs px-4 py-2 rounded-full pointer-events-none select-none font-semibold shadow-lg flex items-center gap-2">
-              <Camera className="w-3.5 h-3.5"/> Street View Overlay — Design elements render on top of the real photo
+              <Camera className="w-3.5 h-3.5"/> Street View — Add elements from palette to overlay on the photo
+            </div>
+          )}
+          {photoMode&&photoUrl&&(
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-emerald-600/90 text-white text-xs px-4 py-2 rounded-full pointer-events-none select-none font-semibold shadow-lg flex items-center gap-2">
+              <Download className="w-3.5 h-3.5 rotate-180"/> Photo Overlay — Add elements from palette · Orbit to match your camera angle
             </div>
           )}
           {!geoCoords&&!satLoading&&!lotEditMode&&!svMode&&(
@@ -1593,11 +1661,13 @@ export default function DesignEditor() {
             </div>
           )}
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-black/60 text-white text-[10px] px-4 py-1.5 rounded-full pointer-events-none select-none backdrop-blur-sm">
-            {svMode
-              ? "Adjust heading/pitch/zoom below to face the house · Add design elements from the palette"
-              : viewMode==="top"
-                ? "Scroll to zoom · Drag to pan · Click palette to add elements · Drag elements to move"
-                : "Scroll to zoom · Left drag to orbit · Right drag to pan · Click elements to select"}
+            {photoMode
+              ? "Orbit to match your photo angle · Add elements from palette to see them on your property"
+              : svMode
+                ? "Adjust heading/pitch/zoom · Add elements from the palette to overlay on the photo"
+                : viewMode==="top"
+                  ? "Scroll to zoom · Drag to pan · Click palette to add elements · Drag elements to move"
+                  : "Scroll to zoom · Left drag to orbit · Right drag to pan · Click elements to select"}
           </div>
         </div>
 
