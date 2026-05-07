@@ -1157,14 +1157,29 @@ export default function DesignEditor() {
   },[geoCoords,svHeading,svPitch,svFov]);
 
   // ── Photo upload: enter overlay mode with user's own photo ───────────────
-  const handlePhotoUpload = useCallback((e)=>{
-    const file = e.target.files?.[0]; if(!file) return;
+  const applyPhotoFile = useCallback((file)=>{
+    if(!file||!file.type.startsWith('image/')) return;
     if(photoUrl) URL.revokeObjectURL(photoUrl);
-    const url = URL.createObjectURL(file);
-    setPhotoUrl(url);
+    setPhotoUrl(URL.createObjectURL(file));
     setPhotoMode(true);
-    setSvMode(false); // turn off street view if active
+    setSvMode(false);
   },[photoUrl]);
+
+  const handlePhotoUpload = useCallback((e)=>{
+    applyPhotoFile(e.target.files?.[0]);
+  },[applyPhotoFile]);
+
+  const [dragOver, setDragOver] = useState(false);
+
+  const onDropzoneDragOver = useCallback((e)=>{
+    e.preventDefault();
+    if(e.dataTransfer.types.includes('Files')) setDragOver(true);
+  },[]);
+  const onDropzoneDragLeave = useCallback(()=>setDragOver(false),[]);
+  const onDropzoneDrop = useCallback((e)=>{
+    e.preventDefault(); setDragOver(false);
+    applyPhotoFile(e.dataTransfer.files?.[0]);
+  },[applyPhotoFile]);
 
   useEffect(()=>{
     const scene=sceneRef.current; if(!scene) return;
@@ -1543,7 +1558,19 @@ export default function DesignEditor() {
         </div>
 
         {/* Canvas viewport */}
-        <div className="flex-1 relative overflow-hidden bg-slate-900">
+        <div className="flex-1 relative overflow-hidden bg-slate-900"
+          onDragOver={onDropzoneDragOver}
+          onDragLeave={onDropzoneDragLeave}
+          onDrop={onDropzoneDrop}>
+
+          {/* Drag-and-drop highlight */}
+          {dragOver&&(
+            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-emerald-900/70 backdrop-blur-sm border-4 border-dashed border-emerald-400 pointer-events-none">
+              <Download className="w-16 h-16 text-emerald-300 rotate-180 mb-3"/>
+              <p className="text-emerald-200 text-xl font-bold">Drop photo to load</p>
+              <p className="text-emerald-400 text-sm mt-1">JPG, PNG, HEIC — any image</p>
+            </div>
+          )}
 
           {/* Uploaded photo background */}
           {photoMode && photoUrl && (
