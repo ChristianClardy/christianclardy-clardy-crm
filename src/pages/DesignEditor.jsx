@@ -673,6 +673,9 @@ export default function DesignEditor() {
   const [selectedId, setSelectedId]     = useState(null);
   const [lotW, setLotW]                 = useState(DEFAULT_LOT_W);
   const [lotD, setLotD]                 = useState(DEFAULT_LOT_D);
+  const [lotOX, setLotOX]               = useState(0);   // lot center X offset in scene-feet
+  const [lotOZ, setLotOZ]               = useState(0);   // lot center Z offset in scene-feet
+  const [lotEditMode, setLotEditMode]   = useState(false);
   const [geoCoords, setGeoCoords]       = useState(null);
   const [showLotSetup, setShowLotSetup] = useState(false);
   const [activePanel, setActivePanel]   = useState("elements");
@@ -684,19 +687,21 @@ export default function DesignEditor() {
   const [satLoading, setSatLoading]     = useState(false);
   const [satLoaded, setSatLoaded]       = useState(false);
 
-  const mountRef       = useRef(null);
-  const rendererRef    = useRef(null);
-  const sceneRef       = useRef(null);
-  const cameraRef      = useRef(null);
-  const controlsRef    = useRef(null);
-  const groupsRef      = useRef({});
-  const groundGroupRef = useRef(null);
-  const satMeshRef     = useRef(null);
-  const selectedIdRef  = useRef(null);
-  const elementsRef    = useRef([]);
-  const lotRef         = useRef({w:DEFAULT_LOT_W,d:DEFAULT_LOT_D});
-  const animIdRef      = useRef(null);
-  const snapRef        = useRef(false);
+  const mountRef        = useRef(null);
+  const rendererRef     = useRef(null);
+  const sceneRef        = useRef(null);
+  const cameraRef       = useRef(null);
+  const controlsRef     = useRef(null);
+  const groupsRef       = useRef({});
+  const groundGroupRef  = useRef(null);
+  const satMeshRef      = useRef(null);
+  const selectedIdRef   = useRef(null);
+  const elementsRef     = useRef([]);
+  const lotRef          = useRef({w:DEFAULT_LOT_W,d:DEFAULT_LOT_D,ox:0,oz:0});
+  const lotEditModeRef  = useRef(false);
+  const handleMeshesRef = useRef([]);
+  const animIdRef       = useRef(null);
+  const snapRef         = useRef(false);
 
   useEffect(()=>{ snapRef.current=snapGrid; },[snapGrid]);
 
@@ -709,7 +714,9 @@ export default function DesignEditor() {
         const els=d.canvas_data.elements||[];
         setElements(els); elementsRef.current=els;
         const lw=d.canvas_data.lotW||DEFAULT_LOT_W, ld=d.canvas_data.lotD||DEFAULT_LOT_D;
-        setLotW(lw); setLotD(ld); lotRef.current={w:lw,d:ld};
+        const ox=d.canvas_data.lotOX||0, oz=d.canvas_data.lotOZ||0;
+        setLotW(lw); setLotD(ld); setLotOX(ox); setLotOZ(oz);
+        lotRef.current={w:lw,d:ld,ox,oz};
         if(d.canvas_data.geoCoords) setGeoCoords(d.canvas_data.geoCoords);
       } else { setShowLotSetup(true); }
       setLoading(false);
@@ -767,13 +774,12 @@ export default function DesignEditor() {
     scene.add(sun);
     scene.add(new THREE.HemisphereLight(0x87CEEB, 0x4a7c59, 0.4));
 
-    buildAndAddGround(scene, DEFAULT_LOT_W, DEFAULT_LOT_D);
-
     // Drag / click
     const dragPlane = new THREE.Plane(new THREE.Vector3(0,1,0), 0);
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     let dragging=false, dragId=null;
+    let lotDragging=false, lotDragType=null, lotDragFixed=null;
     const dragOffset = new THREE.Vector3();
 
     const ndc = e => {
@@ -791,6 +797,27 @@ export default function DesignEditor() {
       if(e.button!==0) return;
       ndc(e);
       raycaster.setFromCamera(mouse, camera);
+
+      // ── Lot handle drag ─────────────────────────────────────────────────────
+      if(lotEditModeRef.current && handleMeshesRef.current.length>0){
+        const hHits=raycaster.intersectObjects(handleMeshesRef.current,false);
+        if(hHits.length){
+          const type=hHits[0].object.userData.handleType;
+          lotDragging=true; lotDragType=type; controls.enabled=false;
+          renderer.domElement.style.cursor="crosshair";
+          if(type!=="center"){
+            const {w,d,ox,oz}=lotRef.current;
+            const opp={NW:{x:ox+w/2,z:oz+d/2},NE:{x:ox-w/2,z:oz+d/2},SW:{x:ox+w/2,z:oz-d/2},SE:{x:ox-w/2,z:oz-d/2}};
+            lotDragFixed=opp[type];
+          } else {
+            const pt=planeHit();
+            if(pt) dragOffset.set(lotRef.current.ox-pt.x,0,lotRef.current.oz-pt.z);
+          }
+          return;
+        }
+      }
+
+      // ── Element drag ────────────────────────────────────────────────────────
       const meshes=[];
       Object.values(groupsRef.current).forEach(g=>g.traverse(c=>{if(c.isMesh&&c.name!=="selection_ring")meshes.push(c);}));
       const hits = raycaster.intersectObjects(meshes, false);
@@ -817,7 +844,24 @@ export default function DesignEditor() {
       } else { setSelectedId(null); selectedIdRef.current=null; }
     };
     const onPointerMove = e => {
-      if(!dragging||!dragId) return; ndc(e);
+      ndc(e);
+      if(lotDragging){
+        const pt=planeHit(); if(!pt) return;
+        if(lotDragType==="center"){
+          const nx=pt.x+dragOffset.x, nz=pt.z+dragOffset.z;
+          lotRef.current.ox=nx; lotRef.current.oz=nz;
+          setLotOX(nx); setLotOZ(nz);
+        } else {
+          const {x:fx,z:fz}=lotDragFixed;
+          const newW=Math.max(20,Math.abs(pt.x-fx));
+          const newD=Math.max(20,Math.abs(pt.z-fz));
+          const newOX=(pt.x+fx)/2, newOZ=(pt.z+fz)/2;
+          lotRef.current={w:newW,d:newD,ox:newOX,oz:newOZ};
+          setLotW(newW); setLotD(newD); setLotOX(newOX); setLotOZ(newOZ);
+        }
+        return;
+      }
+      if(!dragging||!dragId) return;
       const pt=planeHit(); const gr=groupsRef.current[dragId];
       if(pt&&gr){
         let nx=pt.x+dragOffset.x, nz=pt.z+dragOffset.z;
@@ -826,6 +870,11 @@ export default function DesignEditor() {
       }
     };
     const onPointerUp = () => {
+      if(lotDragging){
+        lotDragging=false; lotDragType=null; lotDragFixed=null;
+        controls.enabled=true; renderer.domElement.style.cursor="auto";
+        return;
+      }
       if(dragging&&dragId){
         const gr=groupsRef.current[dragId];
         if(gr) setElements(prev=>prev.map(el=>el.id===dragId?{...el,x:gr.position.x,z:gr.position.z}:el));
@@ -871,46 +920,87 @@ export default function DesignEditor() {
     };
   },[]);
 
+  // ── Keep lotEditModeRef in sync ──────────────────────────────────────────
+  useEffect(()=>{ lotEditModeRef.current=lotEditMode; },[lotEditMode]);
+
   // ── Top / 3D view preset ─────────────────────────────────────────────────
   useEffect(()=>{
     const cam=cameraRef.current; const controls=controlsRef.current;
     if(!cam||!controls) return;
-    const {w,d}=lotRef.current;
+    const {w,d,ox,oz}=lotRef.current;
     const dist=Math.max(w,d);
     if(viewMode==="top"){
-      // High angle looking straight down-ish (slight tilt to avoid gimbal)
-      cam.position.set(0, dist*2.8, dist*0.3);
-      cam.lookAt(0,0,0);
+      cam.position.set(ox, dist*2.8, oz+dist*0.3);
+      cam.lookAt(ox,0,oz);
+      controls.target.set(ox,0,oz);
+      controls.maxPolarAngle=Math.PI/2.05;
     } else {
-      // 45° angle for full 3D view
-      cam.position.set(0, dist*1.2, dist*1.6);
-      cam.lookAt(0,0,0);
+      // Ground-level 3D: stand outside the front edge, eye height, look into yard
+      cam.position.set(ox, 6, oz+d*0.65);
+      cam.lookAt(ox, 2, oz-d*0.2);
+      controls.target.set(ox,2,oz-d*0.2);
+      controls.maxPolarAngle=Math.PI*0.82; // allow looking up slightly
     }
-    controls.target.set(0,0,0);
     controls.update();
   },[viewMode]);
 
-  // ── Ground builder ────────────────────────────────────────────────────────
-  function buildAndAddGround(scene, w, d){
+  // ── Ground / boundary builder ─────────────────────────────────────────────
+  function buildAndAddGround(scene, w, d, ox=0, oz=0, editMode=false){
     if(groundGroupRef.current){
       groundGroupRef.current.traverse(o=>{if(o.isMesh||o.isLine){o.geometry?.dispose();o.material?.dispose();}});
       scene.remove(groundGroupRef.current);
     }
+    handleMeshesRef.current=[];
     const g=new THREE.Group();
-    // Visible grass ground
-    const gMesh=new THREE.Mesh(new THREE.PlaneGeometry(w*30,d*30),new THREE.MeshLambertMaterial({color:0x3a5c2a}));
+
+    // Wide grass base
+    const gMesh=new THREE.Mesh(new THREE.PlaneGeometry(w*60,d*60),new THREE.MeshLambertMaterial({color:0x3a5c2a}));
     gMesh.rotation.x=-Math.PI/2; gMesh.position.y=-0.1; gMesh.receiveShadow=true; g.add(gMesh);
-    // Invisible hit plane for raycasting
-    const hit=new THREE.Mesh(new THREE.PlaneGeometry(w*30,d*30),new THREE.MeshBasicMaterial({visible:false,side:THREE.DoubleSide}));
+    // Invisible drag hit plane
+    const hit=new THREE.Mesh(new THREE.PlaneGeometry(w*60,d*60),new THREE.MeshBasicMaterial({visible:false,side:THREE.DoubleSide}));
     hit.rotation.x=-Math.PI/2; g.add(hit);
-    // Lot boundary line
-    const pts=[new THREE.Vector3(-w/2,.2,-d/2),new THREE.Vector3(w/2,.2,-d/2),new THREE.Vector3(w/2,.2,d/2),new THREE.Vector3(-w/2,.2,d/2),new THREE.Vector3(-w/2,.2,-d/2)];
-    g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineBasicMaterial({color:0xF59E0B})));
-    // Corner posts
-    [[w/2,-d/2],[w/2,d/2],[-w/2,-d/2],[-w/2,d/2]].forEach(([cx,cz])=>{
-      const m=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,3,8),new THREE.MeshBasicMaterial({color:0xF59E0B}));
-      m.position.set(cx,1.5,cz); g.add(m);
-    });
+
+    // Lot boundary group (offset to lot center)
+    const bGroup=new THREE.Group(); bGroup.position.set(ox,0,oz); g.add(bGroup);
+
+    // Boundary line
+    const h=0.25;
+    const pts=[new THREE.Vector3(-w/2,h,-d/2),new THREE.Vector3(w/2,h,-d/2),
+               new THREE.Vector3(w/2,h,d/2), new THREE.Vector3(-w/2,h,d/2),new THREE.Vector3(-w/2,h,-d/2)];
+    bGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineBasicMaterial({color:0xF59E0B,linewidth:2})));
+
+    // Dimension labels (thin planes with canvas texture)
+    const makeLabel=(text,px,py,pz,ry=0)=>{
+      const c=document.createElement("canvas"); c.width=256; c.height=64;
+      const ctx=c.getContext("2d");
+      ctx.fillStyle="rgba(0,0,0,0)"; ctx.clearRect(0,0,256,64);
+      ctx.fillStyle="#F59E0B"; ctx.font="bold 28px sans-serif"; ctx.textAlign="center";
+      ctx.fillText(text,128,40);
+      const t=new THREE.CanvasTexture(c);
+      const m=new THREE.Mesh(new THREE.PlaneGeometry(w>d?w*0.4:d*0.4,6),new THREE.MeshBasicMaterial({map:t,transparent:true,depthWrite:false,side:THREE.DoubleSide}));
+      m.position.set(px,py,pz); m.rotation.y=ry; bGroup.add(m);
+    };
+    makeLabel(`${Math.round(w)}′`,0,2,d/2+4);
+    makeLabel(`${Math.round(d)}′`,-(w/2+4),2,0,Math.PI/2);
+
+    if(editMode){
+      // Corner resize handles
+      [['NW',-w/2,-d/2],['NE',w/2,-d/2],['SW',-w/2,d/2],['SE',w/2,d/2]].forEach(([name,cx,cz])=>{
+        const h=new THREE.Mesh(new THREE.BoxGeometry(5,5,5),new THREE.MeshBasicMaterial({color:0xFFD700}));
+        h.position.set(cx,2.5,cz); h.userData={isLotHandle:true,handleType:name};
+        bGroup.add(h); handleMeshesRef.current.push(h);
+      });
+      // Center move handle
+      const ctr=new THREE.Mesh(new THREE.SphereGeometry(3.5,10,10),new THREE.MeshBasicMaterial({color:0xFF6B00}));
+      ctr.position.set(0,3,0); ctr.userData={isLotHandle:true,handleType:"center"};
+      bGroup.add(ctr); handleMeshesRef.current.push(ctr);
+    } else {
+      [[w/2,-d/2],[w/2,d/2],[-w/2,-d/2],[-w/2,d/2]].forEach(([cx,cz])=>{
+        const m=new THREE.Mesh(new THREE.CylinderGeometry(.4,.4,3,8),new THREE.MeshBasicMaterial({color:0xF59E0B}));
+        m.position.set(cx,1.5,cz); bGroup.add(m);
+      });
+    }
+
     scene.add(g); groundGroupRef.current=g;
   }
 
@@ -947,15 +1037,17 @@ export default function DesignEditor() {
   // ── Sync lot → scene ─────────────────────────────────────────────────────
   useEffect(()=>{
     const scene=sceneRef.current; if(!scene) return;
-    lotRef.current={w:lotW,d:lotD};
-    buildAndAddGround(scene,lotW,lotD);
-    const cam=cameraRef.current; const controls=controlsRef.current;
-    if(cam&&controls&&!satMeshRef.current){
-      const dist=Math.max(lotW,lotD);
-      cam.position.set(0,dist*2,dist*1.5);
-      cam.lookAt(0,0,0); controls.target.set(0,0,0); controls.update();
+    lotRef.current={w:lotW,d:lotD,ox:lotOX,oz:lotOZ};
+    buildAndAddGround(scene,lotW,lotD,lotOX,lotOZ,lotEditMode);
+    if(!satMeshRef.current){
+      const cam=cameraRef.current; const controls=controlsRef.current;
+      if(cam&&controls){
+        const dist=Math.max(lotW,lotD);
+        cam.position.set(lotOX,dist*2.8,lotOZ+dist*0.3);
+        cam.lookAt(lotOX,0,lotOZ); controls.target.set(lotOX,0,lotOZ); controls.update();
+      }
     }
-  },[lotW,lotD]);
+  },[lotW,lotD,lotOX,lotOZ,lotEditMode]);
 
   // ── Sync elements → scene ─────────────────────────────────────────────────
   useEffect(()=>{
@@ -983,11 +1075,11 @@ export default function DesignEditor() {
     setSaving(true);
     try {
       await base44.entities.Design.update(designId,{
-        canvas_data:{elements:elementsRef.current,lotW,lotD,geoCoords},
+        canvas_data:{elements:elementsRef.current,lotW,lotD,lotOX,lotOZ,geoCoords},
       });
       setSaved(true); setTimeout(()=>setSaved(false),2500);
     } finally{ setSaving(false); }
-  },[designId,lotW,lotD,geoCoords]);
+  },[designId,lotW,lotD,lotOX,lotOZ,geoCoords]);
 
   useEffect(()=>{
     const fn=e=>{
@@ -1083,7 +1175,16 @@ export default function DesignEditor() {
             geoCoords&&satLoaded?"bg-emerald-700 text-white":"bg-slate-700 text-slate-300 hover:bg-slate-600")}>
           <RulerIcon className="w-3.5 h-3.5"/>
           {satLoading ? <Loader2 className="w-3 h-3 animate-spin"/> : null}
-          {geoCoords&&satLoaded ? "Aerial ✓" : geoCoords ? "Aerial…" : `${lotW}′×${lotD}′`}
+          {geoCoords&&satLoaded ? "Aerial ✓" : geoCoords ? "Aerial…" : `${Math.round(lotW)}′×${Math.round(lotD)}′`}
+        </button>
+
+        <button onClick={()=>setLotEditMode(m=>!m)}
+          className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors border",
+            lotEditMode
+              ?"bg-yellow-500 text-black border-yellow-400"
+              :"bg-slate-700 text-slate-300 hover:bg-slate-600 border-slate-600")}>
+          <Maximize2 className="w-3.5 h-3.5"/>
+          {lotEditMode?"Done Editing":"Edit Boundary"}
         </button>
 
         {totalCost>0&&(
@@ -1132,7 +1233,12 @@ export default function DesignEditor() {
               <Loader2 className="w-3.5 h-3.5 animate-spin"/>Loading aerial photo…
             </div>
           )}
-          {!geoCoords&&!satLoading&&(
+          {lotEditMode&&(
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-yellow-500/90 text-black text-xs px-4 py-2 rounded-full pointer-events-none select-none font-semibold shadow-lg">
+              Boundary Edit Mode — Drag orange ball to move lot · Drag yellow corners to resize
+            </div>
+          )}
+          {!geoCoords&&!satLoading&&!lotEditMode&&(
             <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/60 text-slate-300 text-xs px-3 py-1.5 rounded-full pointer-events-none select-none">
               Click the lot button above to enter an address and load the aerial photo
             </div>
@@ -1149,7 +1255,12 @@ export default function DesignEditor() {
           <div className="p-3 border-b border-slate-700 space-y-2">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Project</p>
             <div><p className="text-[10px] text-slate-500">Elements</p><p className="text-xl font-bold">{elements.length}</p></div>
-            <div><p className="text-[10px] text-slate-500">Lot</p><p className="text-xs font-semibold text-slate-300">{lotW}′ × {lotD}′</p></div>
+            <div>
+              <p className="text-[10px] text-slate-500">Lot Size</p>
+              <p className="text-xs font-semibold text-slate-300">{Math.round(lotW)}′ × {Math.round(lotD)}′</p>
+              <p className="text-[10px] text-amber-400 font-bold">{(Math.round(lotW)*Math.round(lotD)).toLocaleString()} sq ft</p>
+              <p className="text-[10px] text-slate-500">{((Math.round(lotW)*Math.round(lotD))/43560).toFixed(3)} acres</p>
+            </div>
             {totalCost>0&&<div><p className="text-[10px] text-slate-500">Est. Total</p><p className="text-xs font-bold text-amber-400">${totalCost.toLocaleString()}</p></div>}
           </div>
           <div className="flex-1 overflow-y-auto p-2">
