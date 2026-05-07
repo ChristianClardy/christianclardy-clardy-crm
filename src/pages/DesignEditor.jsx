@@ -54,6 +54,9 @@ const COST_RATES = {
   outdoor_tv:      { unit: "each",  base: 5500,  labor: 1200,  label: "Outdoor TV Mount" },
   driveway:        { unit: "sqft",  base: 14,    labor: 7,     label: "Driveway" },
   golf_green:      { unit: "sqft",  base: 32,    labor: 14,    label: "Golf Green" },
+  house_ranch:     { unit: "each",  base: 0,     labor: 0,     label: "Ranch House (existing)" },
+  house_colonial:  { unit: "each",  base: 0,     labor: 0,     label: "Colonial House (existing)" },
+  house_modern:    { unit: "each",  base: 0,     labor: 0,     label: "Modern House (existing)" },
 };
 
 function calcElementCost(el) {
@@ -101,6 +104,11 @@ const CATEGORIES = [
     { type: "shrub",         label: "Shrub / Hedge",  w: 4,  d: 4,  color: 0x558B2F },
     { type: "lawn",          label: "Lawn Area",      w: 20, d: 16, color: 0x66BB6A },
     { type: "putting_green", label: "Golf Green",     w: 24, d: 18, color: 0x2E7D32 },
+  ]},
+  { key: "building",    label: "House / Building",    icon: Box,           items: [
+    { type: "house_ranch",    label: "Ranch House",      w: 42, d: 28, color: 0xF2EDE0 },
+    { type: "house_colonial", label: "Colonial House",   w: 38, d: 26, color: 0xE8E0D0 },
+    { type: "house_modern",   label: "Modern House",     w: 46, d: 32, color: 0xD0CCC4 },
   ]},
   { key: "amenities",   label: "Amenities",          icon: Compass,       items: [
     { type: "firepit",       label: "Fire Pit",       w: 6,  d: 6,  color: 0xE64A19 },
@@ -316,6 +324,185 @@ function buildGeneric(type, w, d, hex) {
   const g = new THREE.Group(); g.add(mesh); return g;
 }
 
+// ─── House geometry helpers ─────────────────────────────────────────────────
+function gableRoofGeo(w, d, ridgeH) {
+  const positions = new Float32Array([
+    // Front gable
+    -w/2,0,-d/2,  w/2,0,-d/2,  0,ridgeH,-d/2,
+    // Back gable
+     w/2,0, d/2, -w/2,0, d/2,  0,ridgeH, d/2,
+    // Left slope
+    -w/2,0,-d/2,  0,ridgeH,-d/2,  0,ridgeH,d/2,
+    -w/2,0,-d/2,  0,ridgeH, d/2, -w/2,0,  d/2,
+    // Right slope
+     w/2,0,-d/2,  w/2,0,  d/2,  0,ridgeH, d/2,
+     w/2,0,-d/2,  0,ridgeH, d/2,  0,ridgeH,-d/2,
+  ]);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function addMesh(g, geo, mat, x=0, y=0, z=0, rx=0, ry=0) {
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z); m.rotation.x=rx; m.rotation.y=ry;
+  m.castShadow=true; m.receiveShadow=true; g.add(m); return m;
+}
+
+function buildHouseRanch(w, d, hex) {
+  const g = new THREE.Group();
+  const wallH=9, eave=1.5, pitch=0.32;
+  const rW=w+eave*2, rD=d+eave*2, ridgeH=rW/2*pitch;
+
+  const wallMat  = new THREE.MeshStandardMaterial({color:hex, roughness:0.85});
+  const roofMat  = new THREE.MeshStandardMaterial({color:0x2A1710, roughness:0.95});
+  const foundMat = new THREE.MeshStandardMaterial({color:0x9A8878, roughness:0.9});
+  const trimMat  = new THREE.MeshStandardMaterial({color:0xFFFFFF, roughness:0.7});
+  const winMat   = new THREE.MeshStandardMaterial({color:0x9EC9E0,transparent:true,opacity:0.55,roughness:0.1,metalness:0.15});
+  const doorMat  = new THREE.MeshStandardMaterial({color:0x5C3317, roughness:0.8});
+  const brickMat = new THREE.MeshStandardMaterial({color:0x8B5E52, roughness:0.92});
+  const concMat  = new THREE.MeshStandardMaterial({color:0xAAAAAA, roughness:0.85});
+
+  // Foundation
+  addMesh(g, new THREE.BoxGeometry(w+0.6,1.8,d+0.6), foundMat, 0,0.9,0);
+  // Main body
+  addMesh(g, new THREE.BoxGeometry(w,wallH,d), wallMat, 0,wallH/2+1.8,0);
+  // Gable roof with eaves
+  const roofMesh = new THREE.Mesh(gableRoofGeo(rW,rD,ridgeH), roofMat);
+  roofMesh.position.set(0,wallH+1.8,0); roofMesh.castShadow=true; g.add(roofMesh);
+
+  // Front windows × 2
+  const winH=3.5, winW=4;
+  [-w/4, w/4].forEach(wx=>{
+    addMesh(g, new THREE.BoxGeometry(winW+0.3,winH+0.3,0.12), trimMat, wx, wallH*0.55+1.8, -d/2-0.05);
+    addMesh(g, new THREE.BoxGeometry(winW,winH,0.14), winMat, wx, wallH*0.55+1.8, -d/2-0.07);
+  });
+  // Side windows
+  [-d/4, d/4].forEach(wz=>{
+    addMesh(g, new THREE.BoxGeometry(0.12,winH+0.3,winW+0.3), trimMat, -w/2-0.05, wallH*0.5+1.8, wz);
+    addMesh(g, new THREE.BoxGeometry(0.14,winH,winW), winMat, -w/2-0.07, wallH*0.5+1.8, wz);
+  });
+  // Front door
+  addMesh(g, new THREE.BoxGeometry(3.8,7.2,0.12), trimMat, 0, 5.4+1.8, -d/2-0.05);
+  addMesh(g, new THREE.BoxGeometry(3.2,7,0.14), doorMat, 0, 5.1+1.8, -d/2-0.07);
+  // Porch overhang over door
+  addMesh(g, new THREE.BoxGeometry(7,0.3,4), concMat, 0, 9+1.8, -d/2-2);
+  addMesh(g, new THREE.CylinderGeometry(0.2,0.2,8,8), trimMat, -3, 5+1.8, -d/2-3.8);
+  addMesh(g, new THREE.CylinderGeometry(0.2,0.2,8,8), trimMat,  3, 5+1.8, -d/2-3.8);
+
+  // Chimney
+  const chim=new THREE.Mesh(new THREE.BoxGeometry(2.5,wallH+ridgeH*0.8+2,2.5),brickMat);
+  chim.position.set(w/4, (wallH+ridgeH*0.8)/2+1.8, 0); chim.castShadow=true; g.add(chim);
+
+  // Attached garage (right side)
+  const gW=Math.min(24,w*0.55), gH=8, gD=Math.min(22,d*0.85);
+  addMesh(g, new THREE.BoxGeometry(gW+0.6,1.8,gD+0.6), foundMat, w/2+gW/2, 0.9, 0);
+  addMesh(g, new THREE.BoxGeometry(gW,gH,gD), wallMat, w/2+gW/2, gH/2+1.8, 0);
+  const gRoof=new THREE.Mesh(gableRoofGeo(gW+eave,gD+eave,ridgeH*0.65),roofMat);
+  gRoof.position.set(w/2+gW/2,gH+1.8,0); gRoof.castShadow=true; g.add(gRoof);
+  // Garage door
+  addMesh(g, new THREE.BoxGeometry(gW-2,7,0.15), new THREE.MeshStandardMaterial({color:0x888888,roughness:0.6}), w/2+gW/2, 5+1.8, -(gD/2)-0.01);
+
+  // Driveway
+  addMesh(g, new THREE.BoxGeometry(gW,0.15,20), concMat, w/2+gW/2, 1.8+0.08, -gD/2-10);
+
+  return g;
+}
+
+function buildHouseColonial(w, d, hex) {
+  const g = new THREE.Group();
+  const wallH=18, eave=1.5, pitch=0.4;
+  const rW=w+eave*2, rD=d+eave*2, ridgeH=rW/2*pitch;
+
+  const wallMat  = new THREE.MeshStandardMaterial({color:hex, roughness:0.82});
+  const roofMat  = new THREE.MeshStandardMaterial({color:0x1A0F0A, roughness:0.95});
+  const foundMat = new THREE.MeshStandardMaterial({color:0x9A8878, roughness:0.9});
+  const trimMat  = new THREE.MeshStandardMaterial({color:0xFFFFFF, roughness:0.7});
+  const winMat   = new THREE.MeshStandardMaterial({color:0xA8CCE0,transparent:true,opacity:0.55,roughness:0.08,metalness:0.15});
+  const doorMat  = new THREE.MeshStandardMaterial({color:0x1A1A1A, roughness:0.75});
+  const shutMat  = new THREE.MeshStandardMaterial({color:0x2E5E38, roughness:0.8});
+  const brickMat = new THREE.MeshStandardMaterial({color:0x7A4A3A, roughness:0.92});
+
+  addMesh(g, new THREE.BoxGeometry(w+0.6,1.8,d+0.6), foundMat, 0,0.9,0);
+  addMesh(g, new THREE.BoxGeometry(w,wallH,d), wallMat, 0,wallH/2+1.8,0);
+  // Mid-floor trim band
+  addMesh(g, new THREE.BoxGeometry(w+0.15,0.4,d+0.15), trimMat, 0,9.2+1.8,0);
+  // Gable roof
+  const rm=new THREE.Mesh(gableRoofGeo(rW,rD,ridgeH),roofMat);
+  rm.position.set(0,wallH+1.8,0); rm.castShadow=true; g.add(rm);
+
+  // Symmetrical windows — ground & 2nd floor, 3 columns each side of door
+  const cols=[-w/2+6,-w/4,w/4,w/2-6];
+  [4.5,13.5].forEach(wy=>{
+    cols.forEach(wx=>{
+      addMesh(g,new THREE.BoxGeometry(3.2+0.4,4+0.4,0.12),trimMat,wx,wy+1.8,-d/2-0.05);
+      addMesh(g,new THREE.BoxGeometry(3.2,4,0.14),winMat,wx,wy+1.8,-d/2-0.07);
+      // Shutters
+      addMesh(g,new THREE.BoxGeometry(1.2,4,0.12),shutMat,wx-2.2,wy+1.8,-d/2-0.06);
+      addMesh(g,new THREE.BoxGeometry(1.2,4,0.12),shutMat,wx+2.2,wy+1.8,-d/2-0.06);
+    });
+  });
+  // Grand front door with transom
+  addMesh(g,new THREE.BoxGeometry(4,8.5,0.12),trimMat,0,4.5+1.8,-d/2-0.05);
+  addMesh(g,new THREE.BoxGeometry(3.4,7.5,0.14),doorMat,0,4.5+1.8,-d/2-0.07);
+  addMesh(g,new THREE.BoxGeometry(3.4,1.5,0.14),winMat,0,9+1.8,-d/2-0.07);
+  // Portico columns
+  [-3.5,-1.2,1.2,3.5].forEach(cx=>{
+    addMesh(g,new THREE.CylinderGeometry(0.28,0.32,10,12),trimMat,cx,6+1.8,-d/2-2.5);
+  });
+  addMesh(g,new THREE.BoxGeometry(10,0.35,3.5),trimMat,0,11.5+1.8,-d/2-2.5);
+  // Chimney (two chimneys for colonial)
+  [-w/3,w/3].forEach(cx=>{
+    const chim=new THREE.Mesh(new THREE.BoxGeometry(2.5,wallH+ridgeH+2,2.5),brickMat);
+    chim.position.set(cx,(wallH+ridgeH)/2+1.8,0); chim.castShadow=true; g.add(chim);
+  });
+  return g;
+}
+
+function buildHouseModern(w, d, hex) {
+  const g = new THREE.Group();
+  const wallH=11, wallH2=9;
+
+  const wallMat  = new THREE.MeshStandardMaterial({color:hex, roughness:0.7, metalness:0.05});
+  const concMat  = new THREE.MeshStandardMaterial({color:0xC8C4BE, roughness:0.88});
+  const foundMat = new THREE.MeshStandardMaterial({color:0x888888, roughness:0.9});
+  const winMat   = new THREE.MeshStandardMaterial({color:0x8EC4D8,transparent:true,opacity:0.5,roughness:0.05,metalness:0.3});
+  const frameMat = new THREE.MeshStandardMaterial({color:0x222222, roughness:0.4, metalness:0.8});
+  const darkMat  = new THREE.MeshStandardMaterial({color:0x222222, roughness:0.7});
+
+  // Main volume (2 offset boxes for split-level look)
+  addMesh(g, new THREE.BoxGeometry(w+0.6,1.8,d+0.6), foundMat, 0,0.9,0);
+  addMesh(g, new THREE.BoxGeometry(w,wallH,d*0.6), wallMat, 0,wallH/2+1.8,-d*0.2);
+  addMesh(g, new THREE.BoxGeometry(w*0.55,wallH2,d*0.4), concMat, -w*0.225,wallH2/2+1.8, d*0.3);
+  // Flat roofs with thin parapet
+  addMesh(g, new THREE.BoxGeometry(w+0.4,0.5,d*0.6+0.4), darkMat, 0,wallH+1.8+0.25,-d*0.2);
+  addMesh(g, new THREE.BoxGeometry(w*0.55+0.4,0.5,d*0.4+0.4), darkMat, -w*0.225,wallH2+1.8+0.25,d*0.3);
+
+  // Picture windows (large, floor-to-ceiling)
+  const pW=w*0.35, pH=wallH-1.5;
+  addMesh(g,new THREE.BoxGeometry(0.08,pH+0.2,0.08),frameMat, pW/2,pH/2+2.6,-d*0.5-0.06);
+  addMesh(g,new THREE.BoxGeometry(0.08,pH+0.2,0.08),frameMat,-pW/2,pH/2+2.6,-d*0.5-0.06);
+  addMesh(g,new THREE.BoxGeometry(pW,pH,0.14),winMat,0,pH/2+2.6,-d*0.5-0.07);
+  // Horizontal window strip on 2nd volume
+  addMesh(g,new THREE.BoxGeometry(w*0.5,2.5,0.14),winMat,-w*0.225,wallH2*0.65+1.8,-d*0.1-0.07);
+  addMesh(g,new THREE.BoxGeometry(w*0.5+0.2,2.7,0.08),frameMat,-w*0.225,wallH2*0.65+1.8,-d*0.1-0.06);
+
+  // Cantilevered carport
+  addMesh(g,new THREE.BoxGeometry(0.25,wallH-1,0.25),frameMat,w/2-2,  (wallH-1)/2+1.8,-d*0.2);
+  addMesh(g,new THREE.BoxGeometry(0.25,wallH-1,0.25),frameMat,w/2+8,  (wallH-1)/2+1.8,-d*0.2);
+  addMesh(g,new THREE.BoxGeometry(12,0.3,d*0.5),darkMat,w/2+4,wallH+1.8,-d*0.2);
+
+  // Front entry recess + door
+  addMesh(g,new THREE.BoxGeometry(5,wallH*0.65,1),darkMat,0,wallH*0.65*0.5+1.8,-d*0.5-0.5);
+  addMesh(g,new THREE.BoxGeometry(3,8,0.15),frameMat,0,5+1.8,-d*0.5-0.07);
+
+  // Driveway
+  addMesh(g,new THREE.BoxGeometry(14,0.15,24),new THREE.MeshStandardMaterial({color:0x999999,roughness:0.85}),w/2+4,1.81,-d*0.2-14);
+
+  return g;
+}
+
 function buildStructureGroup(el) {
   const cfg = ITEM_MAP[el.type] || {};
   const w   = el.w ?? cfg.w ?? 10;
@@ -324,27 +511,30 @@ function buildStructureGroup(el) {
 
   let mg;
   switch(el.type) {
-    case "pergola":       mg = buildPergola(w,d,hex); break;
-    case "patio_cover":   mg = buildPatioCover(w,d,hex); break;
-    case "cabana":        mg = buildPatioCover(w,d,hex); break;
+    case "pergola":        mg = buildPergola(w,d,hex); break;
+    case "patio_cover":    mg = buildPatioCover(w,d,hex); break;
+    case "cabana":         mg = buildPatioCover(w,d,hex); break;
     case "pool_rect":
-    case "pool_freeform": mg = buildPool(w,d,hex); break;
-    case "spa":           mg = buildSpa(hex); break;
+    case "pool_freeform":  mg = buildPool(w,d,hex); break;
+    case "spa":            mg = buildSpa(hex); break;
     case "tree_palm":
-    case "tree_shade":    mg = buildTree(el.type,hex); break;
+    case "tree_shade":     mg = buildTree(el.type,hex); break;
     case "firepit":
-    case "fire_table":    mg = buildFirepit(hex); break;
+    case "fire_table":     mg = buildFirepit(hex); break;
     case "kitchen_island":
     case "bbq_grill":
-    case "outdoor_bar":   mg = buildKitchen(w,d,hex); break;
+    case "outdoor_bar":    mg = buildKitchen(w,d,hex); break;
     case "patio":
     case "pavers":
     case "driveway":
     case "lawn":
     case "putting_green":
     case "golf_green":
-    case "bocce_court":   mg = buildPatio(w,d,hex); break;
-    default:              mg = buildGeneric(el.type,w,d,hex);
+    case "bocce_court":    mg = buildPatio(w,d,hex); break;
+    case "house_ranch":    mg = buildHouseRanch(w,d,hex); break;
+    case "house_colonial": mg = buildHouseColonial(w,d,hex); break;
+    case "house_modern":   mg = buildHouseModern(w,d,hex); break;
+    default:               mg = buildGeneric(el.type,w,d,hex);
   }
 
   // Selection ring
