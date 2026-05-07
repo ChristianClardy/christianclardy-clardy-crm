@@ -8,7 +8,7 @@ import {
   ArrowLeft, Save, Check, Loader2, Trash2, Copy, RotateCw,
   Sun, Layers, Fence, UtensilsCrossed, Waves, TreePine, Compass,
   ChevronDown, RulerIcon, Maximize2, Map, DollarSign, FileText,
-  Grid3x3, Eye, Satellite, Box,
+  Grid3x3, Eye, Satellite, Box, Camera, RotateCcw, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -876,6 +876,13 @@ export default function DesignEditor() {
   const [viewMode, setViewMode]         = useState("top");   // "top" | "3d"
   const [satLoading, setSatLoading]     = useState(false);
   const [satLoaded, setSatLoaded]       = useState(false);
+  const [svMode, setSvMode]             = useState(false);   // street view overlay mode
+  const [svHeading, setSvHeading]       = useState(180);     // compass heading (0=N,90=E,180=S,270=W)
+  const [svPitch, setSvPitch]           = useState(-5);      // tilt: 0=horizontal,-90=down
+  const [svFov, setSvFov]               = useState(90);      // field of view (zoom)
+  const [svUrl, setSvUrl]               = useState(null);    // current proxy image URL
+  const [svLoading, setSvLoading]       = useState(false);
+  const [svError, setSvError]           = useState(null);
 
   const mountRef        = useRef(null);
   const rendererRef     = useRef(null);
@@ -918,11 +925,12 @@ export default function DesignEditor() {
     const mount = mountRef.current;
     if(!mount) return;
 
-    // Scene with sky background
+    // Scene — background set dynamically (sky in 3D mode, null/transparent in street view)
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87CEEB);
     scene.fog = new THREE.Fog(0x87CEEB, 500, 1500);
     sceneRef.current = scene;
+    const SKY = new THREE.Color(0x87CEEB);
 
     // Single perspective camera — avoids orthographic degenerate-direction issues
     const W = mount.clientWidth || mount.offsetWidth || 800;
@@ -932,8 +940,8 @@ export default function DesignEditor() {
     camera.lookAt(0, 0, 0);
     cameraRef.current = camera;
 
-    // Renderer
-    const renderer = new THREE.WebGLRenderer({antialias:true});
+    // Renderer — alpha:true lets us make the canvas transparent in street view mode
+    const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -1112,6 +1120,44 @@ export default function DesignEditor() {
 
   // ── Keep lotEditModeRef in sync ──────────────────────────────────────────
   useEffect(()=>{ lotEditModeRef.current=lotEditMode; },[lotEditMode]);
+
+  // ── Street view: fetch image whenever params change ───────────────────────
+  const loadStreetView = useCallback(()=>{
+    if(!geoCoords) return;
+    setSvLoading(true); setSvError(null);
+    const url=`/api/streetview?lat=${geoCoords.lat}&lon=${geoCoords.lon}&heading=${svHeading}&pitch=${svPitch}&fov=${svFov}`;
+    setSvUrl(url);
+    setSvLoading(false);
+  },[geoCoords,svHeading,svPitch,svFov]);
+
+  // ── Street view: toggle Three.js transparent/opaque mode ─────────────────
+  useEffect(()=>{
+    const scene=sceneRef.current;
+    if(!scene) return;
+    const cam=cameraRef.current; const ctrl=controlsRef.current;
+    const ground=groundGroupRef.current; const sat=satMeshRef.current;
+    if(svMode){
+      // Transparent canvas — real photo shows through from behind
+      scene.background=null; scene.fog=null;
+      if(ground) ground.visible=false;
+      if(sat) sat.visible=false;
+      // Street-level camera facing the front of the lot
+      if(cam&&ctrl){
+        const {w,d,ox,oz}=lotRef.current;
+        cam.position.set(ox, 5, oz+d*0.55+20);
+        cam.lookAt(ox,3,oz-d*0.1);
+        ctrl.target.set(ox,3,oz-d*0.1);
+        ctrl.maxPolarAngle=Math.PI*0.85;
+        ctrl.update();
+      }
+      if(geoCoords && !svUrl) loadStreetView();
+    } else {
+      scene.background=new THREE.Color(0x87CEEB);
+      scene.fog=new THREE.Fog(0x87CEEB,500,1500);
+      if(ground) ground.visible=true;
+      if(sat) sat.visible=true;
+    }
+  },[svMode]);
 
   // ── Top / 3D view preset ─────────────────────────────────────────────────
   useEffect(()=>{
@@ -1377,6 +1423,15 @@ export default function DesignEditor() {
           {lotEditMode?"Done Editing":"Edit Boundary"}
         </button>
 
+        <button onClick={()=>setSvMode(m=>!m)}
+          className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors border",
+            svMode
+              ?"bg-sky-500 text-white border-sky-400"
+              :"bg-slate-700 text-slate-300 hover:bg-slate-600 border-slate-600")}>
+          <Camera className="w-3.5 h-3.5"/>
+          {svMode?"Exit Photo":"Street View"}
+        </button>
+
         {totalCost>0&&(
           <div className="hidden sm:flex items-center gap-1.5 text-xs font-semibold text-amber-400 bg-amber-900/30 px-2.5 py-1.5 rounded-lg border border-amber-800/40">
             <DollarSign className="w-3.5 h-3.5"/> ${totalCost.toLocaleString()}
@@ -1411,32 +1466,126 @@ export default function DesignEditor() {
         </div>
 
         {/* Canvas viewport */}
-        <div className="flex-1 relative overflow-hidden">
-          <div ref={mountRef} className="w-full h-full"/>
+        <div className="flex-1 relative overflow-hidden bg-slate-900">
+
+          {/* Street view background photo — sits behind transparent Three.js canvas */}
+          {svMode && svUrl && (
+            <img
+              src={svUrl}
+              className="absolute inset-0 w-full h-full object-cover z-0"
+              alt="Street View"
+              onError={()=>setSvError("Street view image unavailable — check Google Maps API key")}
+            />
+          )}
+          {svMode && !svUrl && !svLoading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center z-0 bg-slate-800 gap-3">
+              <Camera className="w-12 h-12 text-slate-500"/>
+              <p className="text-slate-400 text-sm text-center max-w-xs">
+                {!geoCoords
+                  ? "Enter a property address first using the lot button above."
+                  : "Click \"Load Street View\" to fetch the photo."}
+              </p>
+              {geoCoords&&(
+                <button onClick={loadStreetView}
+                  className="flex items-center gap-2 bg-sky-600 hover:bg-sky-500 text-white text-xs px-4 py-2 rounded-lg font-medium transition-colors">
+                  <Camera className="w-3.5 h-3.5"/> Load Street View
+                </button>
+              )}
+            </div>
+          )}
+          {svMode && svError && (
+            <div className="absolute inset-0 flex items-center justify-center z-0 bg-slate-800">
+              <div className="text-center max-w-sm px-4">
+                <p className="text-rose-400 text-sm font-semibold mb-1">Street View Unavailable</p>
+                <p className="text-slate-400 text-xs">{svError}</p>
+                <p className="text-slate-500 text-xs mt-2">Add <code className="bg-slate-700 px-1 rounded">GOOGLE_MAPS_API_KEY</code> to Vercel environment variables.</p>
+              </div>
+            </div>
+          )}
+
+          {/* Three.js canvas — transparent in street view mode, opaque otherwise */}
+          <div ref={mountRef} className="absolute inset-0 z-10"/>
+
+          {/* Loading overlay */}
           {loading&&(
             <div className="absolute inset-0 flex items-center justify-center bg-slate-900 z-30">
               <Loader2 className="w-8 h-8 animate-spin text-amber-500"/>
             </div>
           )}
-          {satLoading&&(
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/70 text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-2 pointer-events-none">
+
+          {/* Street view controls panel */}
+          {svMode&&(
+            <div className="absolute bottom-14 left-1/2 -translate-x-1/2 z-20 bg-black/80 backdrop-blur-sm text-white rounded-2xl px-5 py-3 flex items-center gap-4 shadow-2xl">
+              <div className="flex flex-col items-center gap-1 min-w-0">
+                <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Heading</span>
+                <div className="flex items-center gap-2">
+                  {[["N",0],["E",90],["S",180],["W",270]].map(([lbl,deg])=>(
+                    <button key={lbl} onClick={()=>setSvHeading(deg)}
+                      className={cn("w-6 h-6 rounded text-[9px] font-bold transition-colors",
+                        svHeading===deg?"bg-sky-500 text-white":"bg-slate-700 text-slate-300 hover:bg-slate-600")}>
+                      {lbl}
+                    </button>
+                  ))}
+                  <input type="range" min={0} max={359} value={svHeading}
+                    onChange={e=>setSvHeading(Number(e.target.value))}
+                    className="w-24 accent-sky-500"/>
+                  <span className="text-xs text-slate-300 w-8">{svHeading}°</span>
+                </div>
+              </div>
+              <div className="w-px h-8 bg-slate-600"/>
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Pitch</span>
+                <div className="flex items-center gap-2">
+                  <input type="range" min={-45} max={45} value={svPitch}
+                    onChange={e=>setSvPitch(Number(e.target.value))}
+                    className="w-20 accent-sky-500"/>
+                  <span className="text-xs text-slate-300 w-8">{svPitch>0?"+":""}{svPitch}°</span>
+                </div>
+              </div>
+              <div className="w-px h-8 bg-slate-600"/>
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Zoom</span>
+                <div className="flex items-center gap-2">
+                  <input type="range" min={50} max={120} value={svFov}
+                    onChange={e=>setSvFov(Number(e.target.value))}
+                    className="w-20 accent-sky-500"/>
+                  <span className="text-xs text-slate-300 w-6">{svFov}</span>
+                </div>
+              </div>
+              <div className="w-px h-8 bg-slate-600"/>
+              <button onClick={loadStreetView}
+                className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition-colors shrink-0">
+                <RotateCcw className="w-3 h-3"/> Reload Photo
+              </button>
+            </div>
+          )}
+
+          {satLoading&&!svMode&&(
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-black/70 text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-2 pointer-events-none">
               <Loader2 className="w-3.5 h-3.5 animate-spin"/>Loading aerial photo…
             </div>
           )}
-          {lotEditMode&&(
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-yellow-500/90 text-black text-xs px-4 py-2 rounded-full pointer-events-none select-none font-semibold shadow-lg">
+          {lotEditMode&&!svMode&&(
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-yellow-500/90 text-black text-xs px-4 py-2 rounded-full pointer-events-none select-none font-semibold shadow-lg">
               Boundary Edit Mode — Drag orange ball to move lot · Drag yellow corners to resize
             </div>
           )}
-          {!geoCoords&&!satLoading&&!lotEditMode&&(
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/60 text-slate-300 text-xs px-3 py-1.5 rounded-full pointer-events-none select-none">
+          {svMode&&svUrl&&(
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-sky-600/90 text-white text-xs px-4 py-2 rounded-full pointer-events-none select-none font-semibold shadow-lg flex items-center gap-2">
+              <Camera className="w-3.5 h-3.5"/> Street View Overlay — Design elements render on top of the real photo
+            </div>
+          )}
+          {!geoCoords&&!satLoading&&!lotEditMode&&!svMode&&(
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-black/60 text-slate-300 text-xs px-3 py-1.5 rounded-full pointer-events-none select-none">
               Click the lot button above to enter an address and load the aerial photo
             </div>
           )}
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white text-[10px] px-4 py-1.5 rounded-full pointer-events-none select-none backdrop-blur-sm">
-            {viewMode==="top"
-              ? "Scroll to zoom · Drag to pan · Click palette to add elements · Drag elements to move"
-              : "Scroll to zoom · Left drag to orbit · Right drag to pan · Click elements to select"}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-black/60 text-white text-[10px] px-4 py-1.5 rounded-full pointer-events-none select-none backdrop-blur-sm">
+            {svMode
+              ? "Adjust heading/pitch/zoom below to face the house · Add design elements from the palette"
+              : viewMode==="top"
+                ? "Scroll to zoom · Drag to pan · Click palette to add elements · Drag elements to move"
+                : "Scroll to zoom · Left drag to orbit · Right drag to pan · Click elements to select"}
           </div>
         </div>
 
