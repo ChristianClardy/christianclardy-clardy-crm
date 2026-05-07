@@ -1121,13 +1121,27 @@ export default function DesignEditor() {
   // ── Keep lotEditModeRef in sync ──────────────────────────────────────────
   useEffect(()=>{ lotEditModeRef.current=lotEditMode; },[lotEditMode]);
 
-  // ── Street view: fetch image whenever params change ───────────────────────
-  const loadStreetView = useCallback(()=>{
+  // ── Street view: fetch image and check response before rendering ────────
+  const loadStreetView = useCallback(async ()=>{
     if(!geoCoords) return;
-    setSvLoading(true); setSvError(null);
+    setSvLoading(true); setSvError(null); setSvUrl(null);
     const url=`/api/streetview?lat=${geoCoords.lat}&lon=${geoCoords.lon}&heading=${svHeading}&pitch=${svPitch}&fov=${svFov}`;
-    setSvUrl(url);
-    setSvLoading(false);
+    try {
+      const r = await fetch(url);
+      if(!r.ok){
+        const body = await r.json().catch(()=>({error:`HTTP ${r.status}`}));
+        setSvError(body.error || `Request failed (${r.status})`);
+        return;
+      }
+      const blob = await r.blob();
+      // Revoke previous object URL to avoid memory leaks
+      setSvUrl(prev=>{ if(prev?.startsWith("blob:")) URL.revokeObjectURL(prev); return null; });
+      setSvUrl(URL.createObjectURL(blob));
+    } catch(e){
+      setSvError(`Network error: ${e.message}`);
+    } finally {
+      setSvLoading(false);
+    }
   },[geoCoords,svHeading,svPitch,svFov]);
 
   // ── Street view: toggle Three.js transparent/opaque mode ─────────────────

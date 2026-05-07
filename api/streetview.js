@@ -16,12 +16,19 @@ module.exports = async function handler(req, res) {
 
   try {
     const upstream = await fetch(url);
-    // Google returns a gray "no imagery" image with status 200 when unavailable,
-    // but sets x-googlemaps-panorama-not-found on the response.
-    if (!upstream.ok) return res.status(502).json({ error: "Street view unavailable" });
-
+    if (!upstream.ok) {
+      const body = await upstream.text().catch(() => "");
+      return res.status(502).json({
+        error: `Google API returned ${upstream.status}${body ? ": " + body.slice(0, 200) : ""}. Ensure Street View Static API is enabled and billing is active in Google Cloud Console.`
+      });
+    }
+    const contentType = upstream.headers.get("content-type") || "";
+    if (!contentType.startsWith("image/")) {
+      const body = await upstream.text().catch(() => "");
+      return res.status(502).json({ error: `Unexpected response: ${body.slice(0, 300)}` });
+    }
     const buf = Buffer.from(await upstream.arrayBuffer());
-    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Content-Type", contentType);
     res.setHeader("Cache-Control", "public, max-age=3600");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.send(buf);
