@@ -884,6 +884,8 @@ export default function DesignEditor() {
   const [svLoading, setSvLoading]       = useState(false);
   const [svError, setSvError]           = useState(null);
 
+  const needsRenderRef  = useRef(true);
+  const invalidate      = () => { needsRenderRef.current = true; };
   const mountRef        = useRef(null);
   const rendererRef     = useRef(null);
   const sceneRef        = useRef(null);
@@ -941,31 +943,30 @@ export default function DesignEditor() {
     cameraRef.current = camera;
 
     // Renderer — alpha:true lets us make the canvas transparent in street view mode
-    const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true, powerPreference:'high-performance'});
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // cap at 1.5 for perf
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.LinearToneMapping;
-    renderer.setSize(W, H, false);  // false = don't set canvas CSS size
+    renderer.setSize(W, H, false);
     mount.appendChild(renderer.domElement);
-    // Force canvas to fill mount div regardless of pixel size
     renderer.domElement.style.cssText = 'width:100%;height:100%;display:block;';
     rendererRef.current = renderer;
 
-    // OrbitControls
+    // OrbitControls — no damping for instant response
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true; controls.dampingFactor = 0.08;
+    controls.enableDamping = false;
     controls.screenSpacePanning = true;
     controls.maxPolarAngle = Math.PI / 2.05;
-    controls.zoomSpeed = 1.4;
+    controls.zoomSpeed = 1.2;
     controlsRef.current = controls;
 
     // Lighting
-    scene.add(new THREE.AmbientLight(0xffffff, 1.1));
-    const sun = new THREE.DirectionalLight(0xfff5e0, 1.6);
+    scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+    const sun = new THREE.DirectionalLight(0xfff5e0, 1.5);
     sun.position.set(120, 200, 100); sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.mapSize.set(1024, 1024); // 1024 instead of 2048 — 4× cheaper
     sun.shadow.camera.left=-250; sun.shadow.camera.right=250;
     sun.shadow.camera.top=250;  sun.shadow.camera.bottom=-250;
     sun.shadow.camera.far=600;
@@ -1057,6 +1058,7 @@ export default function DesignEditor() {
           lotRef.current={w:newW,d:newD,ox:newOX,oz:newOZ};
           setLotW(newW); setLotD(newD); setLotOX(newOX); setLotOZ(newOZ);
         }
+        needsRenderRef.current=true;
         return;
       }
       if(!dragging||!dragId) return;
@@ -1065,6 +1067,7 @@ export default function DesignEditor() {
         let nx=pt.x+dragOffset.x, nz=pt.z+dragOffset.z;
         if(snapRef.current){const s=2;nx=Math.round(nx/s)*s;nz=Math.round(nz/s)*s;}
         gr.position.x=nx; gr.position.z=nz;
+        needsRenderRef.current=true;
       }
     };
     const onPointerUp = () => {
@@ -1090,14 +1093,19 @@ export default function DesignEditor() {
       if(!W2||!H2) return;
       camera.aspect = W2/H2; camera.updateProjectionMatrix();
       renderer.setSize(W2, H2, false);
+      needsRenderRef.current = true;
     };
     window.addEventListener("resize", onResize);
-    // Trigger once in case initial size was wrong
     setTimeout(onResize, 100);
+
+    // On-demand rendering — only draw when something actually changed
+    controls.addEventListener('change', ()=>{ needsRenderRef.current=true; });
 
     const animate = () => {
       animIdRef.current = requestAnimationFrame(animate);
       controls.update();
+      if(!needsRenderRef.current) return;
+      needsRenderRef.current = false;
       const sel=selectedIdRef.current;
       Object.entries(groupsRef.current).forEach(([id,g])=>{
         const ring=g.getObjectByName("selection_ring");
@@ -1280,7 +1288,7 @@ export default function DesignEditor() {
         cam.lookAt(0,0,0);
         controls.target.set(0,0,0); controls.update();
       }
-      setSatLoaded(true);
+      setSatLoaded(true); invalidate();
     }).catch(()=>setSatLoaded(false)).finally(()=>setSatLoading(false));
   },[geoCoords,lotW,lotD]);
 
@@ -1289,6 +1297,7 @@ export default function DesignEditor() {
     const scene=sceneRef.current; if(!scene) return;
     lotRef.current={w:lotW,d:lotD,ox:lotOX,oz:lotOZ};
     buildAndAddGround(scene,lotW,lotD,lotOX,lotOZ,lotEditMode);
+    invalidate();
     if(!satMeshRef.current){
       const cam=cameraRef.current; const controls=controlsRef.current;
       if(cam&&controls){
@@ -1317,6 +1326,7 @@ export default function DesignEditor() {
         groupsRef.current[el.id].rotation.y=(el.rotation||0)*Math.PI/180;
       }
     });
+    invalidate();
   },[elements]);
 
   // ── Save ──────────────────────────────────────────────────────────────────
@@ -1527,49 +1537,37 @@ export default function DesignEditor() {
             </div>
           )}
 
-          {/* Street view controls panel */}
+          {/* Street view controls — compact bottom bar */}
           {svMode&&(
-            <div className="absolute bottom-14 left-1/2 -translate-x-1/2 z-20 bg-black/80 backdrop-blur-sm text-white rounded-2xl px-5 py-3 flex items-center gap-4 shadow-2xl">
-              <div className="flex flex-col items-center gap-1 min-w-0">
-                <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Heading</span>
-                <div className="flex items-center gap-2">
-                  {[["N",0],["E",90],["S",180],["W",270]].map(([lbl,deg])=>(
-                    <button key={lbl} onClick={()=>setSvHeading(deg)}
-                      className={cn("w-6 h-6 rounded text-[9px] font-bold transition-colors",
-                        svHeading===deg?"bg-sky-500 text-white":"bg-slate-700 text-slate-300 hover:bg-slate-600")}>
-                      {lbl}
-                    </button>
-                  ))}
-                  <input type="range" min={0} max={359} value={svHeading}
-                    onChange={e=>setSvHeading(Number(e.target.value))}
-                    className="w-24 accent-sky-500"/>
-                  <span className="text-xs text-slate-300 w-8">{svHeading}°</span>
-                </div>
-              </div>
-              <div className="w-px h-8 bg-slate-600"/>
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Pitch</span>
-                <div className="flex items-center gap-2">
-                  <input type="range" min={-45} max={45} value={svPitch}
-                    onChange={e=>setSvPitch(Number(e.target.value))}
-                    className="w-20 accent-sky-500"/>
-                  <span className="text-xs text-slate-300 w-8">{svPitch>0?"+":""}{svPitch}°</span>
-                </div>
-              </div>
-              <div className="w-px h-8 bg-slate-600"/>
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Zoom</span>
-                <div className="flex items-center gap-2">
-                  <input type="range" min={50} max={120} value={svFov}
-                    onChange={e=>setSvFov(Number(e.target.value))}
-                    className="w-20 accent-sky-500"/>
-                  <span className="text-xs text-slate-300 w-6">{svFov}</span>
-                </div>
-              </div>
-              <div className="w-px h-8 bg-slate-600"/>
+            <div className="absolute bottom-14 left-1/2 -translate-x-1/2 z-20 bg-black/80 backdrop-blur-sm text-white rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-2xl select-none">
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide shrink-0">Heading</span>
+              {[["N",0],["E",90],["S",180],["W",270]].map(([lbl,deg])=>(
+                <button key={lbl} onClick={()=>{ setSvHeading(deg); setTimeout(loadStreetView,50); }}
+                  className={cn("w-6 h-6 rounded text-[9px] font-bold transition-colors shrink-0",
+                    svHeading===deg?"bg-sky-500 text-white":"bg-slate-700 text-slate-300 hover:bg-slate-600")}>
+                  {lbl}
+                </button>
+              ))}
+              <input type="range" min={0} max={359} value={svHeading}
+                onChange={e=>setSvHeading(Number(e.target.value))}
+                onMouseUp={loadStreetView} onTouchEnd={loadStreetView}
+                className="w-28 accent-sky-500"/>
+              <span className="text-xs text-slate-300 w-8 shrink-0">{svHeading}°</span>
+              <div className="w-px h-6 bg-slate-600"/>
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide shrink-0">Pitch</span>
+              <input type="range" min={-45} max={45} value={svPitch}
+                onChange={e=>setSvPitch(Number(e.target.value))}
+                onMouseUp={loadStreetView} onTouchEnd={loadStreetView}
+                className="w-20 accent-sky-500"/>
+              <div className="w-px h-6 bg-slate-600"/>
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide shrink-0">Zoom</span>
+              <input type="range" min={50} max={120} value={svFov}
+                onChange={e=>setSvFov(Number(e.target.value))}
+                onMouseUp={loadStreetView} onTouchEnd={loadStreetView}
+                className="w-20 accent-sky-500"/>
               <button onClick={loadStreetView}
-                className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-500 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition-colors shrink-0">
-                <RotateCcw className="w-3 h-3"/> Reload Photo
+                className="flex items-center gap-1 bg-sky-600 hover:bg-sky-500 text-white text-xs px-2.5 py-1.5 rounded-lg font-medium transition-colors shrink-0">
+                <RotateCcw className="w-3 h-3"/> Reload
               </button>
             </div>
           )}
