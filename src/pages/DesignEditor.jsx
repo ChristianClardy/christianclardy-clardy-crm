@@ -8,7 +8,7 @@ import {
   ArrowLeft, Save, Check, Loader2, Trash2, Copy, RotateCw,
   Sun, Layers, Fence, UtensilsCrossed, Waves, TreePine, Compass,
   ChevronDown, RulerIcon, Maximize2, Map, DollarSign, FileText,
-  Grid3x3, Eye, Satellite, Box, Camera, RotateCcw, Download,
+  Grid3x3, Eye, Satellite, Box, Camera, RotateCcw, Download, Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -120,6 +120,28 @@ const CATEGORIES = [
 ];
 const ALL_ITEMS = CATEGORIES.flatMap(c => c.items);
 const ITEM_MAP  = Object.fromEntries(ALL_ITEMS.map(i => [i.type, i]));
+
+const KITCHEN_ELEMENT_TYPES = new Set(['kitchen_island', 'bbq_grill', 'outdoor_bar']);
+
+const APPLIANCE_CATALOG = [
+  { id: 'big_green_egg',  label: 'Big Green Egg',   widthIn: 18, depthIn: 18 },
+  { id: 'kamado_lg',      label: 'Kamado (Large)',   widthIn: 22, depthIn: 22 },
+  { id: 'grill_36',       label: 'Gas Grill 36"',    widthIn: 36, depthIn: 20 },
+  { id: 'grill_30',       label: 'Gas Grill 30"',    widthIn: 30, depthIn: 20 },
+  { id: 'grill_24',       label: 'Gas Grill 24"',    widthIn: 24, depthIn: 20 },
+  { id: 'burner',         label: 'Side Burner',      widthIn: 15, depthIn: 20 },
+  { id: 'pizza_oven',     label: 'Pizza Oven',       widthIn: 24, depthIn: 24 },
+  { id: 'fridge_15',      label: 'Fridge 15"',       widthIn: 15, depthIn: 24 },
+  { id: 'fridge_24',      label: 'Fridge 24"',       widthIn: 24, depthIn: 24 },
+  { id: 'ice_maker',      label: 'Ice Maker',        widthIn: 15, depthIn: 24 },
+  { id: 'trash_pullout',  label: 'Trash Pull-Out',   widthIn: 15, depthIn: 22 },
+];
+
+function fmtIn(inches) {
+  const ft = Math.floor(inches / 12);
+  const i  = Math.round(inches % 12);
+  return ft > 0 ? (i > 0 ? `${ft}′${i}″` : `${ft}′`) : `${i}″`;
+}
 
 // ─── Procedural textures ────────────────────────────────────────────────────
 function woodTexture(hex) {
@@ -276,18 +298,188 @@ function buildFirepit(_hex) {
   return g;
 }
 
-function buildKitchen(w, d, hex) {
-  const g = new THREE.Group();
-  const ct = concreteTexture(hex);
-  const base = new THREE.Mesh(new THREE.BoxGeometry(w,3,d), new THREE.MeshStandardMaterial({ map:ct, roughness:0.6 }));
-  base.position.y=1.5; base.castShadow=true; base.receiveShadow=true; g.add(base);
-  const top = new THREE.Mesh(new THREE.BoxGeometry(w+0.2,0.15,d+0.2), new THREE.MeshStandardMaterial({ color:0xE8E8E8, roughness:0.15, metalness:0.4 }));
-  top.position.y=3.07; top.castShadow=true; g.add(top);
-  const grillMat = new THREE.MeshStandardMaterial({ color:0x333333, roughness:0.3, metalness:0.8 });
-  for (let i=0;i<4;i++) {
-    const gr = new THREE.Mesh(new THREE.BoxGeometry(0.08,0.04,d*0.8), grillMat);
-    gr.position.set(-w/4+i*(w/4),3.22,0); g.add(gr);
+function buildKitchen(w, d, hex, config) {
+  const g       = new THREE.Group();
+  const sections = config?.sections  || [];
+  const levels   = config?.levels    || 1;
+  const ledge    = config?.ledge     || 'concrete';
+  const baseH    = 3.0;
+
+  const ct      = concreteTexture(hex);
+  const base    = new THREE.Mesh(new THREE.BoxGeometry(w, baseH, d), new THREE.MeshStandardMaterial({ map: ct, roughness: 0.6 }));
+  base.position.y = baseH / 2; base.castShadow = true; base.receiveShadow = true; g.add(base);
+
+  const LEDGE_CFG = {
+    concrete:  { color: 0xE8E8E8, roughness: 0.15, metalness: 0.4 },
+    granite:   { color: 0x2A2A2A, roughness: 0.05, metalness: 0.1 },
+    quartzite: { color: 0xD4C9BC, roughness: 0.08, metalness: 0.05 },
+    tile:      { color: 0xD4C5A9, roughness: 0.35, metalness: 0.0 },
+    none:      null,
+  };
+  const lc = LEDGE_CFG[ledge] || LEDGE_CFG.concrete;
+  if (lc) {
+    const top = new THREE.Mesh(new THREE.BoxGeometry(w + 0.25, 0.16, d + 0.25), new THREE.MeshStandardMaterial(lc));
+    top.position.y = baseH + 0.08; top.castShadow = true; g.add(top);
   }
+
+  if (sections.length > 0) {
+    const totalIn = sections.reduce((s, sec) => s + (sec.widthIn || 24), 0) || 1;
+    let xCursor   = -w / 2;
+    const pullMat = new THREE.MeshStandardMaterial({ color: 0xBBBBBB, metalness: 0.85, roughness: 0.1 });
+
+    sections.forEach(sec => {
+      const sw = ((sec.widthIn || 24) / totalIn) * w;
+      const cx = xCursor + sw / 2;
+      const fz = -d / 2 - 0.05;
+
+      switch (sec.type) {
+        case 'drawer': {
+          const panelMat = new THREE.MeshStandardMaterial({ color: 0x3E3E3E, roughness: 0.5 });
+          const cnt = Math.max(1, sec.drawerCount || 3);
+          const dh  = (baseH - 0.25) / cnt;
+          for (let di = 0; di < cnt; di++) {
+            const py = 0.12 + dh * (di + 0.5);
+            const panel = new THREE.Mesh(new THREE.BoxGeometry(sw - 0.1, dh - 0.08, 0.08), panelMat);
+            panel.position.set(cx, py, fz); g.add(panel);
+            const pull = new THREE.Mesh(new THREE.BoxGeometry(sw * 0.38, 0.07, 0.12), pullMat);
+            pull.position.set(cx, py, fz - 0.07); g.add(pull);
+          }
+          break;
+        }
+        case 'door': {
+          const doorMat = new THREE.MeshStandardMaterial({ color: 0x3E3E3E, roughness: 0.5 });
+          const cnt = Math.max(1, sec.doorCount || 1);
+          const dw2 = (sw - 0.12) / cnt;
+          for (let di = 0; di < cnt; di++) {
+            const dcx = cx - (sw - 0.12) / 2 + dw2 * (di + 0.5);
+            const door = new THREE.Mesh(new THREE.BoxGeometry(dw2 - 0.06, baseH * 0.72, 0.08), doorMat);
+            door.position.set(dcx, baseH * 0.38, fz); g.add(door);
+            const pull = new THREE.Mesh(new THREE.BoxGeometry(0.07, baseH * 0.28, 0.12), pullMat);
+            pull.position.set(dcx + dw2 * 0.36, baseH * 0.38, fz - 0.07); g.add(pull);
+          }
+          break;
+        }
+        case 'appliance': {
+          const app = sec.applianceType || 'grill_30';
+          if (app === 'big_green_egg' || app === 'kamado_lg') {
+            const diam = (app === 'big_green_egg' ? 18 : 22) / 12;
+            const r    = diam / 2;
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.9, r, 1.4, 16),
+              new THREE.MeshStandardMaterial({ color: 0x1A1A1A, roughness: 0.5, metalness: 0.2 }));
+            body.position.set(cx, baseH + 0.55, 0); g.add(body);
+            const lid2 = new THREE.Mesh(new THREE.SphereGeometry(r * 0.9, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+              new THREE.MeshStandardMaterial({ color: 0x1A1A1A, roughness: 0.4 }));
+            lid2.position.set(cx, baseH + 1.2, 0); g.add(lid2);
+            const bandMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8, roughness: 0.2 });
+            const band = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.92, r * 0.92, 0.1, 16),
+              bandMat);
+            band.position.set(cx, baseH + 1.2, 0); g.add(band);
+          } else if (app === 'pizza_oven') {
+            const pw = (sec.applianceWidthIn || 24) / 12;
+            const pd = Math.min(d - 0.3, (sec.applianceDepthIn || 24) / 12);
+            const ovenBase = new THREE.Mesh(new THREE.BoxGeometry(pw, 0.7, pd),
+              new THREE.MeshStandardMaterial({ map: concreteTexture(0x8D6E63), roughness: 0.9 }));
+            ovenBase.position.set(cx, baseH + 0.5, 0); g.add(ovenBase);
+            const dome = new THREE.Mesh(new THREE.SphereGeometry(pw * 0.42, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+              new THREE.MeshStandardMaterial({ color: 0x7A5C50, roughness: 0.9 }));
+            dome.position.set(cx, baseH + 0.7, 0); g.add(dome);
+          } else if (app === 'fridge_15' || app === 'fridge_24' || app === 'ice_maker') {
+            const fw = (sec.applianceWidthIn || (app === 'fridge_24' ? 24 : 15)) / 12;
+            const fh = app === 'ice_maker' ? 2.5 : 2.8;
+            const fridge = new THREE.Mesh(new THREE.BoxGeometry(fw, fh, d * 0.9),
+              new THREE.MeshStandardMaterial({ color: 0xCCCCCC, roughness: 0.2, metalness: 0.45 }));
+            fridge.position.set(cx, fh / 2, 0); g.add(fridge);
+            const hdl = new THREE.Mesh(new THREE.BoxGeometry(0.06, fh * 0.45, 0.1), pullMat);
+            hdl.position.set(cx + fw * 0.4, fh * 0.55, -d / 2 - 0.06); g.add(hdl);
+          } else if (app === 'trash_pullout') {
+            const tw = (sec.applianceWidthIn || 15) / 12;
+            const tDoor = new THREE.Mesh(new THREE.BoxGeometry(tw - 0.08, baseH * 0.72, 0.08),
+              new THREE.MeshStandardMaterial({ color: 0x3E3E3E, roughness: 0.5 }));
+            tDoor.position.set(cx, baseH * 0.38, fz); g.add(tDoor);
+            const tPull = new THREE.Mesh(new THREE.BoxGeometry(0.07, baseH * 0.25, 0.12), pullMat);
+            tPull.position.set(cx, baseH * 0.38, fz - 0.07); g.add(tPull);
+          } else {
+            // Generic grill / burner
+            const gw = (sec.applianceWidthIn || 30) / 12;
+            const gd = Math.min(d - 0.2, (sec.applianceDepthIn || 20) / 12);
+            const grillBodyMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2, metalness: 0.8 });
+            const lid3 = new THREE.Mesh(new THREE.BoxGeometry(gw, 0.3, gd), grillBodyMat);
+            lid3.position.set(cx, baseH + 0.2, 0); g.add(lid3);
+            const grateMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.4, metalness: 0.6 });
+            for (let gi = 0; gi < 5; gi++) {
+              const gr = new THREE.Mesh(new THREE.BoxGeometry(gw * 0.88, 0.04, 0.05), grateMat);
+              gr.position.set(cx, baseH + 0.08, -gd / 2 + 0.06 + gi * ((gd - 0.1) / 4)); g.add(gr);
+            }
+          }
+          break;
+        }
+        case 'sink': {
+          const sw2   = Math.min(sw - 0.2, (sec.applianceWidthIn || 21) / 12);
+          const sd2   = Math.min(d - 0.25, 1.35);
+          const rimMat = new THREE.MeshStandardMaterial({ color: 0xB0B0B0, metalness: 0.6, roughness: 0.15 });
+          const rim = new THREE.Mesh(new THREE.BoxGeometry(sw2, 0.1, sd2), rimMat);
+          rim.position.set(cx, baseH + 0.13, 0); g.add(rim);
+          const basin = new THREE.Mesh(new THREE.BoxGeometry(sw2 - 0.18, 0.06, sd2 - 0.18),
+            new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.4, roughness: 0.3 }));
+          basin.position.set(cx, baseH + 0.07, 0); g.add(basin);
+          const faucetMat = new THREE.MeshStandardMaterial({ color: 0xCCCCCC, metalness: 0.9, roughness: 0.05 });
+          const fBase = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.32, 8), faucetMat);
+          fBase.position.set(cx, baseH + 0.34, 0); g.add(fBase);
+          const fArm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.28, 8), faucetMat);
+          fArm.rotation.x = Math.PI / 2; fArm.position.set(cx, baseH + 0.56, -0.1); g.add(fArm);
+          break;
+        }
+        case 'open': {
+          const frameMat = new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.7 });
+          [-sw / 2 + 0.05, sw / 2 - 0.05].forEach(px => {
+            const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, baseH, 0.08), frameMat);
+            post.position.set(cx + px, baseH / 2, -d / 2 + 0.05); g.add(post);
+          });
+          const shelf = new THREE.Mesh(new THREE.BoxGeometry(sw - 0.14, 0.08, d * 0.35), frameMat);
+          shelf.position.set(cx, baseH * 0.52, -d / 2 + d * 0.18); g.add(shelf);
+          break;
+        }
+        // 'filler' — plain base panel already covered by body box
+      }
+      xCursor += sw;
+    });
+  } else {
+    // Default look: grill grates on top
+    const grillMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.3, metalness: 0.8 });
+    for (let i = 0; i < 4; i++) {
+      const gr = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.04, d * 0.8), grillMat);
+      gr.position.set(-w / 4 + i * (w / 4), baseH + 0.22, 0); g.add(gr);
+    }
+  }
+
+  // Two-level bar section
+  if (levels === 2) {
+    const barH   = (config?.barHeightIn || 42) / 12;
+    const barD   = (config?.barDepthIn  || 14) / 12;
+    const barBodyMat = new THREE.MeshStandardMaterial({ map: concreteTexture(Math.max(0, hex - 0x101010)), roughness: 0.65 });
+    const barBody = new THREE.Mesh(new THREE.BoxGeometry(w, barH - baseH, barD), barBodyMat);
+    barBody.position.set(0, baseH + (barH - baseH) / 2, -d / 2 + barD / 2);
+    barBody.castShadow = true; g.add(barBody);
+    if (lc) {
+      const barTopMat = new THREE.MeshStandardMaterial(lc);
+      const barTop = new THREE.Mesh(new THREE.BoxGeometry(w + 0.3, 0.18, barD + 0.3), barTopMat);
+      barTop.position.set(0, barH + 0.09, -d / 2 + barD / 2);
+      barTop.castShadow = true; g.add(barTop);
+    }
+    // Bar stools
+    const stoolMat = new THREE.MeshStandardMaterial({ color: 0x5C4A3A, roughness: 0.7 });
+    const numStools = Math.max(1, Math.floor(w / 2.2));
+    for (let s = 0; s < numStools; s++) {
+      const sx = -w / 2 + (s + 0.5) * (w / numStools);
+      const sz = -d / 2 - 1.3;
+      const stH = barH - 1.4;
+      const seat = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.31, 0.08, 8), stoolMat);
+      seat.position.set(sx, barH - 0.04, sz); g.add(seat);
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, stH, 6), stoolMat);
+      leg.position.set(sx, stH / 2, sz); g.add(leg);
+    }
+  }
+
   return g;
 }
 
@@ -523,7 +715,7 @@ function buildStructureGroup(el) {
     case "fire_table":     mg = buildFirepit(hex); break;
     case "kitchen_island":
     case "bbq_grill":
-    case "outdoor_bar":    mg = buildKitchen(w,d,hex); break;
+    case "outdoor_bar":    mg = buildKitchen(w,d,hex,el.kitchenConfig); break;
     case "patio":
     case "pavers":
     case "driveway":
@@ -742,31 +934,50 @@ function PropertiesPanel({ el, onUpdate, onDelete, onDuplicate }) {
     : (el.color||"#888888");
   const cost = calcElementCost(el);
 
+  const isKitchen = KITCHEN_ELEMENT_TYPES.has(el.type);
+
   return (
-    <div className="flex-1 overflow-y-auto p-3 space-y-3">
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">{el.label}</p>
-        <div className="space-y-2">
-          <div>
-            <Label className="text-[10px] text-slate-400 mb-1 block">Label</Label>
-            <Input value={el.label} onChange={e=>onUpdate(el.id,{label:e.target.value})} className="h-7 text-xs bg-slate-800 border-slate-600 text-white" />
+    <div className="flex-1 overflow-y-auto pb-4 space-y-3">
+      <div className="p-3 space-y-2">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{el.label}</p>
+        <div>
+          <Label className="text-[10px] text-slate-400 mb-1 block">Label</Label>
+          <Input value={el.label} onChange={e=>onUpdate(el.id,{label:e.target.value})} className="h-7 text-xs bg-slate-800 border-slate-600 text-white" />
+        </div>
+        {/* For kitchen elements: width is controlled by section builder, show read-only total */}
+        {isKitchen ? (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-[10px] text-slate-400 mb-1 block">Total Width</Label>
+              <div className="h-7 px-2 flex items-center text-xs bg-slate-900 border border-slate-700 rounded text-amber-300 font-bold">
+                {fmtIn((el.w ?? cfg.w ?? 10) * 12)}
+              </div>
+            </div>
+            <div>
+              <Label className="text-[10px] text-slate-400 mb-1 block">Depth (ft)</Label>
+              <Input type="number" min={1.5} max={6} step={0.5} value={el.d??cfg.d??4}
+                onChange={e=>onUpdate(el.id,{d:Number(e.target.value)})} className="h-7 text-xs bg-slate-800 border-slate-600 text-white" />
+            </div>
           </div>
+        ) : (
           <div className="grid grid-cols-2 gap-2">
             <div><Label className="text-[10px] text-slate-400 mb-1 block">Width (ft)</Label>
               <Input type="number" min={1} value={el.w??cfg.w??10} onChange={e=>onUpdate(el.id,{w:Number(e.target.value)})} className="h-7 text-xs bg-slate-800 border-slate-600 text-white" /></div>
             <div><Label className="text-[10px] text-slate-400 mb-1 block">Depth (ft)</Label>
               <Input type="number" min={1} value={el.d??cfg.d??10} onChange={e=>onUpdate(el.id,{d:Number(e.target.value)})} className="h-7 text-xs bg-slate-800 border-slate-600 text-white" /></div>
           </div>
-          <div>
-            <Label className="text-[10px] text-slate-400 mb-1 block">Rotation (°)</Label>
-            <div className="flex items-center gap-2">
-              <Input type="number" value={el.rotation||0} onChange={e=>onUpdate(el.id,{rotation:Number(e.target.value)})} className="h-7 text-xs bg-slate-800 border-slate-600 text-white flex-1" />
-              <button onClick={()=>onUpdate(el.id,{rotation:((el.rotation||0)+45)%360})}
-                className="p-1.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors">
-                <RotateCw className="w-3.5 h-3.5" />
-              </button>
-            </div>
+        )}
+        <div>
+          <Label className="text-[10px] text-slate-400 mb-1 block">Rotation (°)</Label>
+          <div className="flex items-center gap-2">
+            <Input type="number" value={el.rotation||0} onChange={e=>onUpdate(el.id,{rotation:Number(e.target.value)})} className="h-7 text-xs bg-slate-800 border-slate-600 text-white flex-1" />
+            <button onClick={()=>onUpdate(el.id,{rotation:((el.rotation||0)+45)%360})}
+              className="p-1.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors">
+              <RotateCw className="w-3.5 h-3.5" />
+            </button>
           </div>
+        </div>
+        {!isKitchen && (
           <div>
             <Label className="text-[10px] text-slate-400 mb-1 block">Color</Label>
             <div className="flex gap-2 items-center">
@@ -774,22 +985,351 @@ function PropertiesPanel({ el, onUpdate, onDelete, onDuplicate }) {
               <span className="text-[10px] text-slate-400 font-mono">{hexStr.toUpperCase()}</span>
             </div>
           </div>
+        )}
+        {/* Cost preview */}
+        <div className="rounded-lg bg-slate-800/80 p-2.5 space-y-1 border border-slate-700 mt-1">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Cost Preview</p>
+          <div className="flex justify-between text-[10px]"><span className="text-slate-400">Materials</span><span className="text-slate-300">${cost.materials.toLocaleString()}</span></div>
+          <div className="flex justify-between text-[10px]"><span className="text-slate-400">Labor</span><span className="text-slate-300">${cost.labor.toLocaleString()}</span></div>
+          <div className="flex justify-between text-xs font-bold pt-1 border-t border-slate-600"><span className="text-slate-300">Total</span><span className="text-amber-400">${cost.total.toLocaleString()}</span></div>
+        </div>
+        <div className="space-y-1.5 border-t border-slate-700 pt-2">
+          <button onClick={()=>onDuplicate(el.id)} className="flex items-center gap-2 w-full text-xs text-slate-300 hover:text-white px-2 py-1.5 rounded hover:bg-slate-700 transition-colors">
+            <Copy className="w-3.5 h-3.5"/> Duplicate
+          </button>
+          <button onClick={()=>onDelete(el.id)} className="flex items-center gap-2 w-full text-xs text-rose-400 hover:text-rose-300 px-2 py-1.5 rounded hover:bg-rose-900/30 transition-colors">
+            <Trash2 className="w-3.5 h-3.5"/> Remove
+          </button>
         </div>
       </div>
-      {/* Cost preview for this element */}
-      <div className="rounded-lg bg-slate-800/80 p-2.5 space-y-1 border border-slate-700">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Cost Preview</p>
-        <div className="flex justify-between text-[10px]"><span className="text-slate-400">Materials</span><span className="text-slate-300">${cost.materials.toLocaleString()}</span></div>
-        <div className="flex justify-between text-[10px]"><span className="text-slate-400">Labor</span><span className="text-slate-300">${cost.labor.toLocaleString()}</span></div>
-        <div className="flex justify-between text-xs font-bold pt-1 border-t border-slate-600"><span className="text-slate-300">Total</span><span className="text-amber-400">${cost.total.toLocaleString()}</span></div>
+
+      {/* Kitchen Builder — only for kitchen element types */}
+      {isKitchen && <KitchenSketchPanel el={el} onUpdate={onUpdate}/>}
+    </div>
+  );
+}
+
+// ─── Kitchen Builder Panel ───────────────────────────────────────────────────
+const SEC_COLORS = {
+  drawer: '#374151', door: '#4B5563', appliance: '#7C2D12',
+  sink: '#1E3A5F', open: '#1F2937', filler: '#111827',
+};
+const SEC_LABELS = {
+  drawer: 'DWR', door: 'DOOR', appliance: 'APPL',
+  sink: 'SINK', open: 'OPEN', filler: 'FILL',
+};
+
+function KitchenSketchPanel({ el, onUpdate }) {
+  const cfg         = el.kitchenConfig || {};
+  const levels      = cfg.levels      || 1;
+  const ledge       = cfg.ledge       || 'concrete';
+  const sections    = cfg.sections    || [];
+  const barHeightIn = cfg.barHeightIn || 42;
+  const barDepthIn  = cfg.barDepthIn  || 14;
+
+  const [selIdx, setSelIdx]   = useState(null);
+  const [appPicker, setAppPicker] = useState(false);
+  const selSec = selIdx !== null ? sections[selIdx] : null;
+
+  const updateCfg = (patch) =>
+    onUpdate(el.id, { kitchenConfig: { ...cfg, ...patch } });
+
+  const updateSection = (idx, patch) => {
+    const newSecs = sections.map((s, i) => i === idx ? { ...s, ...patch } : s);
+    const newW = 'widthIn' in patch
+      ? newSecs.reduce((sum, s) => sum + (s.widthIn || 24), 0) / 12
+      : el.w;
+    onUpdate(el.id, {
+      kitchenConfig: { ...cfg, sections: newSecs },
+      ...(newW !== el.w ? { w: Math.round(newW * 100) / 100 } : {}),
+    });
+  };
+
+  const addSection = (type) => {
+    const defaults = {
+      drawer:    { widthIn: 24, drawerCount: 3 },
+      door:      { widthIn: 24, doorCount: 1 },
+      appliance: { widthIn: 30, applianceType: 'grill_30', applianceName: 'Gas Grill 30"', applianceWidthIn: 30, applianceDepthIn: 20 },
+      sink:      { widthIn: 30, applianceWidthIn: 21 },
+      open:      { widthIn: 24 },
+      filler:    { widthIn: 6 },
+    };
+    const newSec  = { id: `sec_${Date.now()}`, type, ...defaults[type] };
+    const newSecs = [...sections, newSec];
+    const newW    = newSecs.reduce((sum, s) => sum + (s.widthIn || 24), 0) / 12;
+    onUpdate(el.id, {
+      kitchenConfig: { ...cfg, sections: newSecs },
+      w: Math.round(newW * 100) / 100,
+    });
+    setSelIdx(newSecs.length - 1);
+  };
+
+  const removeSection = (idx) => {
+    const newSecs = sections.filter((_, i) => i !== idx);
+    const newW    = newSecs.length > 0
+      ? newSecs.reduce((sum, s) => sum + (s.widthIn || 24), 0) / 12
+      : el.w;
+    onUpdate(el.id, {
+      kitchenConfig: { ...cfg, sections: newSecs },
+      w: Math.round(newW * 100) / 100,
+    });
+    setSelIdx(null);
+  };
+
+  const moveSection = (idx, dir) => {
+    const to = idx + dir;
+    if (to < 0 || to >= sections.length) return;
+    const newSecs = [...sections];
+    [newSecs[idx], newSecs[to]] = [newSecs[to], newSecs[idx]];
+    updateCfg({ sections: newSecs });
+    setSelIdx(to);
+  };
+
+  const totalIn = sections.reduce((s, sec) => s + (sec.widthIn || 24), 0);
+
+  return (
+    <div className="space-y-2.5 border-t border-slate-700 pt-3">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-amber-400 px-3 flex items-center gap-1.5">
+        <UtensilsCrossed className="w-3 h-3"/> Kitchen Builder
+      </p>
+
+      {/* Level + Bar config */}
+      <div className="px-3 space-y-1.5">
+        <div className="flex gap-1">
+          {[1, 2].map(lvl => (
+            <button key={lvl} onClick={() => updateCfg({ levels: lvl })}
+              className={cn("flex-1 py-1 text-[10px] rounded font-bold transition-colors",
+                levels === lvl ? "bg-amber-500 text-white" : "bg-slate-700 text-slate-300 hover:bg-slate-600")}>
+              {lvl === 1 ? 'Single Level' : '2-Level Bar'}
+            </button>
+          ))}
+        </div>
+
+        {levels === 2 && (
+          <div className="grid grid-cols-2 gap-1.5">
+            <div>
+              <p className="text-[9px] text-slate-500 mb-0.5">Bar Height (in)</p>
+              <Input type="number" min={38} max={52} value={barHeightIn}
+                onChange={e => updateCfg({ barHeightIn: Number(e.target.value) })}
+                className="h-6 text-[10px] bg-slate-800 border-slate-600 text-white px-1.5"/>
+            </div>
+            <div>
+              <p className="text-[9px] text-slate-500 mb-0.5">Bar Depth (in)</p>
+              <Input type="number" min={8} max={24} value={barDepthIn}
+                onChange={e => updateCfg({ barDepthIn: Number(e.target.value) })}
+                className="h-6 text-[10px] bg-slate-800 border-slate-600 text-white px-1.5"/>
+            </div>
+          </div>
+        )}
+
+        {/* Countertop material */}
+        <div>
+          <p className="text-[9px] text-slate-500 mb-0.5">Countertop</p>
+          <div className="grid grid-cols-3 gap-0.5">
+            {[['concrete','Concrete'],['granite','Granite'],['quartzite','Quartzite'],['tile','Tile'],['none','None']].map(([val,lbl]) => (
+              <button key={val} onClick={() => updateCfg({ ledge: val })}
+                className={cn("py-0.5 text-[9px] rounded font-medium transition-colors",
+                  ledge === val ? "bg-amber-500 text-white" : "bg-slate-700 text-slate-400 hover:bg-slate-600")}>
+                {lbl}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
-      <div className="space-y-1.5 border-t border-slate-700 pt-2">
-        <button onClick={()=>onDuplicate(el.id)} className="flex items-center gap-2 w-full text-xs text-slate-300 hover:text-white px-2 py-1.5 rounded hover:bg-slate-700 transition-colors">
-          <Copy className="w-3.5 h-3.5"/> Duplicate
-        </button>
-        <button onClick={()=>onDelete(el.id)} className="flex items-center gap-2 w-full text-xs text-rose-400 hover:text-rose-300 px-2 py-1.5 rounded hover:bg-rose-900/30 transition-colors">
-          <Trash2 className="w-3.5 h-3.5"/> Remove
-        </button>
+
+      {/* Sketch — front elevation */}
+      <div className="px-3">
+        <div className="flex justify-between text-[9px] text-slate-400 mb-1">
+          <span className="font-bold">{fmtIn(totalIn || el.w * 12)} total</span>
+          <span>{sections.length} sections</span>
+        </div>
+        {sections.length === 0 ? (
+          <div className="h-10 flex items-center justify-center rounded border border-dashed border-slate-600 text-[9px] text-slate-500">
+            Add sections below to build your kitchen
+          </div>
+        ) : (
+          <div className="overflow-x-auto pb-0.5">
+            {/* Width labels */}
+            <div className="flex mb-0.5" style={{ minWidth: sections.length * 34 }}>
+              {sections.map((sec, i) => {
+                const pct = (sec.widthIn || 24) / Math.max(totalIn, 1);
+                return (
+                  <div key={sec.id || i} style={{ flex: pct, minWidth: 34 }}
+                    className="text-[8px] text-slate-400 text-center truncate leading-none px-0.5">
+                    {sec.widthIn}″
+                  </div>
+                );
+              })}
+            </div>
+            {/* Section blocks */}
+            <div className="flex rounded overflow-hidden border border-slate-600 h-10"
+              style={{ minWidth: sections.length * 34 }}>
+              {sections.map((sec, i) => {
+                const pct = (sec.widthIn || 24) / Math.max(totalIn, 1);
+                const appLabel = sec.applianceName ? sec.applianceName.split(' ').map(w2 => w2[0]).join('') : 'APP';
+                return (
+                  <button key={sec.id || i}
+                    style={{ flex: pct, minWidth: 34, backgroundColor: SEC_COLORS[sec.type] || SEC_COLORS.filler }}
+                    onClick={() => setSelIdx(selIdx === i ? null : i)}
+                    className={cn("flex items-center justify-center text-[9px] font-bold border-r border-slate-600 last:border-r-0 transition-all relative overflow-hidden",
+                      selIdx === i ? "ring-1 ring-inset ring-amber-400 text-amber-300" : "text-slate-300 hover:brightness-125")}>
+                    <span className="truncate px-0.5">
+                      {sec.type === 'appliance' ? appLabel : SEC_LABELS[sec.type] || '?'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {/* Bottom measurement line */}
+            <div className="flex mt-0.5" style={{ minWidth: sections.length * 34 }}>
+              {sections.map((sec, i) => {
+                const pct = (sec.widthIn || 24) / Math.max(totalIn, 1);
+                return (
+                  <div key={sec.id || i} style={{ flex: pct, minWidth: 34 }}
+                    className="text-[7px] text-slate-600 text-center truncate">
+                    {fmtIn(sec.widthIn || 24)}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Add section buttons */}
+      <div className="px-3">
+        <p className="text-[9px] text-slate-500 mb-1">Add Section</p>
+        <div className="grid grid-cols-3 gap-0.5">
+          {[['drawer','Drawer'],['door','Door'],['appliance','Appliance'],['sink','Sink'],['open','Open'],['filler','Filler']].map(([type,lbl]) => (
+            <button key={type} onClick={() => addSection(type)}
+              className="flex items-center justify-center gap-0.5 py-1 text-[9px] bg-slate-700 hover:bg-slate-600 text-slate-300 rounded transition-colors">
+              <Plus className="w-2.5 h-2.5"/>{lbl}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Selected section editor */}
+      {selSec && (
+        <div className="mx-3 rounded-lg bg-slate-800/80 border border-slate-700 p-2.5 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-bold text-amber-300 capitalize">
+              {selSec.type === 'appliance' ? (selSec.applianceName || 'Appliance') : `${selSec.type} section`}
+            </p>
+            <div className="flex items-center gap-1">
+              <button onClick={() => moveSection(selIdx, -1)} disabled={selIdx === 0}
+                className="text-slate-500 hover:text-slate-300 disabled:opacity-30 transition-colors text-[9px] px-1">◀</button>
+              <button onClick={() => moveSection(selIdx, 1)} disabled={selIdx === sections.length - 1}
+                className="text-slate-500 hover:text-slate-300 disabled:opacity-30 transition-colors text-[9px] px-1">▶</button>
+              <button onClick={() => removeSection(selIdx)}
+                className="text-slate-500 hover:text-rose-400 transition-colors ml-1">
+                <Trash2 className="w-3 h-3"/>
+              </button>
+            </div>
+          </div>
+
+          {/* Width */}
+          <div>
+            <p className="text-[9px] text-slate-500 mb-0.5">Width (inches)</p>
+            <div className="flex gap-1 items-center">
+              <Input type="number" min={3} max={120} value={selSec.widthIn || 24}
+                onChange={e => updateSection(selIdx, { widthIn: Math.max(3, Number(e.target.value)) })}
+                className="h-6 text-[10px] bg-slate-900 border-slate-600 text-white px-1.5 flex-1"/>
+              <span className="text-[9px] text-slate-400">{fmtIn(selSec.widthIn || 24)}</span>
+            </div>
+          </div>
+
+          {/* Drawer-specific */}
+          {selSec.type === 'drawer' && (
+            <div>
+              <p className="text-[9px] text-slate-500 mb-0.5">Number of Drawers</p>
+              <div className="flex gap-1">
+                {[1,2,3,4,5,6].map(n => (
+                  <button key={n} onClick={() => updateSection(selIdx, { drawerCount: n })}
+                    className={cn("flex-1 py-0.5 text-[10px] rounded font-bold transition-colors",
+                      (selSec.drawerCount || 3) === n ? "bg-amber-500 text-white" : "bg-slate-700 text-slate-400 hover:bg-slate-600")}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Door-specific */}
+          {selSec.type === 'door' && (
+            <div>
+              <p className="text-[9px] text-slate-500 mb-0.5">Number of Doors</p>
+              <div className="flex gap-1">
+                {[1,2].map(n => (
+                  <button key={n} onClick={() => updateSection(selIdx, { doorCount: n })}
+                    className={cn("flex-1 py-0.5 text-[10px] rounded font-bold transition-colors",
+                      (selSec.doorCount || 1) === n ? "bg-amber-500 text-white" : "bg-slate-700 text-slate-400 hover:bg-slate-600")}>
+                    {n} Door{n > 1 ? 's' : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Appliance-specific */}
+          {selSec.type === 'appliance' && (
+            <div className="space-y-1.5">
+              <p className="text-[9px] text-slate-500">Appliance Type</p>
+              <div className="max-h-28 overflow-y-auto space-y-0.5 pr-0.5">
+                {APPLIANCE_CATALOG.map(app => (
+                  <button key={app.id}
+                    onClick={() => updateSection(selIdx, {
+                      applianceType: app.id,
+                      applianceName: app.label,
+                      widthIn: app.widthIn,
+                      applianceWidthIn: app.widthIn,
+                      applianceDepthIn: app.depthIn,
+                    })}
+                    className={cn("w-full text-left px-2 py-1 text-[9px] rounded transition-colors flex justify-between",
+                      selSec.applianceType === app.id
+                        ? "bg-amber-900/60 text-amber-200 border border-amber-700/50"
+                        : "bg-slate-700/60 text-slate-300 hover:bg-slate-600")}>
+                    <span className="font-semibold">{app.label}</span>
+                    <span className="text-slate-400">{app.widthIn}″</span>
+                  </button>
+                ))}
+              </div>
+              <div>
+                <p className="text-[9px] text-slate-500 mb-0.5">Custom Width (in)</p>
+                <Input type="number" min={12} max={72} value={selSec.applianceWidthIn || selSec.widthIn || 30}
+                  onChange={e => updateSection(selIdx, { applianceWidthIn: Number(e.target.value), widthIn: Number(e.target.value) })}
+                  className="h-6 text-[10px] bg-slate-900 border-slate-600 text-white px-1.5"/>
+              </div>
+            </div>
+          )}
+
+          {/* Sink-specific */}
+          {selSec.type === 'sink' && (
+            <div>
+              <p className="text-[9px] text-slate-500 mb-0.5">Basin Width (in)</p>
+              <div className="flex gap-1">
+                {[['Single 21"',21],['Single 27"',27],['Double 33"',33]].map(([lbl, v]) => (
+                  <button key={v} onClick={() => updateSection(selIdx, { applianceWidthIn: v })}
+                    className={cn("flex-1 py-0.5 text-[9px] rounded font-bold transition-colors",
+                      (selSec.applianceWidthIn || 21) === v ? "bg-amber-500 text-white" : "bg-slate-700 text-slate-400 hover:bg-slate-600")}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Kitchen depth */}
+      <div className="px-3 pb-1">
+        <p className="text-[9px] text-slate-500 mb-0.5">Kitchen Depth (ft)</p>
+        <div className="flex gap-1 items-center">
+          <Input type="number" min={1.5} max={6} step={0.5} value={el.d ?? 4}
+            onChange={e => onUpdate(el.id, { d: Number(e.target.value) })}
+            className="h-6 text-[10px] bg-slate-800 border-slate-600 text-white px-1.5 flex-1"/>
+          <span className="text-[9px] text-slate-400">{fmtIn((el.d ?? 4) * 12)}</span>
+        </div>
       </div>
     </div>
   );
@@ -853,6 +1393,30 @@ async function fetchSatTexture(url) {
   });
 }
 
+// Resize image to max 1024px and return base64 string (no data: prefix)
+async function resizeAndEncode(file) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const objUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      const MAX = 1024;
+      let { width, height } = img;
+      if (width > MAX || height > MAX) {
+        const scale = MAX / Math.max(width, height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(objUrl);
+      resolve(canvas.toDataURL('image/jpeg', 0.85).split(',')[1]);
+    };
+    img.onerror = () => { URL.revokeObjectURL(objUrl); resolve(null); };
+    img.src = objUrl;
+  });
+}
+
 export default function DesignEditor() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
@@ -887,6 +1451,10 @@ export default function DesignEditor() {
   const [photoMode, setPhotoMode]       = useState(false);
   const [photoUrl, setPhotoUrl]         = useState(null);    // blob URL of uploaded image
   const photoInputRef                   = useRef(null);
+  const [aiAnalyzing, setAiAnalyzing]   = useState(false);
+  const [aiScene, setAiScene]           = useState(null);
+  const [aiError, setAiError]           = useState(null);
+  const photoModeRef                    = useRef(false);
 
   const needsRenderRef  = useRef(true);
   const invalidate      = () => { needsRenderRef.current = true; };
@@ -1130,8 +1698,9 @@ export default function DesignEditor() {
     };
   },[]);
 
-  // ── Keep lotEditModeRef in sync ──────────────────────────────────────────
+  // ── Keep refs in sync ────────────────────────────────────────────────────
   useEffect(()=>{ lotEditModeRef.current=lotEditMode; },[lotEditMode]);
+  useEffect(()=>{ photoModeRef.current=photoMode; },[photoMode]);
 
   // ── Street view: fetch image and check response before rendering ────────
   const loadStreetView = useCallback(async ()=>{
@@ -1156,14 +1725,95 @@ export default function DesignEditor() {
     }
   },[geoCoords,svHeading,svPitch,svFov]);
 
+  // ── AI: map detected feature types to catalog items ──────────────────────
+  const AI_TYPE_MAP = {
+    concrete_patio: 'patio', deck: 'patio', raised_bed: 'patio',
+    fence: 'retaining_wall', retaining_wall: 'retaining_wall', shed: 'retaining_wall',
+    tree: 'tree_shade', shrub: 'shrub', lawn: 'lawn',
+    pool: 'pool_rect', pergola: 'pergola',
+  };
+
+  const applyAiScene = useCallback((aiData)=>{
+    // Update lot dimensions from AI estimate
+    const w = Math.max(20, Math.min(aiData.spaceWidth  || 40, 200));
+    const d = Math.max(20, Math.min(aiData.spaceDepth  || 60, 200));
+    setLotW(w); setLotD(d); setLotOX(0); setLotOZ(0);
+    lotRef.current = { w, d, ox: 0, oz: 0 };
+
+    // Set camera to match detected perspective
+    const cam = cameraRef.current; const ctrl = controlsRef.current;
+    if (cam && ctrl) {
+      const h    = Math.max(3, aiData.cameraHeightFt || 5.5);
+      const tilt = Math.max(5, Math.min(aiData.cameraTiltDeg || 20, 55)) * Math.PI / 180;
+      const eyeDist = h / Math.tan(tilt);
+      cam.position.set(0, h, d * 0.5 + eyeDist);
+      cam.lookAt(0, 0, 0);
+      ctrl.target.set(0, 0, 0);
+      ctrl.maxPolarAngle = Math.PI * 0.78;
+      ctrl.minPolarAngle = Math.PI * 0.05;
+      ctrl.minAzimuthAngle = -Math.PI * 0.35;
+      ctrl.maxAzimuthAngle =  Math.PI * 0.35;
+      ctrl.update();
+    }
+
+    // Build elements from detected features
+    const features = aiData.existingFeatures || [];
+    const newEls = features.map(f => {
+      const type = AI_TYPE_MAP[f.type] || 'patio';
+      const cfg  = ITEM_MAP[type] || { label: f.type, color: 0x888888 };
+      return {
+        id:       `ai_${f.type}_${Date.now()}_${Math.random().toString(36).slice(2,6)}`,
+        type,
+        label:    cfg.label || f.type,
+        color:    cfg.color ?? 0x888888,
+        w:        Math.max(2, f.widthFt  || cfg.w || 10),
+        d:        Math.max(2, f.depthFt  || cfg.d || 10),
+        rotation: 0,
+        x:        f.xFt  || 0,
+        z:        (f.zFt || 0) - d * 0.5 + (f.depthFt || 10) * 0.5,
+      };
+    });
+
+    if (newEls.length > 0) setElements(prev => [...prev, ...newEls]);
+    invalidate();
+  }, []);
+
   // ── Photo upload: enter overlay mode with user's own photo ───────────────
+  const analyzePhoto = useCallback(async (file)=>{
+    setAiAnalyzing(true); setAiError(null); setAiScene(null);
+    try {
+      const b64 = await resizeAndEncode(file);
+      if (!b64) throw new Error('Could not read image');
+      const r = await fetch('/api/analyze-scene', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: b64, mediaType: 'image/jpeg' }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+        setAiError(err.error || 'Analysis failed');
+        return;
+      }
+      const scene = await r.json();
+      setAiScene(scene);
+      applyAiScene(scene);
+    } catch (e) {
+      setAiError(e.message);
+    } finally {
+      setAiAnalyzing(false);
+    }
+  }, [applyAiScene]);
+
   const applyPhotoFile = useCallback((file)=>{
     if(!file||!file.type.startsWith('image/')) return;
     if(photoUrl) URL.revokeObjectURL(photoUrl);
     setPhotoUrl(URL.createObjectURL(file));
     setPhotoMode(true);
     setSvMode(false);
-  },[photoUrl]);
+    setAiScene(null);
+    setAiError(null);
+    analyzePhoto(file);
+  },[photoUrl, analyzePhoto]);
 
   const handlePhotoUpload = useCallback((e)=>{
     applyPhotoFile(e.target.files?.[0]);
@@ -1191,10 +1841,15 @@ export default function DesignEditor() {
       if(sat) sat.visible=false;
       if(cam&&ctrl){
         const {w,d,ox,oz}=lotRef.current;
-        cam.position.set(ox, 6, oz+d*0.55+20);
-        cam.lookAt(ox,3,oz-d*0.1);
-        ctrl.target.set(ox,3,oz-d*0.1);
-        ctrl.maxPolarAngle=Math.PI*0.85;
+        const h=5.5, eyeDist=30;
+        cam.position.set(ox, h, oz+d*0.5+eyeDist);
+        cam.lookAt(ox,0,oz);
+        ctrl.target.set(ox,0,oz);
+        // Constrain rotation so elements stay anchored to photo angle
+        ctrl.maxPolarAngle=Math.PI*0.78;
+        ctrl.minPolarAngle=Math.PI*0.05;
+        ctrl.minAzimuthAngle=-Math.PI*0.35;
+        ctrl.maxAzimuthAngle= Math.PI*0.35;
         ctrl.update();
       }
       invalidate();
@@ -1202,7 +1857,13 @@ export default function DesignEditor() {
       scene.background=new THREE.Color(0x87CEEB);
       scene.fog=new THREE.Fog(0x87CEEB,500,1500);
       if(ground) ground.visible=true;
-      if(sat) sat.visible=true;
+      if(sat) sat.visible=!!geoCoords;
+      if(ctrl){
+        ctrl.minAzimuthAngle=-Infinity;
+        ctrl.maxAzimuthAngle= Infinity;
+        ctrl.minPolarAngle=0;
+        ctrl.maxPolarAngle=Math.PI/2.05;
+      }
       invalidate();
     }
   },[photoMode]);
@@ -1351,9 +2012,11 @@ export default function DesignEditor() {
   useEffect(()=>{
     const scene=sceneRef.current; if(!scene) return;
     lotRef.current={w:lotW,d:lotD,ox:lotOX,oz:lotOZ};
-    buildAndAddGround(scene,lotW,lotD,lotOX,lotOZ,lotEditMode);
+    // In photo mode, build ground (for the invisible drag plane) but keep it hidden
+    buildAndAddGround(scene,lotW,lotD,lotOX,lotOZ,lotEditMode && !photoMode);
+    if(photoMode && groundGroupRef.current) groundGroupRef.current.visible=false;
     invalidate();
-    if(!satMeshRef.current){
+    if(!satMeshRef.current && !photoMode){
       const cam=cameraRef.current; const controls=controlsRef.current;
       if(cam&&controls){
         const dist=Math.max(lotW,lotD);
@@ -1361,7 +2024,7 @@ export default function DesignEditor() {
         cam.lookAt(lotOX,0,lotOZ); controls.target.set(lotOX,0,lotOZ); controls.update();
       }
     }
-  },[lotW,lotD,lotOX,lotOZ,lotEditMode]);
+  },[lotW,lotD,lotOX,lotOZ,lotEditMode,photoMode]);
 
   // ── Sync elements → scene ─────────────────────────────────────────────────
   useEffect(()=>{
@@ -1413,15 +2076,20 @@ export default function DesignEditor() {
   const addElement=item=>{
     const id=`el_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const {w,d}=lotRef.current;
-    const el={id,type:item.type,label:item.label,color:item.color,w:item.w,d:item.d,rotation:0,
-      x:(Math.random()-0.5)*w*0.4, z:(Math.random()-0.5)*d*0.4};
+    const el={
+      id, type:item.type, label:item.label, color:item.color, w:item.w, d:item.d, rotation:0,
+      x:(Math.random()-0.5)*w*0.4, z:(Math.random()-0.5)*d*0.4,
+      ...(KITCHEN_ELEMENT_TYPES.has(item.type)
+        ? { kitchenConfig: { levels:1, ledge:'concrete', sections:[], barHeightIn:42, barDepthIn:14 } }
+        : {}),
+    };
     setElements(prev=>[...prev,el]);
     setSelectedId(id); selectedIdRef.current=id; setActivePanel("props");
   };
 
   const updateElement=(id,patch)=>{
     setElements(prev=>prev.map(el=>el.id===id?{...el,...patch}:el));
-    if(patch.color!==undefined||patch.w!==undefined||patch.d!==undefined){
+    if(patch.color!==undefined||patch.w!==undefined||patch.d!==undefined||patch.kitchenConfig!==undefined){
       const scene=sceneRef.current;
       if(scene&&groupsRef.current[id]){scene.remove(groupsRef.current[id]); delete groupsRef.current[id];}
     }
@@ -1465,19 +2133,21 @@ export default function DesignEditor() {
           {design?.client_name&&<p className="text-[10px] text-slate-400 truncate">{design.client_name} · {design.address||""}</p>}
         </div>
 
-        {/* View toggle */}
-        <div className="flex rounded-lg overflow-hidden border border-slate-600 shrink-0">
-          <button onClick={()=>setViewMode("top")}
-            className={cn("flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors",
-              viewMode==="top"?"bg-amber-500 text-white":"bg-slate-700 text-slate-300 hover:bg-slate-600")}>
-            <Eye className="w-3.5 h-3.5"/> Top View
-          </button>
-          <button onClick={()=>setViewMode("3d")}
-            className={cn("flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors border-l border-slate-600",
-              viewMode==="3d"?"bg-amber-500 text-white":"bg-slate-700 text-slate-300 hover:bg-slate-600")}>
-            <Box className="w-3.5 h-3.5"/> 3D View
-          </button>
-        </div>
+        {/* View toggle — hidden in photo mode (camera is fixed to photo angle) */}
+        {!photoMode && (
+          <div className="flex rounded-lg overflow-hidden border border-slate-600 shrink-0">
+            <button onClick={()=>setViewMode("top")}
+              className={cn("flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors",
+                viewMode==="top"?"bg-amber-500 text-white":"bg-slate-700 text-slate-300 hover:bg-slate-600")}>
+              <Eye className="w-3.5 h-3.5"/> Top View
+            </button>
+            <button onClick={()=>setViewMode("3d")}
+              className={cn("flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors border-l border-slate-600",
+                viewMode==="3d"?"bg-amber-500 text-white":"bg-slate-700 text-slate-300 hover:bg-slate-600")}>
+              <Box className="w-3.5 h-3.5"/> 3D View
+            </button>
+          </div>
+        )}
 
         <button onClick={()=>setSnapGrid(s=>!s)}
           className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
@@ -1485,43 +2155,53 @@ export default function DesignEditor() {
           <Grid3x3 className="w-3.5 h-3.5"/> Snap
         </button>
 
-        <button onClick={()=>setShowLotSetup(true)}
-          className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
-            geoCoords&&satLoaded?"bg-emerald-700 text-white":"bg-slate-700 text-slate-300 hover:bg-slate-600")}>
-          <RulerIcon className="w-3.5 h-3.5"/>
-          {satLoading ? <Loader2 className="w-3 h-3 animate-spin"/> : null}
-          {geoCoords&&satLoaded ? "Aerial ✓" : geoCoords ? "Aerial…" : `${Math.round(lotW)}′×${Math.round(lotD)}′`}
-        </button>
+        {!photoMode && (
+          <button onClick={()=>setShowLotSetup(true)}
+            className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
+              geoCoords&&satLoaded?"bg-emerald-700 text-white":"bg-slate-700 text-slate-300 hover:bg-slate-600")}>
+            <RulerIcon className="w-3.5 h-3.5"/>
+            {satLoading ? <Loader2 className="w-3 h-3 animate-spin"/> : null}
+            {geoCoords&&satLoaded ? "Aerial ✓" : geoCoords ? "Aerial…" : `${Math.round(lotW)}′×${Math.round(lotD)}′`}
+          </button>
+        )}
 
-        <button onClick={()=>setLotEditMode(m=>!m)}
-          className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors border",
-            lotEditMode
-              ?"bg-yellow-500 text-black border-yellow-400"
-              :"bg-slate-700 text-slate-300 hover:bg-slate-600 border-slate-600")}>
-          <Maximize2 className="w-3.5 h-3.5"/>
-          {lotEditMode?"Done Editing":"Edit Boundary"}
-        </button>
+        {!photoMode && (
+          <button onClick={()=>setLotEditMode(m=>!m)}
+            className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors border",
+              lotEditMode
+                ?"bg-yellow-500 text-black border-yellow-400"
+                :"bg-slate-700 text-slate-300 hover:bg-slate-600 border-slate-600")}>
+            <Maximize2 className="w-3.5 h-3.5"/>
+            {lotEditMode?"Done Editing":"Edit Boundary"}
+          </button>
+        )}
 
-        <button onClick={()=>setSvMode(m=>!m)}
-          className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors border",
-            svMode
-              ?"bg-sky-500 text-white border-sky-400"
-              :"bg-slate-700 text-slate-300 hover:bg-slate-600 border-slate-600")}>
-          <Camera className="w-3.5 h-3.5"/>
-          {svMode?"Exit Street View":"Street View"}
-        </button>
+        {!photoMode && (
+          <button onClick={()=>setSvMode(m=>!m)}
+            className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors border",
+              svMode
+                ?"bg-sky-500 text-white border-sky-400"
+                :"bg-slate-700 text-slate-300 hover:bg-slate-600 border-slate-600")}>
+            <Camera className="w-3.5 h-3.5"/>
+            {svMode?"Exit Street View":"Street View"}
+          </button>
+        )}
 
-        {/* Upload your own photo (backyard, front, etc.) */}
+        {/* Upload your own photo → AI analyzes → 3D scene */}
         <input ref={photoInputRef} type="file" accept="image/*" className="hidden"
           onChange={handlePhotoUpload}/>
         <button
-          onClick={()=>{ if(photoMode){ setPhotoMode(false); } else { photoInputRef.current?.click(); } }}
+          onClick={()=>{ if(photoMode){ setPhotoMode(false); setAiScene(null); setAiError(null); } else { photoInputRef.current?.click(); } }}
           className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors border",
-            photoMode
-              ?"bg-emerald-500 text-white border-emerald-400"
-              :"bg-slate-700 text-slate-300 hover:bg-slate-600 border-slate-600")}>
-          <Download className="w-3.5 h-3.5 rotate-180"/>
-          {photoMode?"Exit Photo":"Upload Photo"}
+            aiAnalyzing
+              ?"bg-amber-500 text-black border-amber-400"
+              :photoMode
+                ?"bg-emerald-500 text-white border-emerald-400"
+                :"bg-slate-700 text-slate-300 hover:bg-slate-600 border-slate-600")}>
+          {aiAnalyzing
+            ? <Loader2 className="w-3.5 h-3.5 animate-spin"/>
+            : <Download className="w-3.5 h-3.5 rotate-180"/>}
+          {aiAnalyzing?"Analyzing…":photoMode?"Exit Photo":"AI Photo Mode"}
         </button>
 
         {totalCost>0&&(
@@ -1567,8 +2247,8 @@ export default function DesignEditor() {
           {dragOver&&(
             <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-emerald-900/70 backdrop-blur-sm border-4 border-dashed border-emerald-400 pointer-events-none">
               <Download className="w-16 h-16 text-emerald-300 rotate-180 mb-3"/>
-              <p className="text-emerald-200 text-xl font-bold">Drop photo to load</p>
-              <p className="text-emerald-400 text-sm mt-1">JPG, PNG, HEIC — any image</p>
+              <p className="text-emerald-200 text-xl font-bold">Drop photo to analyze</p>
+              <p className="text-emerald-400 text-sm mt-1">AI will build a 3D scene from your photo</p>
             </div>
           )}
 
@@ -1579,6 +2259,17 @@ export default function DesignEditor() {
           {photoMode && !photoUrl && (
             <div className="absolute inset-0 flex items-center justify-center z-0 bg-slate-800">
               <p className="text-slate-400 text-sm">No photo loaded</p>
+            </div>
+          )}
+
+          {/* AI analyzing overlay */}
+          {aiAnalyzing && (
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-none">
+              <div className="bg-slate-900/90 border border-amber-500/40 rounded-2xl px-8 py-6 flex flex-col items-center gap-3 shadow-2xl">
+                <Loader2 className="w-10 h-10 text-amber-400 animate-spin"/>
+                <p className="text-white font-semibold text-base">AI is analyzing your space…</p>
+                <p className="text-slate-400 text-sm text-center max-w-xs">Detecting dimensions, ground type, and existing features to build your 3D scene</p>
+              </div>
             </div>
           )}
 
@@ -1677,9 +2368,25 @@ export default function DesignEditor() {
               <Camera className="w-3.5 h-3.5"/> Street View — Add elements from palette to overlay on the photo
             </div>
           )}
-          {photoMode&&photoUrl&&(
+          {photoMode&&photoUrl&&!aiAnalyzing&&!aiScene&&!aiError&&(
             <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-emerald-600/90 text-white text-xs px-4 py-2 rounded-full pointer-events-none select-none font-semibold shadow-lg flex items-center gap-2">
               <Download className="w-3.5 h-3.5 rotate-180"/> Photo Overlay — Add elements from palette · Orbit to match your camera angle
+            </div>
+          )}
+          {photoMode&&aiScene&&!aiAnalyzing&&(
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-amber-500/95 text-black text-xs px-4 py-2 rounded-full pointer-events-none select-none font-semibold shadow-lg flex items-center gap-2">
+              <Box className="w-3.5 h-3.5"/> AI Scene Built — {aiScene.existingFeatures?.length||0} features detected · Now add your design elements
+            </div>
+          )}
+          {photoMode&&aiError&&!aiAnalyzing&&(
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 max-w-sm w-full bg-rose-700/95 text-white text-xs px-4 py-3 rounded-xl select-none shadow-lg space-y-1.5">
+              <p className="font-bold">AI Photo Analysis Failed</p>
+              <p className="text-rose-200 leading-snug break-words">{aiError}</p>
+              {aiError.includes('ANTHROPIC_API_KEY') && (
+                <p className="text-rose-300 text-[10px]">Add ANTHROPIC_API_KEY to your Vercel environment variables and redeploy.</p>
+              )}
+              <button onClick={()=>{ if(photoUrl) fetch(photoUrl).then(r=>r.blob()).then(b=>analyzePhoto(new File([b],'photo.jpg',{type:'image/jpeg'}))); }}
+                className="mt-1 underline pointer-events-auto hover:text-rose-200 transition-colors font-semibold">Retry</button>
             </div>
           )}
           {!geoCoords&&!satLoading&&!lotEditMode&&!svMode&&(
@@ -1689,7 +2396,11 @@ export default function DesignEditor() {
           )}
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-black/60 text-white text-[10px] px-4 py-1.5 rounded-full pointer-events-none select-none backdrop-blur-sm">
             {photoMode
-              ? "Orbit to match your photo angle · Add elements from palette to see them on your property"
+              ? aiAnalyzing
+                ? "AI is analyzing your photo and building a 3D scene…"
+                : aiScene
+                  ? `${aiScene.description || 'Space analyzed'} · Drag elements from palette to add to the 3D scene`
+                  : "Orbit to match your photo angle · Add elements from palette to see them on your property"
               : svMode
                 ? "Adjust heading/pitch/zoom · Add elements from the palette to overlay on the photo"
                 : viewMode==="top"
