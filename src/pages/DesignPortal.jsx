@@ -381,7 +381,7 @@ function DesignCard({ design, linkedEstimate, onEdit, onDelete, onOpenEstimate, 
           onClick={onOpenEditor}
           className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-sm font-semibold rounded-xl py-2.5 transition-all shadow-sm hover:shadow-md"
         >
-          <Compass className="w-4 h-4" /> Open 2D Designer
+          <Compass className="w-4 h-4" /> Open 3D Designer
         </button>
       </div>
 
