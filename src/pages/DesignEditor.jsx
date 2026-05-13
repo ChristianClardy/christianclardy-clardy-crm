@@ -978,20 +978,26 @@ function buildPergola(w, d, hex, config) {
   const beamMat = new THREE.MeshStandardMaterial({ map: woodTexture(Math.max(0, matColor - 0x151515)), roughness: 0.8 });
   const cmMat   = new THREE.MeshStandardMaterial({ map: woodTexture(Math.max(0, matColor - 0x202020)), roughness: 0.8 });
 
-  // Posts — front (z = -d/2) use frontH, back (z = +d/2) use backH
+  // Posts — shorter by beamD so side beams sit on post tops (not flush)
+  const capMatP = new THREE.MeshStandardMaterial({ color: 0x6A6A6A, metalness: 0.82, roughness: 0.18 });
+  const postFHp = frontH - beamD;
+  const postBHp = backH  - beamD;
   const postDefs = [
-    { x: -w/2+ps, z: -d/2+ps, h: frontH },
-    { x:  w/2-ps, z: -d/2+ps, h: frontH },
-    { x: -w/2+ps, z:  d/2-ps, h: backH  },
-    { x:  w/2-ps, z:  d/2-ps, h: backH  },
+    { x: -w/2+ps, z: -d/2+ps, h: postFHp },
+    { x:  w/2-ps, z: -d/2+ps, h: postFHp },
+    { x: -w/2+ps, z:  d/2-ps, h: postBHp },
+    { x:  w/2-ps, z:  d/2-ps, h: postBHp },
   ];
-  if (w > 20) postDefs.push({ x: 0, z: -d/2+ps, h: frontH }, { x: 0, z: d/2-ps, h: backH });
+  if (w > 20) postDefs.push({ x: 0, z: -d/2+ps, h: postFHp }, { x: 0, z: d/2-ps, h: postBHp });
   postDefs.forEach(({ x: px, z: pz, h: ph }) => {
     const post = new THREE.Mesh(new THREE.BoxGeometry(ps, ph, ps), postMat);
     post.position.set(px, ph/2, pz); post.castShadow = true; g.add(post);
     const base = new THREE.Mesh(new THREE.BoxGeometry(ps+0.15, 0.12, ps+0.15),
       new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.7, roughness: 0.2 }));
     base.position.set(px, 0.06, pz); g.add(base);
+    // Column cap hardware at post top
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(ps + 0.08, 0.1, ps + 0.08), capMatP);
+    cap.position.set(px, ph + 0.05, pz); g.add(cap);
   });
 
   // Side beams — sloped when front/back heights differ
@@ -1004,6 +1010,11 @@ function buildPergola(w, d, hex, config) {
     beam.rotation.x = -slopeAngle;
     beam.castShadow = true; g.add(beam);
   });
+  // Front and back header beams — connect front posts and back posts
+  { const hb = new THREE.Mesh(new THREE.BoxGeometry(w - ps, beamD, ps * 1.5), beamMat);
+    hb.position.set(0, frontH - beamD / 2, -d / 2 + ps); hb.castShadow = true; g.add(hb); }
+  { const hb = new THREE.Mesh(new THREE.BoxGeometry(w - ps, beamD, ps * 1.5), beamMat);
+    hb.position.set(0, backH - beamD / 2, d / 2 - ps); hb.castShadow = true; g.add(hb); }
 
   // Rafters running front-to-back, sloped to match
   const rafterCount = Math.max(2, Math.ceil(w / rSpac));
@@ -1120,34 +1131,77 @@ function buildPatioCover(w, d, hex, config) {
   const ridgeRise = cfg.ridgeRiseFt || 2;
   const overhang  = 0.65;
 
+  // Beam depth auto-sized from span — defined early so posts can be sized correctly
+  const beamH2 = Math.max(0.5, Math.min(1.0, Math.max(w, d) * 0.044));
+  const beamFW = Math.max(0.28, ps * 0.55);
+
   const isAlum = cfg.postMaterial === 'aluminum' || cfg.postMaterial === 'steel';
   const postMat = isAlum
     ? new THREE.MeshStandardMaterial({ color: 0xA8A8A8, roughness: 0.2, metalness: 0.75 })
     : new THREE.MeshStandardMaterial({ map: woodTexture(hex || 0x9E8050), roughness: 0.8 });
+  const capMat2 = new THREE.MeshStandardMaterial({ color: 0x6A6A6A, metalness: 0.82, roughness: 0.18 });
 
-  // Posts — omit back row when attached (house wall carries the load)
+  // Posts are shorter by beamH2 so beams can sit on top of posts (not flush)
+  const postFH = frontH - beamH2;
+  const postBH = (roofShape === 'shed' ? backH2 : frontH) - beamH2;
+
   const postDefs2 = [];
-  postDefs2.push({ x: -w/2+ps, z: -d/2+ps, h: frontH });
-  postDefs2.push({ x:  w/2-ps, z: -d/2+ps, h: frontH });
-  if (w > 18) postDefs2.push({ x: 0, z: -d/2+ps, h: frontH });
+  postDefs2.push({ x: -w/2+ps, z: -d/2+ps, h: postFH });
+  postDefs2.push({ x:  w/2-ps, z: -d/2+ps, h: postFH });
+  if (w > 18) postDefs2.push({ x: 0, z: -d/2+ps, h: postFH });
   if (!attached) {
-    postDefs2.push({ x: -w/2+ps, z: d/2-ps, h: roofShape === 'shed' ? backH2 : frontH });
-    postDefs2.push({ x:  w/2-ps, z: d/2-ps, h: roofShape === 'shed' ? backH2 : frontH });
-    if (w > 18) postDefs2.push({ x: 0, z: d/2-ps, h: roofShape === 'shed' ? backH2 : frontH });
+    postDefs2.push({ x: -w/2+ps, z: d/2-ps, h: postBH });
+    postDefs2.push({ x:  w/2-ps, z: d/2-ps, h: postBH });
+    if (w > 18) postDefs2.push({ x: 0, z: d/2-ps, h: postBH });
   }
   postDefs2.forEach(({ x: px, z: pz, h: ph }) => {
     const post = new THREE.Mesh(new THREE.BoxGeometry(ps, ph, ps), postMat);
     post.position.set(px, ph/2, pz); post.castShadow = true; g.add(post);
+    // Post base anchor (concrete footing plate)
     const base2 = new THREE.Mesh(new THREE.BoxGeometry(ps+0.2, 0.14, ps+0.2),
       new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.7, roughness: 0.2 }));
     base2.position.set(px, 0.07, pz); g.add(base2);
+    // Column cap hardware — steel connector between post top and beam bottom
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(ps + 0.08, 0.1, ps + 0.08), capMat2);
+    cap.position.set(px, ph + 0.05, pz); g.add(cap);
   });
 
-  // Ledger board on house wall when attached
+  // ── Structural perimeter beams — bottom at post top, beam sits ON post ──
+  const bMat2  = new THREE.MeshStandardMaterial({ map: woodTexture(0x7A6030), normalMap: woodNormal(3, 1), normalScale: new THREE.Vector2(0.7, 0.7), roughness: 0.72, envMapIntensity: 0.35 });
+  const backPH = roofShape === 'shed' ? backH2 : frontH;
+
+  // Front beam — spans all front posts
+  { const bm = new THREE.Mesh(new THREE.BoxGeometry(w - ps, beamH2, beamFW), bMat2);
+    bm.position.set(0, frontH - beamH2 / 2, -d / 2 + ps); bm.castShadow = true; g.add(bm); }
+
+  // Back beam or ledger board when attached to house
   if (attached) {
-    const ledger = new THREE.Mesh(new THREE.BoxGeometry(w + 0.2, 0.5, 0.28),
+    const ledger = new THREE.Mesh(new THREE.BoxGeometry(w + 0.2, beamH2, beamFW + 0.02),
       new THREE.MeshStandardMaterial({ map: woodTexture(0x8B7355), roughness: 0.7 }));
-    ledger.position.set(0, frontH - 0.25, d/2); g.add(ledger);
+    ledger.position.set(0, frontH - beamH2 / 2, d / 2); g.add(ledger);
+  } else {
+    const bm = new THREE.Mesh(new THREE.BoxGeometry(w - ps, beamH2, beamFW), bMat2);
+    bm.position.set(0, backPH - beamH2 / 2, d / 2 - ps); bm.castShadow = true; g.add(bm);
+  }
+
+  // Side beams — sloped for shed, level for all other shapes
+  if (roofShape === 'shed') {
+    const sdLen = attached ? d - ps : d - 2 * ps;
+    const sdCZ  = attached ? ps / 2 : 0;
+    const slAng = Math.atan2(backH2 - frontH, sdLen);
+    const slLen = Math.sqrt(sdLen ** 2 + (backH2 - frontH) ** 2);
+    const midHs = (frontH + backH2) / 2;
+    [-w / 2 + ps, w / 2 - ps].forEach(bx => {
+      const bm = new THREE.Mesh(new THREE.BoxGeometry(beamFW, beamH2, slLen), bMat2);
+      bm.position.set(bx, midHs - beamH2 / 2, sdCZ); bm.rotation.x = -slAng; bm.castShadow = true; g.add(bm);
+    });
+  } else {
+    const sdLen = attached ? d - ps : d - 2 * ps;
+    const sdCZ  = attached ? ps / 2 : 0;
+    [-w / 2 + ps, w / 2 - ps].forEach(bx => {
+      const bm = new THREE.Mesh(new THREE.BoxGeometry(beamFW, beamH2, sdLen), bMat2);
+      bm.position.set(bx, frontH - beamH2 / 2, sdCZ); bm.castShadow = true; g.add(bm);
+    });
   }
 
   // Roof construction
@@ -1183,7 +1237,6 @@ function buildPatioCover(w, d, hex, config) {
     const ridgeBMat = new THREE.MeshStandardMaterial({ map: woodTexture(0x7A5020), roughness: 0.62 });
     const raftMat   = new THREE.MeshStandardMaterial({ map: woodTexture(0x8B7040), roughness: 0.70 });
     const gfMat     = new THREE.MeshStandardMaterial({ map: woodTexture(0x7A5020), roughness: 0.65 });
-    const plateMat2 = new THREE.MeshStandardMaterial({ map: woodTexture(0x7A6040), roughness: 0.7 });
 
     // ridgeSpan = dimension perpendicular to ridge (slopes this direction)
     // eavSpan   = dimension parallel to ridge (ridge runs this direction)
@@ -1203,8 +1256,7 @@ function buildPatioCover(w, d, hex, config) {
       g.add(makeRoofQuad([w/2+ov,frontH,d/2+ov],[-w/2-ov,frontH,d/2+ov],[-w/2-ov,ridgeH2,0],[w/2+ov,ridgeH2,0],rm2));
       // Ridge beam
       const rb=new THREE.Mesh(new THREE.BoxGeometry(eavSpan+ov*2+0.1,0.32,0.4),ridgeBMat); rb.position.set(0,ridgeH2-0.14,0); rb.castShadow=true; g.add(rb);
-      // Eave plates at front and back
-      [-d/2,d/2].forEach(pz=>{const pl=new THREE.Mesh(new THREE.BoxGeometry(eavSpan+ov*2,0.28,0.3),plateMat2); pl.position.set(0,frontH-0.14,pz); g.add(pl);});
+      // Eave line — structural beam already placed as perimeter beam above
       // Common rafters (along X, spanning Z slope)
       for(let rx=-w/2+raftSpac;rx<w/2;rx+=raftSpac){
         const rfF=new THREE.Mesh(new THREE.BoxGeometry(0.15,0.67,slopeLen),raftMat); rfF.position.set(rx,(frontH+ridgeH2)/2-offY,-(d/2+ov)/2-offS); rfF.rotation.x=-slopeAng; rfF.castShadow=true; g.add(rfF);
@@ -1237,8 +1289,7 @@ function buildPatioCover(w, d, hex, config) {
       g.add(makeRoofQuad([w/2+ov,frontH,d/2+ov],[w/2+ov,frontH,-d/2-ov],[0,ridgeH2,-d/2-ov],[0,ridgeH2,d/2+ov],rm2));
       // Ridge beam running along Z
       const rb=new THREE.Mesh(new THREE.BoxGeometry(0.4,0.32,eavSpan+ov*2+0.1),ridgeBMat); rb.position.set(0,ridgeH2-0.14,0); rb.castShadow=true; g.add(rb);
-      // Eave plates at left and right
-      [-w/2,w/2].forEach(px=>{const pl=new THREE.Mesh(new THREE.BoxGeometry(0.3,0.28,eavSpan+ov*2),plateMat2); pl.position.set(px,frontH-0.14,0); g.add(pl);});
+      // Eave line — structural beam already placed as perimeter beam above
       // Common rafters (along Z, spanning X slope)
       for(let rz=-d/2+raftSpac;rz<d/2;rz+=raftSpac){
         const rfL=new THREE.Mesh(new THREE.BoxGeometry(slopeLen,0.67,0.15),raftMat); rfL.position.set(-(w/2+ov)/2-offS,(frontH+ridgeH2)/2-offY,rz); rfL.rotation.z=slopeAng; rfL.castShadow=true; g.add(rfL);
