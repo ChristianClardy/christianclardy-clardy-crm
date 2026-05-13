@@ -979,7 +979,6 @@ function buildPergola(w, d, hex, config) {
   const cmMat   = new THREE.MeshStandardMaterial({ map: woodTexture(Math.max(0, matColor - 0x202020)), roughness: 0.8 });
 
   // Posts — shorter by beamD so side beams sit on post tops (not flush)
-  const capMatP = new THREE.MeshStandardMaterial({ color: 0x6A6A6A, metalness: 0.82, roughness: 0.18 });
   const postFHp = frontH - beamD;
   const postBHp = backH  - beamD;
   const postDefs = [
@@ -995,9 +994,6 @@ function buildPergola(w, d, hex, config) {
     const base = new THREE.Mesh(new THREE.BoxGeometry(ps+0.15, 0.12, ps+0.15),
       new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.7, roughness: 0.2 }));
     base.position.set(px, 0.06, pz); g.add(base);
-    // Column cap hardware at post top
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(ps + 0.08, 0.1, ps + 0.08), capMatP);
-    cap.position.set(px, ph + 0.05, pz); g.add(cap);
   });
 
   // Side beams — sloped when front/back heights differ
@@ -1139,8 +1135,6 @@ function buildPatioCover(w, d, hex, config) {
   const postMat = isAlum
     ? new THREE.MeshStandardMaterial({ color: 0xA8A8A8, roughness: 0.2, metalness: 0.75 })
     : new THREE.MeshStandardMaterial({ map: woodTexture(hex || 0x9E8050), roughness: 0.8 });
-  const capMat2 = new THREE.MeshStandardMaterial({ color: 0x6A6A6A, metalness: 0.82, roughness: 0.18 });
-
   // Posts are shorter by beamH2 so beams can sit on top of posts (not flush)
   const postFH = frontH - beamH2;
   const postBH = (roofShape === 'shed' ? backH2 : frontH) - beamH2;
@@ -1157,13 +1151,9 @@ function buildPatioCover(w, d, hex, config) {
   postDefs2.forEach(({ x: px, z: pz, h: ph }) => {
     const post = new THREE.Mesh(new THREE.BoxGeometry(ps, ph, ps), postMat);
     post.position.set(px, ph/2, pz); post.castShadow = true; g.add(post);
-    // Post base anchor (concrete footing plate)
     const base2 = new THREE.Mesh(new THREE.BoxGeometry(ps+0.2, 0.14, ps+0.2),
       new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.7, roughness: 0.2 }));
     base2.position.set(px, 0.07, pz); g.add(base2);
-    // Column cap hardware — steel connector between post top and beam bottom
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(ps + 0.08, 0.1, ps + 0.08), capMat2);
-    cap.position.set(px, ph + 0.05, pz); g.add(cap);
   });
 
   // ── Structural perimeter beams — bottom at post top, beam sits ON post ──
@@ -5253,10 +5243,12 @@ export default function DesignEditor() {
     });
     elements.forEach(el=>{
       if(!groupsRef.current[el.id]){
-        const gr=buildStructureGroup(el);
-        gr.position.set(el.x??0, 0, el.z??0);
-        gr.rotation.y=(el.rotation||0)*Math.PI/180;
-        scene.add(gr); groupsRef.current[el.id]=gr;
+        try {
+          const gr=buildStructureGroup(el);
+          gr.position.set(el.x??0, 0, el.z??0);
+          gr.rotation.y=(el.rotation||0)*Math.PI/180;
+          scene.add(gr); groupsRef.current[el.id]=gr;
+        } catch(e) { console.error('buildStructureGroup failed for', el.id, e); }
       } else {
         groupsRef.current[el.id].rotation.y=(el.rotation||0)*Math.PI/180;
       }
