@@ -1234,8 +1234,8 @@ function buildPatioCover(w, d, hex, config) {
     const eavSpan   = axis === 'x' ? w : d;
     const slopeLen  = Math.sqrt((ridgeSpan/2 + ov)**2 + ridgeRise**2);
     const slopeAng  = Math.atan2(ridgeRise, ridgeSpan/2 + ov);
-    const offY      = Math.cos(slopeAng) * 0.28;
-    const offS      = Math.sin(slopeAng) * 0.28;
+    const offY      = Math.cos(slopeAng) * 0.40;
+    const offS      = Math.sin(slopeAng) * 0.40;
     const raftSpac  = cfg.rafterSpacingIn ? cfg.rafterSpacingIn/12 : 1.5;
     const ctH       = frontH + ridgeRise * 0.55;
 
@@ -1244,30 +1244,12 @@ function buildPatioCover(w, d, hex, config) {
       // Exterior roof panels
       g.add(makeRoofQuad([-w/2-ov,frontH,-d/2-ov],[w/2+ov,frontH,-d/2-ov],[w/2+ov,ridgeH2,0],[-w/2-ov,ridgeH2,0],rm2));
       g.add(makeRoofQuad([w/2+ov,frontH,d/2+ov],[-w/2-ov,frontH,d/2+ov],[-w/2-ov,ridgeH2,0],[w/2+ov,ridgeH2,0],rm2));
-      // Ridge beam
-      const rb=new THREE.Mesh(new THREE.BoxGeometry(eavSpan+ov*2+0.1,0.32,0.4),ridgeBMat); rb.position.set(0,ridgeH2-0.14,0); rb.castShadow=true; g.add(rb);
-      // Eave line — structural beam already placed as perimeter beam above
-      // Common rafters (along X, spanning Z slope)
-      for(let rx=-w/2+raftSpac;rx<w/2;rx+=raftSpac){
-        const rfF=new THREE.Mesh(new THREE.BoxGeometry(0.15,0.67,slopeLen),raftMat); rfF.position.set(rx,(frontH+ridgeH2)/2-offY,-(d/2+ov)/2-offS); rfF.rotation.x=-slopeAng; rfF.castShadow=true; g.add(rfF);
-        const rfB=new THREE.Mesh(new THREE.BoxGeometry(0.15,0.67,slopeLen),raftMat); rfB.position.set(rx,(frontH+ridgeH2)/2-offY,(d/2+ov)/2+offS); rfB.rotation.x=slopeAng; rfB.castShadow=true; g.add(rfB);
-      }
-      // Gable-end outlooker rafters at x=±w/2
+      // Ridge beam (top at ridgeH2-0.06 so it stays below the roof surface)
+      const rb=new THREE.Mesh(new THREE.BoxGeometry(eavSpan+ov*2+0.1,0.32,0.4),ridgeBMat); rb.position.set(0,ridgeH2-0.22,0); rb.castShadow=true; g.add(rb);
+      // ── Gable-end barge rafters at x=±w/2 (open gable — no infill) ──
       [-w/2,w/2].forEach(ex=>{
         const efF=new THREE.Mesh(new THREE.BoxGeometry(0.2,0.75,slopeLen),ridgeBMat); efF.position.set(ex,(frontH+ridgeH2)/2-offY,-(d/2+ov)/2-offS); efF.rotation.x=-slopeAng; efF.castShadow=true; g.add(efF);
         const efB=new THREE.Mesh(new THREE.BoxGeometry(0.2,0.75,slopeLen),ridgeBMat); efB.position.set(ex,(frontH+ridgeH2)/2-offY,(d/2+ov)/2+offS); efB.rotation.x=slopeAng; efB.castShadow=true; g.add(efB);
-      });
-      // ── Gable-end face framing at x=±w/2 (collar tie spans Z, rake boards in ZY plane) ──
-      [-w/2,w/2].forEach(ex=>{
-        const ct=new THREE.Mesh(new THREE.BoxGeometry(0.28,0.35,ridgeSpan+ov*1.5),gfMat); ct.position.set(ex,ctH,0); ct.castShadow=true; g.add(ct);
-        // Rake boards: run along the slope angle in ZY plane at x=ex
-        const rkF=new THREE.Mesh(new THREE.BoxGeometry(0.18,0.45,slopeLen),gfMat); rkF.position.set(ex,(frontH+ridgeH2)/2,-(ridgeSpan/2+ov)/2); rkF.rotation.x=-slopeAng; rkF.castShadow=true; g.add(rkF);
-        const rkB=new THREE.Mesh(new THREE.BoxGeometry(0.18,0.45,slopeLen),gfMat); rkB.position.set(ex,(frontH+ridgeH2)/2,(ridgeSpan/2+ov)/2); rkB.rotation.x=slopeAng; rkB.castShadow=true; g.add(rkB);
-        // King post
-        const kpH=ridgeH2-ctH; const kp=new THREE.Mesh(new THREE.BoxGeometry(0.28,kpH,0.28),gfMat); kp.position.set(ex,ctH+kpH/2,0); kp.castShadow=true; g.add(kp);
-        // Knee braces
-        const bLen=Math.min(ridgeSpan/4,(ctH-frontH)*0.7); const bAng=Math.atan2(ctH-frontH,bLen);
-        [-1,1].forEach(s=>{const bz=s*(ridgeSpan/2-bLen*Math.cos(bAng)*0.5),by=frontH+bLen*Math.sin(bAng)*0.5; const br=new THREE.Mesh(new THREE.BoxGeometry(0.2,0.2,bLen/Math.cos(bAng)),gfMat); br.position.set(ex,by,bz); br.rotation.x=s*-bAng; br.castShadow=true; g.add(br);});
       });
       // Fascia at eaves (front+back)
       [-d/2-ov*.5,d/2+ov*.5].forEach(fz=>{const fb=new THREE.Mesh(new THREE.BoxGeometry(eavSpan+ov*2+0.1,0.5,0.1),fascMat); fb.position.set(0,frontH-0.25,fz); g.add(fb);});
@@ -1277,30 +1259,12 @@ function buildPatioCover(w, d, hex, config) {
       // Exterior roof panels (slopes go left→right)
       g.add(makeRoofQuad([-w/2-ov,frontH,-d/2-ov],[-w/2-ov,frontH,d/2+ov],[0,ridgeH2,d/2+ov],[0,ridgeH2,-d/2-ov],rm2));
       g.add(makeRoofQuad([w/2+ov,frontH,d/2+ov],[w/2+ov,frontH,-d/2-ov],[0,ridgeH2,-d/2-ov],[0,ridgeH2,d/2+ov],rm2));
-      // Ridge beam running along Z
-      const rb=new THREE.Mesh(new THREE.BoxGeometry(0.4,0.32,eavSpan+ov*2+0.1),ridgeBMat); rb.position.set(0,ridgeH2-0.14,0); rb.castShadow=true; g.add(rb);
-      // Eave line — structural beam already placed as perimeter beam above
-      // Common rafters (along Z, spanning X slope)
-      for(let rz=-d/2+raftSpac;rz<d/2;rz+=raftSpac){
-        const rfL=new THREE.Mesh(new THREE.BoxGeometry(slopeLen,0.67,0.15),raftMat); rfL.position.set(-(w/2+ov)/2-offS,(frontH+ridgeH2)/2-offY,rz); rfL.rotation.z=slopeAng; rfL.castShadow=true; g.add(rfL);
-        const rfR=new THREE.Mesh(new THREE.BoxGeometry(slopeLen,0.67,0.15),raftMat); rfR.position.set((w/2+ov)/2+offS,(frontH+ridgeH2)/2-offY,rz); rfR.rotation.z=-slopeAng; rfR.castShadow=true; g.add(rfR);
-      }
-      // Gable-end outlooker rafters at z=±d/2
+      // Ridge beam (top at ridgeH2-0.06 so it stays below the roof surface)
+      const rb=new THREE.Mesh(new THREE.BoxGeometry(0.4,0.32,eavSpan+ov*2+0.1),ridgeBMat); rb.position.set(0,ridgeH2-0.22,0); rb.castShadow=true; g.add(rb);
+      // ── Gable-end barge rafters at z=±d/2 (open gable — no infill) ──
       [-d/2,d/2].forEach(ez=>{
         const efL=new THREE.Mesh(new THREE.BoxGeometry(slopeLen,0.75,0.2),ridgeBMat); efL.position.set(-(w/2+ov)/2-offS,(frontH+ridgeH2)/2-offY,ez); efL.rotation.z=slopeAng; efL.castShadow=true; g.add(efL);
         const efR=new THREE.Mesh(new THREE.BoxGeometry(slopeLen,0.75,0.2),ridgeBMat); efR.position.set((w/2+ov)/2+offS,(frontH+ridgeH2)/2-offY,ez); efR.rotation.z=-slopeAng; efR.castShadow=true; g.add(efR);
-      });
-      // ── Gable-end face framing at z=±d/2 (collar tie spans X, rake boards in XY plane) ──
-      [-d/2,d/2].forEach(ez=>{
-        const ct=new THREE.Mesh(new THREE.BoxGeometry(ridgeSpan+ov*1.5,0.35,0.28),gfMat); ct.position.set(0,ctH,ez); ct.castShadow=true; g.add(ct);
-        // Rake boards in XY plane at z=ez
-        const rkL=new THREE.Mesh(new THREE.BoxGeometry(slopeLen,0.45,0.18),gfMat); rkL.position.set(-(ridgeSpan/2+ov)/2,(frontH+ridgeH2)/2,ez); rkL.rotation.z=slopeAng; rkL.castShadow=true; g.add(rkL);
-        const rkR=new THREE.Mesh(new THREE.BoxGeometry(slopeLen,0.45,0.18),gfMat); rkR.position.set((ridgeSpan/2+ov)/2,(frontH+ridgeH2)/2,ez); rkR.rotation.z=-slopeAng; rkR.castShadow=true; g.add(rkR);
-        // King post
-        const kpH=ridgeH2-ctH; const kp=new THREE.Mesh(new THREE.BoxGeometry(0.28,kpH,0.28),gfMat); kp.position.set(0,ctH+kpH/2,ez); kp.castShadow=true; g.add(kp);
-        // Knee braces
-        const bLen=Math.min(ridgeSpan/4,(ctH-frontH)*0.7); const bAng=Math.atan2(ctH-frontH,bLen);
-        [-1,1].forEach(s=>{const bx=s*(ridgeSpan/2-bLen*Math.cos(bAng)*0.5),by=frontH+bLen*Math.sin(bAng)*0.5; const br=new THREE.Mesh(new THREE.BoxGeometry(bLen/Math.cos(bAng),0.2,0.2),gfMat); br.position.set(bx,by,ez); br.rotation.z=s*bAng; br.castShadow=true; g.add(br);});
       });
       // Fascia at eaves (left+right)
       [-w/2-ov*.5,w/2+ov*.5].forEach(fx=>{const fb=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.5,eavSpan+ov*2+0.1),fascMat); fb.position.set(fx,frontH-0.25,0); g.add(fb);});
@@ -1354,12 +1318,14 @@ function buildPatioCover(w, d, hex, config) {
 
   // ── Interior ceiling — follows the actual roof pitch (no flat ceilings) ────
   if (cfg.ceiling && cfg.ceiling !== 'none') {
-    const isDW   = cfg.ceiling === 'drywall';
-    const cHex   = cfg.ceiling === 'drywall' ? 0xF0EDE8 : 0xBC8A4A;
+    const isDW      = cfg.ceiling === 'drywall';
+    const isShiplap = cfg.ceiling === 'shiplap';
+    const showPanel = cfg.ceiling !== 'open_beam'; // open_beam = rafters only, no surface
+    const cHex = isDW ? 0xF0EDE8 : isShiplap ? 0xE8E2D8 : 0xBC8A4A;
     const ceilMat3 = new THREE.MeshStandardMaterial({
-      map:        isDW ? concreteTexture(cHex) : woodTexture(cHex),
+      map:        isDW ? concreteTexture(cHex) : isShiplap ? sidingTexture(cHex) : woodTexture(cHex),
       normalMap:  isDW ? concreteNormal(4,4)   : woodNormal(2,2),
-      normalScale:new THREE.Vector2(isDW?0.25:0.9, isDW?0.25:0.9),
+      normalScale:new THREE.Vector2(isDW?0.25:isShiplap?0.7:0.9, isDW?0.25:isShiplap?0.7:0.9),
       roughness:  isDW ? 0.88 : 0.65,
       envMapIntensity: 0.4,
       side: THREE.DoubleSide,
@@ -1368,10 +1334,11 @@ function buildPatioCover(w, d, hex, config) {
     const raftSpacC = (cfg.rafterSpacingIn || 16) / 12;
 
     if (roofShape === 'flat') {
-      // Flat ceiling — PlaneGeometry facing down
-      const fc = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.05, d - 0.05), ceilMat3);
-      fc.rotation.x = Math.PI / 2; fc.position.y = frontH - 0.05; fc.receiveShadow = true; g.add(fc);
-      // Joists running front-to-back
+      if (showPanel) {
+        const fc = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.05, d - 0.05), ceilMat3);
+        fc.rotation.x = Math.PI / 2; fc.position.y = frontH - 0.05; fc.receiveShadow = true; g.add(fc);
+      }
+      // Joists always visible (structure for open_beam; hidden behind panel for others)
       for (let rx = -w/2 + raftSpacC; rx < w/2; rx += raftSpacC) {
         const joist = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.5, d - 0.1), raftCeilMat);
         joist.position.set(rx, frontH - 0.3, 0); joist.castShadow = true; g.add(joist);
@@ -1381,9 +1348,7 @@ function buildPatioCover(w, d, hex, config) {
       const slopeAngC = Math.atan2(backH2 - frontH, d);
       const slopeLenC = Math.sqrt(d*d + (backH2-frontH)**2);
       const midYC = (frontH + backH2) / 2;
-      // Single sloped ceiling panel
-      g.add(makeRoofQuad([w/2,frontH,-d/2],[-w/2,frontH,-d/2],[-w/2,backH2-0.06,d/2],[w/2,backH2-0.06,d/2], ceilMat3));
-      // Shed rafters
+      if (showPanel) g.add(makeRoofQuad([w/2,frontH,-d/2],[-w/2,frontH,-d/2],[-w/2,backH2-0.06,d/2],[w/2,backH2-0.06,d/2], ceilMat3));
       const offYC = Math.cos(slopeAngC)*0.24, offZC = Math.sin(slopeAngC)*0.24;
       for (let rx = -w/2 + raftSpacC; rx < w/2; rx += raftSpacC) {
         const sr = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.6, slopeLenC), raftCeilMat);
@@ -1395,12 +1360,10 @@ function buildPatioCover(w, d, hex, config) {
       const gAxis    = cfg.ridgeAxis || 'x';
 
       if (gAxis === 'x') {
-        // Ridge along X: slopes run front-to-back (Z direction)
-        // Front slope inner ceiling (eave at z=-d/2, ridge at z=0)
-        g.add(makeRoofQuad([w/2,frontH,-d/2],[-w/2,frontH,-d/2],[-w/2,ridgeHg-0.06,0],[w/2,ridgeHg-0.06,0], ceilMat3));
-        // Back slope inner ceiling (ridge at z=0, eave at z=d/2)
-        g.add(makeRoofQuad([-w/2,frontH,d/2],[w/2,frontH,d/2],[w/2,ridgeHg-0.06,0],[-w/2,ridgeHg-0.06,0], ceilMat3));
-        // Exposed rafters spaced along X, running front-to-back (Z)
+        if (showPanel) {
+          g.add(makeRoofQuad([w/2,frontH,-d/2],[-w/2,frontH,-d/2],[-w/2,ridgeHg-0.06,0],[w/2,ridgeHg-0.06,0], ceilMat3));
+          g.add(makeRoofQuad([-w/2,frontH,d/2],[w/2,frontH,d/2],[w/2,ridgeHg-0.06,0],[-w/2,ridgeHg-0.06,0], ceilMat3));
+        }
         const slopeAngG = Math.atan2(ridgeRise, d/2);
         const slopeLenG = Math.sqrt((d/2)**2 + ridgeRise**2);
         const offYG = Math.cos(slopeAngG)*0.24, offZG = Math.sin(slopeAngG)*0.24;
@@ -1413,12 +1376,10 @@ function buildPatioCover(w, d, hex, config) {
           rfB2.rotation.x = slopeAngG; rfB2.castShadow = true; g.add(rfB2);
         }
       } else {
-        // Ridge along Z: slopes run left-to-right (X direction)
-        // Left slope inner ceiling (eave at x=-w/2, ridge at x=0)
-        g.add(makeRoofQuad([-w/2,frontH,d/2],[-w/2,frontH,-d/2],[0,ridgeHg-0.06,-d/2],[0,ridgeHg-0.06,d/2], ceilMat3));
-        // Right slope inner ceiling (ridge at x=0, eave at x=w/2)
-        g.add(makeRoofQuad([0,ridgeHg-0.06,-d/2],[0,ridgeHg-0.06,d/2],[w/2,frontH,d/2],[w/2,frontH,-d/2], ceilMat3));
-        // Exposed rafters spaced along Z, running left-to-right (X)
+        if (showPanel) {
+          g.add(makeRoofQuad([-w/2,frontH,d/2],[-w/2,frontH,-d/2],[0,ridgeHg-0.06,-d/2],[0,ridgeHg-0.06,d/2], ceilMat3));
+          g.add(makeRoofQuad([0,ridgeHg-0.06,-d/2],[0,ridgeHg-0.06,d/2],[w/2,frontH,d/2],[w/2,frontH,-d/2], ceilMat3));
+        }
         const slopeAngGz = Math.atan2(ridgeRise, w/2);
         const slopeLenGz = Math.sqrt((w/2)**2 + ridgeRise**2);
         const offYGz = Math.cos(slopeAngGz)*0.24, offXGz = Math.sin(slopeAngGz)*0.24;
@@ -1436,19 +1397,15 @@ function buildPatioCover(w, d, hex, config) {
       const ridgeHh = frontH + ridgeRise;
       const ridgeLh = Math.max(0, w - d);
       const rlh     = ridgeLh / 2;
-      // Front slope ceiling
       if (ridgeLh > 0) {
-        g.add(makeRoofQuad([w/2,frontH,-d/2],[-w/2,frontH,-d/2],[-rlh,ridgeHh-0.06,0],[rlh,ridgeHh-0.06,0], ceilMat3));
-        // Back slope ceiling
-        g.add(makeRoofQuad([-w/2,frontH,d/2],[w/2,frontH,d/2],[rlh,ridgeHh-0.06,0],[-rlh,ridgeHh-0.06,0], ceilMat3));
-        // Left hip triangle ceiling
-        g.add(makeRoofTri([-w/2,frontH,-d/2],[-w/2,frontH,d/2],[-rlh,ridgeHh-0.06,0], ceilMat3));
-        // Right hip triangle ceiling
-        g.add(makeRoofTri([w/2,frontH,d/2],[w/2,frontH,-d/2],[rlh,ridgeHh-0.06,0], ceilMat3));
-        // Ridge board (visible inside)
+        if (showPanel) {
+          g.add(makeRoofQuad([w/2,frontH,-d/2],[-w/2,frontH,-d/2],[-rlh,ridgeHh-0.06,0],[rlh,ridgeHh-0.06,0], ceilMat3));
+          g.add(makeRoofQuad([-w/2,frontH,d/2],[w/2,frontH,d/2],[rlh,ridgeHh-0.06,0],[-rlh,ridgeHh-0.06,0], ceilMat3));
+          g.add(makeRoofTri([-w/2,frontH,-d/2],[-w/2,frontH,d/2],[-rlh,ridgeHh-0.06,0], ceilMat3));
+          g.add(makeRoofTri([w/2,frontH,d/2],[w/2,frontH,-d/2],[rlh,ridgeHh-0.06,0], ceilMat3));
+        }
         const ridgeBoardH = new THREE.Mesh(new THREE.BoxGeometry(ridgeLh, 0.28, 0.32), raftCeilMat);
         ridgeBoardH.position.set(0, ridgeHh - 0.18, 0); ridgeBoardH.castShadow = true; g.add(ridgeBoardH);
-        // Common rafters front slope (run front-to-back perpendicular to ridge, left/right of center)
         const slopeAngHf = Math.atan2(ridgeRise, d/2);
         const slopeLenHf = Math.sqrt((d/2)**2 + ridgeRise**2);
         const offYHf = Math.cos(slopeAngHf)*0.22, offZHf = Math.sin(slopeAngHf)*0.22;
@@ -1458,13 +1415,11 @@ function buildPatioCover(w, d, hex, config) {
           const rB = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.58, slopeLenHf), raftCeilMat);
           rB.position.set(rx, (frontH+ridgeHh)/2-offYHf, (d/4)+offZHf); rB.rotation.x=slopeAngHf; rB.castShadow=true; g.add(rB);
         }
-        // Hip jack rafters on end slopes
         const hipSlopeLenX = Math.sqrt((w/2-rlh)**2 + ridgeRise**2);
         const hipSlopeAngX = Math.atan2(ridgeRise, w/2-rlh);
         const offYHx = Math.cos(hipSlopeAngX)*0.22;
         [-1,1].forEach(side => {
           const x0 = side*(w/2), xR = side*rlh;
-          const len = Math.sqrt((x0-xR)**2 + ridgeRise**2);
           for(let i=0;i<3;i++){
             const t=(i+1)/4, xI=x0+(xR-x0)*t, yI=frontH+ridgeRise*t;
             const jr = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.5, hipSlopeLenX*(1-t)), raftCeilMat);
@@ -1475,7 +1430,7 @@ function buildPatioCover(w, d, hex, config) {
       } else {
         // Square — pyramid
         const pts2 = [[-w/2,-d/2],[w/2,-d/2],[w/2,d/2],[-w/2,d/2]];
-        pts2.forEach(([x,z],i)=>{
+        if (showPanel) pts2.forEach(([x,z],i)=>{
           const [nx2,nz2]=pts2[(i+1)%4];
           g.add(makeRoofTri([x,frontH,z],[nx2,frontH,nz2],[0,ridgeHh-0.06,0],ceilMat3));
         });
@@ -5248,7 +5203,13 @@ export default function DesignEditor() {
           gr.position.set(el.x??0, 0, el.z??0);
           gr.rotation.y=(el.rotation||0)*Math.PI/180;
           scene.add(gr); groupsRef.current[el.id]=gr;
-        } catch(e) { console.error('buildStructureGroup failed for', el.id, e); }
+        } catch(e) {
+          console.error('buildStructureGroup failed for', el.id, e);
+          // Placeholder so the element stays selectable/visible until next rebuild
+          const ph=new THREE.Group();
+          ph.position.set(el.x??0, 0, el.z??0);
+          scene.add(ph); groupsRef.current[el.id]=ph;
+        }
       } else {
         groupsRef.current[el.id].rotation.y=(el.rotation||0)*Math.PI/180;
       }
@@ -5301,7 +5262,13 @@ export default function DesignEditor() {
     setElements(prev=>prev.map(el=>el.id===id?{...el,...patch}:el));
     if(patch.color!==undefined||patch.w!==undefined||patch.d!==undefined||patch.kitchenConfig!==undefined||patch.buildConfig!==undefined){
       const scene=sceneRef.current;
-      if(scene&&groupsRef.current[id]){scene.remove(groupsRef.current[id]); delete groupsRef.current[id];}
+      if(scene&&groupsRef.current[id]){
+        // Keep old group in scene until the new one successfully rebuilds
+        // (useEffect will remove the old group when it adds the new one)
+        const old=groupsRef.current[id];
+        scene.remove(old);
+        delete groupsRef.current[id];
+      }
     }
   };
 
