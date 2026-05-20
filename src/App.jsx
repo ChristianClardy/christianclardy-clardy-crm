@@ -30,6 +30,11 @@ import Login from './pages/Login';
 import SetPassword from './pages/SetPassword';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import CRM from './pages/CRM';
+import CRMDashboard from './components/crm/CRMDashboard';
+import PipelineView from './components/crm/PipelineView';
+import ContactsView from './components/crm/ContactsView';
+import CompaniesView from './components/crm/CompaniesView';
+import ActivitiesView from './components/crm/ActivitiesView';
 import Payments from './pages/Payments';
 import Documents from './pages/Documents';
 import SalesDashboard from './pages/SalesDashboard';
@@ -118,6 +123,11 @@ const AuthenticatedApp = () => {
         />
       ))}
       <Route path="/CRM" element={<LayoutWrapper currentPageName="CRM"><CRM /></LayoutWrapper>} />
+      <Route path="/Pipeline" element={<LayoutWrapper currentPageName="Pipeline"><PipelineView /></LayoutWrapper>} />
+      <Route path="/CRMContacts" element={<LayoutWrapper currentPageName="CRMContacts"><ContactsView /></LayoutWrapper>} />
+      <Route path="/CRMCompanies" element={<LayoutWrapper currentPageName="CRMCompanies"><CompaniesView /></LayoutWrapper>} />
+      <Route path="/CRMActivities" element={<LayoutWrapper currentPageName="CRMActivities"><ActivitiesView /></LayoutWrapper>} />
+      <Route path="/CRMDashboard" element={<LayoutWrapper currentPageName="CRMDashboard"><CRMDashboard /></LayoutWrapper>} />
       <Route path="/Payments" element={<LayoutWrapper currentPageName="Payments"><Payments /></LayoutWrapper>} />
       <Route path="/Documents" element={<LayoutWrapper currentPageName="Documents"><Documents /></LayoutWrapper>} />
       <Route path="/SalesDashboard" element={<LayoutWrapper currentPageName="SalesDashboard"><SalesDashboard /></LayoutWrapper>} />

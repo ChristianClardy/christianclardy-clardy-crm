@@ -21,6 +21,11 @@ import {
   Moon,
   ShieldCheck,
   Compass,
+  BarChart3,
+  Kanban,
+  Phone,
+  Activity,
+  ChevronDown,
 } from "lucide-react";
 import { useState } from "react";
 import NotificationBell from "@/components/notifications/NotificationBell";
@@ -35,11 +40,25 @@ export default function Layout({ children, currentPageName }) {
   const { theme, toggleTheme } = useTheme();
   const { organization } = useTenant();
 
+  const crmPages = new Set(["CRM", "Pipeline", "CRMContacts", "CRMCompanies", "CRMActivities", "CRMDashboard"]);
+  const [crmOpen, setCrmOpen] = useState(() => crmPages.has(currentPageName));
+
   const navigation = [
     { name: "Dashboard", href: createPageUrl("Dashboard"), icon: LayoutDashboard },
     { name: "Sales Dashboard", href: createPageUrl("SalesDashboard"), icon: CheckSquare },
     { name: "Projects", href: createPageUrl("Projects"), icon: FolderKanban },
-    { name: "CRM", href: createPageUrl("CRM"), icon: Users },
+    {
+      name: "CRM",
+      href: createPageUrl("CRM"),
+      icon: Users,
+      children: [
+        { name: "Pipeline", href: createPageUrl("Pipeline"), icon: Kanban },
+        { name: "Contacts", href: createPageUrl("CRMContacts"), icon: Phone },
+        { name: "Companies", href: createPageUrl("CRMCompanies"), icon: Building2 },
+        { name: "Activities", href: createPageUrl("CRMActivities"), icon: Activity },
+        { name: "CRM Dashboard", href: createPageUrl("CRMDashboard"), icon: BarChart3 },
+      ],
+    },
     { name: "Calendar", href: createPageUrl("Calendar"), icon: CalendarDays },
     { name: "Subcontractors", href: createPageUrl("Subcontractors"), icon: Wrench },
     { name: "Municipalities", href: createPageUrl("Municipalities"), icon: Building2 },
@@ -91,23 +110,78 @@ export default function Layout({ children, currentPageName }) {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-4 py-2 space-y-1">
-        {navigation.map((item) => (
-          <Link
-            key={item.name}
-            to={item.href}
-            onClick={() => setSidebarOpen(false)}
-            className="flex items-center gap-3 px-4 py-3 rounded text-sm tracking-wide transition-all duration-200"
-            style={isActive(item.href)
-              ? { backgroundColor: "var(--brand-gold)", color: "#f5f0eb", fontWeight: 600 }
-              : { color: "var(--brand-sidebar-text)", fontWeight: 400 }
-            }
-            onMouseEnter={e => { if (!isActive(item.href)) { e.currentTarget.style.backgroundColor = "var(--brand-sidebar-hover)"; e.currentTarget.style.color = "#f5f0eb"; }}}
-            onMouseLeave={e => { if (!isActive(item.href)) { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "var(--brand-sidebar-text)"; }}}
-          >
-            <item.icon className="w-4 h-4" />
-            {item.name}
-          </Link>
-        ))}
+        {navigation.map((item) => {
+          if (item.children) {
+            const groupActive = crmPages.has(currentPageName);
+            return (
+              <div key={item.name}>
+                <div className="flex items-center">
+                  <Link
+                    to={item.href}
+                    onClick={() => setSidebarOpen(false)}
+                    className="flex flex-1 items-center gap-3 px-4 py-3 rounded-l text-sm tracking-wide transition-all duration-200"
+                    style={isActive(item.href)
+                      ? { backgroundColor: "var(--brand-gold)", color: "#f5f0eb", fontWeight: 600 }
+                      : groupActive
+                        ? { color: "#f5f0eb", fontWeight: 500 }
+                        : { color: "var(--brand-sidebar-text)", fontWeight: 400 }
+                    }
+                    onMouseEnter={e => { if (!isActive(item.href)) { e.currentTarget.style.backgroundColor = "var(--brand-sidebar-hover)"; e.currentTarget.style.color = "#f5f0eb"; }}}
+                    onMouseLeave={e => { if (!isActive(item.href)) { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = groupActive ? "#f5f0eb" : "var(--brand-sidebar-text)"; }}}
+                  >
+                    <item.icon className="w-4 h-4" />
+                    {item.name}
+                  </Link>
+                  <button
+                    onClick={() => setCrmOpen(o => !o)}
+                    className="px-2 py-3 rounded-r text-sm transition-all duration-200"
+                    style={{ color: groupActive ? "#f5f0eb" : "var(--brand-sidebar-text)" }}
+                  >
+                    <ChevronDown className={cn("w-3.5 h-3.5 transition-transform duration-200", crmOpen ? "rotate-0" : "-rotate-90")} />
+                  </button>
+                </div>
+                {crmOpen && (
+                  <div className="ml-4 mt-0.5 space-y-0.5 border-l pl-3" style={{ borderColor: "var(--brand-sidebar-border)" }}>
+                    {item.children.map((child) => (
+                      <Link
+                        key={child.name}
+                        to={child.href}
+                        onClick={() => setSidebarOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2 rounded text-sm tracking-wide transition-all duration-200"
+                        style={isActive(child.href)
+                          ? { backgroundColor: "var(--brand-gold)", color: "#f5f0eb", fontWeight: 600 }
+                          : { color: "var(--brand-sidebar-text)", fontWeight: 400 }
+                        }
+                        onMouseEnter={e => { if (!isActive(child.href)) { e.currentTarget.style.backgroundColor = "var(--brand-sidebar-hover)"; e.currentTarget.style.color = "#f5f0eb"; }}}
+                        onMouseLeave={e => { if (!isActive(child.href)) { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "var(--brand-sidebar-text)"; }}}
+                      >
+                        <child.icon className="w-3.5 h-3.5" />
+                        {child.name}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          }
+          return (
+            <Link
+              key={item.name}
+              to={item.href}
+              onClick={() => setSidebarOpen(false)}
+              className="flex items-center gap-3 px-4 py-3 rounded text-sm tracking-wide transition-all duration-200"
+              style={isActive(item.href)
+                ? { backgroundColor: "var(--brand-gold)", color: "#f5f0eb", fontWeight: 600 }
+                : { color: "var(--brand-sidebar-text)", fontWeight: 400 }
+              }
+              onMouseEnter={e => { if (!isActive(item.href)) { e.currentTarget.style.backgroundColor = "var(--brand-sidebar-hover)"; e.currentTarget.style.color = "#f5f0eb"; }}}
+              onMouseLeave={e => { if (!isActive(item.href)) { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "var(--brand-sidebar-text)"; }}}
+            >
+              <item.icon className="w-4 h-4" />
+              {item.name}
+            </Link>
+          );
+        })}
       </nav>
 
       {/* Footer */}
