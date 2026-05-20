@@ -90,7 +90,7 @@ export default function Layout({ children, currentPageName }) {
       <CompanyScopeSwitcher />
 
       {/* Navigation */}
-      <nav className="flex-1 px-4 py-2 space-y-1">
+      <nav className="flex-1 overflow-y-auto px-4 py-2 space-y-1">
         {navigation.map((item) => (
           <Link
             key={item.name}
@@ -194,7 +194,7 @@ export default function Layout({ children, currentPageName }) {
         </header>
 
         {/* Page content */}
-        <main className="min-h-[calc(100vh-4rem)] lg:min-h-screen" style={{ backgroundColor: "var(--brand-bg)" }}>
+        <main className="min-h-[calc(100vh-4rem)] lg:min-h-screen overflow-x-hidden" style={{ backgroundColor: "var(--brand-bg)" }}>
           {children}
         </main>
       </div>

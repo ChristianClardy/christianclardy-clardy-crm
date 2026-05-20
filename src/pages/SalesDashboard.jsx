@@ -1,20 +1,49 @@
 import { useEffect, useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import MetricCard from "@/components/dashboard/MetricCard";
+import { getSelectedCompanyScope, subscribeToCompanyScope } from "@/lib/companyScope";
+
+const FUNNEL_BUCKETS = [
+  { key: "leads",     label: "Leads",     color: "bg-slate-400",   bar: "bg-slate-400" },
+  { key: "prospects", label: "Prospects", color: "bg-blue-400",    bar: "bg-blue-400" },
+  { key: "approved",  label: "Approved",  color: "bg-emerald-400", bar: "bg-emerald-400" },
+  { key: "completed", label: "Completed", color: "bg-violet-400",  bar: "bg-violet-400" },
+  { key: "closed",    label: "Closed",    color: "bg-rose-400",    bar: "bg-rose-400" },
+  { key: "archived",  label: "Archived",  color: "bg-slate-300",   bar: "bg-slate-300" },
+];
+
+function getBucket(stage) {
+  if (stage === "dead_lead") return "archived";
+  if (stage === "closed") return "closed";
+  if (stage === "completed") return "completed";
+  if (stage === "approved") return "approved";
+  if (["proposal_sent", "negotiating"].includes(stage)) return "prospects";
+  return "leads";
+}
 
 export default function SalesDashboard() {
   const [leads, setLeads] = useState([]);
+  const [clients, setClients] = useState([]);
   const [estimates, setEstimates] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedCompanyScope, setSelectedCompanyScope] = useState(getSelectedCompanyScope());
 
   useEffect(() => {
+    const unsubScope = subscribeToCompanyScope(setSelectedCompanyScope);
+    return unsubScope;
+  }, []);
+
+  useEffect(() => {
+    setLoading(true);
     Promise.all([
       base44.entities.Lead.list("-created_date", 2000),
+      base44.entities.Client.list("-created_date", 5000),
       base44.entities.Estimate.list("-created_date", 2000),
       base44.entities.Task.list("-created_date", 2000),
-    ]).then(([leadData, estimateData, taskData]) => {
+    ]).then(([leadData, clientData, estimateData, taskData]) => {
       setLeads(leadData || []);
+      setClients(clientData || []);
       setEstimates(estimateData || []);
       setTasks(taskData || []);
     }).catch(err => {
@@ -29,22 +58,53 @@ export default function SalesDashboard() {
   startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
   const weekISO = startOfWeek.toISOString().slice(0, 10);
 
-  const leadsByStatus = useMemo(() => leads.reduce((acc, lead) => {
+  const scopedLeads = useMemo(
+    () => selectedCompanyScope === "all" ? leads : leads.filter((l) => l.company_id === selectedCompanyScope),
+    [leads, selectedCompanyScope]
+  );
+  const scopedClients = useMemo(
+    () => selectedCompanyScope === "all" ? clients : clients.filter((c) => c.company_id === selectedCompanyScope),
+    [clients, selectedCompanyScope]
+  );
+  const scopedEstimates = useMemo(
+    () => selectedCompanyScope === "all" ? estimates : estimates.filter((e) => e.company_id === selectedCompanyScope),
+    [estimates, selectedCompanyScope]
+  );
+  const scopedTasks = useMemo(
+    () => selectedCompanyScope === "all" ? tasks : tasks.filter((t) => t.company_id === selectedCompanyScope),
+    [tasks, selectedCompanyScope]
+  );
+
+  const leadsByStatus = useMemo(() => scopedLeads.reduce((acc, lead) => {
     acc[lead.status] = (acc[lead.status] || 0) + 1;
     return acc;
-  }, {}), [leads]);
+  }, {}), [scopedLeads]);
 
-  const newLeadsThisWeek = leads.filter((lead) => (lead.created_date || "") >= weekISO).length;
-  const estimatesInProgress = estimates.filter((estimate) => ["draft", "internal_review", "revised"].includes(estimate.status)).length;
-  const estimatesSent = estimates.filter((estimate) => ["sent", "viewed", "follow_up_needed"].includes(estimate.status)).length;
-  const approvedEstimates = estimates.filter((estimate) => ["approved", "accepted"].includes(estimate.status));
-  const rejectedEstimates = estimates.filter((estimate) => ["rejected", "declined", "expired"].includes(estimate.status));
+  const funnelCounts = useMemo(() => {
+    const counts = Object.fromEntries(FUNNEL_BUCKETS.map((b) => [b.key, 0]));
+    scopedClients.forEach((c) => {
+      const bucket = getBucket(c.workflow_stage || "new_lead");
+      if (bucket in counts) counts[bucket]++;
+    });
+    return counts;
+  }, [scopedClients]);
+
+  const funnelMax = useMemo(
+    () => Math.max(...Object.values(funnelCounts), 1),
+    [funnelCounts]
+  );
+
+  const newLeadsThisWeek = scopedLeads.filter((lead) => (lead.created_date || "") >= weekISO).length;
+  const estimatesInProgress = scopedEstimates.filter((estimate) => ["draft", "internal_review", "revised"].includes(estimate.status)).length;
+  const estimatesSent = scopedEstimates.filter((estimate) => ["sent", "viewed", "follow_up_needed"].includes(estimate.status)).length;
+  const approvedEstimates = scopedEstimates.filter((estimate) => ["approved", "accepted"].includes(estimate.status));
+  const rejectedEstimates = scopedEstimates.filter((estimate) => ["rejected", "declined", "expired"].includes(estimate.status));
   const estimateApprovalRate = approvedEstimates.length + rejectedEstimates.length > 0
     ? `${Math.round((approvedEstimates.length / (approvedEstimates.length + rejectedEstimates.length)) * 100)}%`
     : "0%";
   const wonRevenue = approvedEstimates.reduce((sum, estimate) => sum + (estimate.total || estimate.estimated_revenue || 0), 0);
-  const lostLeads = leads.filter((lead) => lead.status === "Lost").length;
-  const followUpsDueToday = tasks.filter((task) => task.due_date === today && ["Call", "Follow Up"].includes(task.task_type)).length;
+  const lostLeads = scopedLeads.filter((lead) => lead.status === "Lost").length;
+  const followUpsDueToday = scopedTasks.filter((task) => task.due_date === today && ["Call", "Follow Up"].includes(task.task_type)).length;
 
   if (loading) return <div className="flex min-h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-amber-500 border-t-transparent" /></div>;
 
@@ -66,14 +126,25 @@ export default function SalesDashboard() {
       </div>
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Lead Status Snapshot</h2>
+          <h2 className="text-lg font-semibold text-slate-900">Sales Funnel</h2>
+          <p className="mt-0.5 text-xs text-slate-400">{scopedClients.length} total contacts</p>
           <div className="mt-4 space-y-2">
-            {Object.entries(leadsByStatus).map(([status, count]) => (
-              <div key={status} className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 text-sm">
-                <span className="text-slate-600">{status}</span>
-                <span className="font-semibold text-slate-900">{count}</span>
-              </div>
-            ))}
+            {FUNNEL_BUCKETS.map((bucket) => {
+              const count = funnelCounts[bucket.key] || 0;
+              const pct = Math.round((count / funnelMax) * 100);
+              return (
+                <div key={bucket.key} className="flex items-center gap-3 text-sm">
+                  <span className="w-20 shrink-0 text-slate-600 font-medium">{bucket.label}</span>
+                  <div className="flex-1 rounded-full bg-slate-100 h-5 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${bucket.bar}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className="w-6 shrink-0 text-right font-semibold text-slate-900">{count}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

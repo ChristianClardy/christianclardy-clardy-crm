@@ -358,22 +358,24 @@ export default function LeadList({ archived = false }) {
 
       {/* ── Kanban board ── */}
       {view === "kanban" && !archived && (
-        <div
-          className="flex gap-3 overflow-x-auto pb-4"
-          onDragLeave={() => setDraggingOver(null)}
-          onDragEnd={handleDragEnd}
-        >
-          {COLUMNS.map((col) => (
-            <KanbanColumn
-              key={col.key}
-              column={col}
-              leads={columnLeads[col.key] || []}
-              draggingOver={draggingOver}
-              onDragStart={handleDragStart}
-              onDragOver={(e) => handleDragOver(e, col.key)}
-              onDrop={handleDrop}
-            />
-          ))}
+        <div className="overflow-x-auto pb-4">
+          <div
+            className="flex gap-3 min-w-max"
+            onDragLeave={() => setDraggingOver(null)}
+            onDragEnd={handleDragEnd}
+          >
+            {COLUMNS.map((col) => (
+              <KanbanColumn
+                key={col.key}
+                column={col}
+                leads={columnLeads[col.key] || []}
+                draggingOver={draggingOver}
+                onDragStart={handleDragStart}
+                onDragOver={(e) => handleDragOver(e, col.key)}
+                onDrop={handleDrop}
+              />
+            ))}
+          </div>
         </div>
       )}
 

@@ -49,6 +49,9 @@ const TABLE_MAP = {
   SubInvoice:             'sub_invoices',
   DocuSignEnvelope:       'docusign_envelopes',
   Design:                 'designs',
+  Deal:                   'deals',
+  CRMCompany:             'crm_companies',
+  CRMActivity:            'crm_activities',
 };
 
 // ─── Field name compatibility ────────────────────────────────────────────────
@@ -84,6 +87,9 @@ const TABLE_OPTIONAL_FIELDS = {
   subcontractors: new Set(['trade_type','vendor_type']),
   company_profiles: new Set(['invoice_company_name','invoice_logo_url','invoice_header_title','invoice_accent_color','invoice_intro_text','invoice_footer_text','invoice_scope_label','color']),
   clients: new Set(['first_name','last_name','customer_number']),
+  deals: new Set(['won_at','lost_at','lost_reason','company_id','lead_id','probability','close_date']),
+  crm_companies: new Set(['website','industry','company_size','annual_revenue','city','state']),
+  crm_activities: new Set(['outcome','duration_min','scheduled_at','completed_at','deal_id','company_id','lead_id','created_by']),
 };
 
 function cleanForWrite(record) {
@@ -113,6 +119,10 @@ let _currentOrgId = null;
 // Tables that are global / shared across all orgs (public lookup data).
 const GLOBAL_TABLES = new Set(['municipalities']);
 
+// Only these tables actually have an organization_id column.
+// All original tables use USING(true) RLS policies and have no org column.
+const ORG_SCOPED_TABLES = new Set(['designs', 'deals', 'crm_companies', 'crm_activities']);
+
 export function setCurrentOrgId(id) {
   _currentOrgId = id;
 }
@@ -122,19 +132,21 @@ export function getCurrentOrgId() {
 }
 
 // ─── Centralised error reporter ──────────────────────────────────────────────
-// Shows a visible alert so save failures are never silent.
+// Alerts on write failures. Read failures are logged to console so components
+// can catch and render empty states without interrupting the user.
 function reportError(op, table, error) {
   const msg = `${op} failed on "${table}": ${error?.message || error}`;
   console.error('[base44]', msg, error);
-  // Use a brief timeout so React's render cycle isn't interrupted mid-update
-  setTimeout(() => alert(msg), 0);
+  const isWrite = op === 'create' || op === 'update' || op === 'delete';
+  if (isWrite) setTimeout(() => alert(msg), 0);
   throw error;
 }
 
 // ─── Entity factory ──────────────────────────────────────────────────────────
 function createEntity(tableName) {
   const isGlobal = GLOBAL_TABLES.has(tableName);
-  const needsOrg = () => _currentOrgId && !isGlobal;
+  const isOrgScoped = ORG_SCOPED_TABLES.has(tableName);
+  const needsOrg = () => _currentOrgId && isOrgScoped;
   const warnIfNoOrg = (op) => {
     if (!isGlobal && !_currentOrgId) {
       console.warn(`[base44] ${op} on "${tableName}" called before org loaded — results may be unscoped`);
@@ -205,7 +217,7 @@ function createEntity(tableName) {
       const payload = cleanForWrite(record);
       let query = supabase.from(tableName).update(payload).eq('id', id);
       if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
-      let { data, error } = await query.select().single();
+      let { error } = await query;
       // If a column is missing from the schema cache, strip optional fields and retry once
       if (error?.message?.includes('schema cache') || error?.message?.includes('Could not find')) {
         const optional = TABLE_OPTIONAL_FIELDS[tableName];
@@ -213,10 +225,13 @@ function createEntity(tableName) {
           const stripped = Object.fromEntries(Object.entries(payload).filter(([k]) => !optional.has(k)));
           let q2 = supabase.from(tableName).update(stripped).eq('id', id);
           if (needsOrg()) q2 = q2.eq('organization_id', _currentOrgId);
-          ({ data, error } = await q2.select().single());
+          ({ error } = await q2);
         }
       }
       if (error) reportError('update', tableName, error);
+      // Fetch the updated record separately to avoid PostgREST "coerce to single object" errors
+      const { data, error: fetchError } = await supabase.from(tableName).select('*').eq('id', id).single();
+      if (fetchError) reportError('update', tableName, fetchError);
       return mapDates(data);
     },
 
@@ -386,4 +401,7 @@ export const {
   SubInvoice,
   DocuSignEnvelope,
   Design,
+  Deal,
+  CRMCompany,
+  CRMActivity,
 } = entities;

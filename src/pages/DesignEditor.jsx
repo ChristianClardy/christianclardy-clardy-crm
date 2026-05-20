@@ -51,7 +51,13 @@ const COST_RATES = {
   fire_table:      { unit: "each",  base: 2800,  labor: 500,   label: "Fire Table" },
   tree_palm:       { unit: "each",  base: 850,   labor: 250,   label: "Palm Tree" },
   tree_shade:      { unit: "each",  base: 650,   labor: 200,   label: "Shade Tree" },
+  japanese_maple:  { unit: "each",  base: 450,   labor: 150,   label: "Japanese Maple" },
+  crape_myrtle:    { unit: "each",  base: 280,   labor: 100,   label: "Crape Myrtle" },
   shrub:           { unit: "each",  base: 120,   labor: 60,    label: "Shrub / Hedge" },
+  boxwood:         { unit: "each",  base: 65,    labor: 30,    label: "Boxwood" },
+  rose_bush:       { unit: "each",  base: 55,    labor: 25,    label: "Rose Bush" },
+  ornamental_grass:{ unit: "each",  base: 35,    labor: 15,    label: "Ornamental Grass" },
+  agave:           { unit: "each",  base: 75,    labor: 35,    label: "Agave / Succulent" },
   lawn:            { unit: "sqft",  base: 3.5,   labor: 1.5,   label: "Sod / Lawn" },
   firepit:         { unit: "each",  base: 2200,  labor: 800,   label: "Fire Pit" },
   seating:         { unit: "each",  base: 3800,  labor: 0,     label: "Seating Group" },
@@ -107,11 +113,17 @@ const CATEGORIES = [
     { type: "fire_table",    label: "Fire Table",     w: 5,  d: 5,  color: 0xBF360C },
   ]},
   { key: "landscaping", label: "Landscaping",        icon: TreePine,      items: [
-    { type: "tree_palm",     label: "Palm Tree",      w: 6,  d: 6,  color: 0x2E7D32 },
-    { type: "tree_shade",    label: "Shade Tree",     w: 12, d: 12, color: 0x388E3C },
-    { type: "shrub",         label: "Shrub / Hedge",  w: 4,  d: 4,  color: 0x558B2F },
-    { type: "lawn",          label: "Lawn Area",      w: 20, d: 16, color: 0x66BB6A },
-    { type: "putting_green", label: "Golf Green",     w: 24, d: 18, color: 0x2E7D32 },
+    { type: "tree_palm",       label: "Palm Tree",        w: 6,  d: 6,  color: 0x2E7D32 },
+    { type: "tree_shade",      label: "Shade Tree",       w: 12, d: 12, color: 0x388E3C },
+    { type: "japanese_maple",  label: "Japanese Maple",   w: 8,  d: 8,  color: 0x8B1A1A },
+    { type: "crape_myrtle",    label: "Crape Myrtle",     w: 6,  d: 6,  color: 0xD44000 },
+    { type: "shrub",           label: "Shrub / Hedge",    w: 4,  d: 4,  color: 0x558B2F },
+    { type: "boxwood",         label: "Boxwood",          w: 3,  d: 3,  color: 0x2D5A1B },
+    { type: "rose_bush",       label: "Rose Bush",        w: 3,  d: 3,  color: 0xC41E3A },
+    { type: "ornamental_grass",label: "Ornamental Grass", w: 3,  d: 3,  color: 0x8FA832 },
+    { type: "agave",           label: "Agave",            w: 4,  d: 4,  color: 0x5C8A2B },
+    { type: "lawn",            label: "Lawn Area",        w: 20, d: 16, color: 0x66BB6A },
+    { type: "putting_green",   label: "Golf Green",       w: 24, d: 18, color: 0x2E7D32 },
   ]},
   { key: "building",    label: "House / Building",    icon: Box,           items: [
     { type: "room",           label: "Room / Space",     w: 20, d: 16, color: 0xF2EDE0 },
@@ -728,20 +740,79 @@ function grassTexture() {
   const W=1024,H=1024;
   const c=document.createElement('canvas'); c.width=W; c.height=H;
   const ctx=c.getContext('2d');
-  const grad=ctx.createLinearGradient(0,0,W,H);
-  grad.addColorStop(0,'#4a8a5a'); grad.addColorStop(0.5,'#5a9e6a'); grad.addColorStop(1,'#3e7850');
-  ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
-  const blades=['#3d7a4a','#5faa6e','#2e6639','#6cbf7a','#447d52','#71c481','#395e42','#4e9460','#527a5c','#68b574'];
-  for(let i=0;i<6000;i++){
+
+  // Base soil layer
+  ctx.fillStyle='#3a5c2e'; ctx.fillRect(0,0,W,H);
+
+  // Large variation patches — lighter/darker grass zones
+  const patches=[
+    {x:0.15,y:0.2,r:200,color:'rgba(72,110,42,0.55)'},
+    {x:0.7,y:0.1,r:180,color:'rgba(58,95,34,0.45)'},
+    {x:0.4,y:0.6,r:240,color:'rgba(80,125,50,0.50)'},
+    {x:0.85,y:0.75,r:160,color:'rgba(65,100,38,0.40)'},
+    {x:0.2,y:0.85,r:190,color:'rgba(55,88,30,0.45)'},
+    {x:0.6,y:0.4,r:210,color:'rgba(76,118,46,0.50)'},
+  ];
+  patches.forEach(p=>{
+    const g2=ctx.createRadialGradient(p.x*W,p.y*H,0,p.x*W,p.y*H,p.r);
+    g2.addColorStop(0,p.color); g2.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=g2; ctx.fillRect(0,0,W,H);
+  });
+
+  // Dry/bare patches (subtle earth tones)
+  for(let i=0;i<18;i++){
+    const bx=Math.random()*W,by=Math.random()*H,br=5+Math.random()*30;
+    const bg=ctx.createRadialGradient(bx,by,0,bx,by,br);
+    bg.addColorStop(0,`rgba(130,100,55,${0.06+Math.random()*0.10})`);
+    bg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=bg; ctx.beginPath(); ctx.arc(bx,by,br,0,Math.PI*2); ctx.fill();
+  }
+
+  // Fine grass blades — multiple tones layered for depth
+  const tones=[
+    '#2e6632','#3a7a40','#46904c','#52a458','#5db864','#3f7244',
+    '#4d8d50','#61a55e','#2a5c30','#70bc6e','#3b6e3c','#5fa35a',
+    '#c8d44a','#d4e050',  // yellow-green tips for sun-catching blades
+  ];
+  // Fine underlayer
+  for(let i=0;i<9000;i++){
     const x=Math.random()*W,y=Math.random()*H;
-    ctx.fillStyle=blades[Math.floor(Math.random()*blades.length)];
-    ctx.fillRect(x,y,1+Math.random()*2.5,5+Math.random()*14);
+    const h=4+Math.random()*10,w2=0.8+Math.random()*1.5;
+    ctx.globalAlpha=0.55+Math.random()*0.35;
+    ctx.fillStyle=tones[Math.floor(Math.random()*10)];
+    ctx.save(); ctx.translate(x,y);
+    ctx.rotate((Math.random()-0.5)*0.4);
+    ctx.fillRect(-w2/2,0,w2,h); ctx.restore();
   }
-  for(let i=0;i<40;i++){
-    ctx.fillStyle=`rgba(145,105,48,${0.03+Math.random()*0.07})`;
-    ctx.beginPath(); ctx.arc(Math.random()*W,Math.random()*H,8+Math.random()*25,0,Math.PI*2); ctx.fill();
+  // Bright top layer — tips that catch light
+  for(let i=0;i<5000;i++){
+    const x=Math.random()*W,y=Math.random()*H;
+    const h=6+Math.random()*16,w2=0.6+Math.random()*1.2;
+    ctx.globalAlpha=0.30+Math.random()*0.45;
+    ctx.fillStyle=tones[7+Math.floor(Math.random()*7)];
+    ctx.save(); ctx.translate(x,y);
+    ctx.rotate((Math.random()-0.5)*0.5);
+    ctx.fillRect(-w2/2,0,w2,h); ctx.restore();
   }
-  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(14,14);
+  ctx.globalAlpha=1;
+
+  // Subtle specular sheen — light glint on a few blades
+  for(let i=0;i<700;i++){
+    const x=Math.random()*W,y=Math.random()*H;
+    ctx.fillStyle=`rgba(220,240,180,${0.04+Math.random()*0.08})`;
+    ctx.fillRect(x,y,0.6,3+Math.random()*8);
+  }
+
+  // Micro shadow between blade clusters
+  for(let i=0;i<60;i++){
+    const sx=Math.random()*W,sy=Math.random()*H;
+    const sg=ctx.createRadialGradient(sx,sy,0,sx,sy,4+Math.random()*12);
+    sg.addColorStop(0,'rgba(0,0,0,0.12)'); sg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(sx,sy,4+Math.random()*12,0,Math.PI*2); ctx.fill();
+  }
+
+  const t=new THREE.CanvasTexture(c);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(18,18);
   t.colorSpace=THREE.SRGBColorSpace; return t;
 }
 
@@ -1349,7 +1420,7 @@ function buildPatioCover(w, d, hex, config) {
       const slopeLenC = Math.sqrt(d*d + (backH2-frontH)**2);
       const midYC = (frontH + backH2) / 2;
       if (showPanel) g.add(makeRoofQuad([w/2,frontH,-d/2],[-w/2,frontH,-d/2],[-w/2,backH2-0.06,d/2],[w/2,backH2-0.06,d/2], ceilMat3));
-      const offYC = Math.cos(slopeAngC)*0.24, offZC = Math.sin(slopeAngC)*0.24;
+      const offYC = Math.cos(slopeAngC)*0.38, offZC = Math.sin(slopeAngC)*0.38;
       for (let rx = -w/2 + raftSpacC; rx < w/2; rx += raftSpacC) {
         const sr = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.6, slopeLenC), raftCeilMat);
         sr.position.set(rx, midYC - offYC, - offZC); sr.rotation.x = -slopeAngC; sr.castShadow = true; g.add(sr);
@@ -1366,7 +1437,7 @@ function buildPatioCover(w, d, hex, config) {
         }
         const slopeAngG = Math.atan2(ridgeRise, d/2);
         const slopeLenG = Math.sqrt((d/2)**2 + ridgeRise**2);
-        const offYG = Math.cos(slopeAngG)*0.24, offZG = Math.sin(slopeAngG)*0.24;
+        const offYG = Math.cos(slopeAngG)*0.38, offZG = Math.sin(slopeAngG)*0.38;
         for (let rx = -w/2 + raftSpacC; rx < w/2; rx += raftSpacC) {
           const rfF2 = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.6, slopeLenG), raftCeilMat);
           rfF2.position.set(rx, (frontH+ridgeHg)/2 - offYG, -(d/4) - offZG);
@@ -1382,7 +1453,7 @@ function buildPatioCover(w, d, hex, config) {
         }
         const slopeAngGz = Math.atan2(ridgeRise, w/2);
         const slopeLenGz = Math.sqrt((w/2)**2 + ridgeRise**2);
-        const offYGz = Math.cos(slopeAngGz)*0.24, offXGz = Math.sin(slopeAngGz)*0.24;
+        const offYGz = Math.cos(slopeAngGz)*0.38, offXGz = Math.sin(slopeAngGz)*0.38;
         for (let rz = -d/2 + raftSpacC; rz < d/2; rz += raftSpacC) {
           const rfL2 = new THREE.Mesh(new THREE.BoxGeometry(slopeLenGz, 0.6, 0.13), raftCeilMat);
           rfL2.position.set(-(w/4) - offXGz, (frontH+ridgeHg)/2 - offYGz, rz);
@@ -1408,7 +1479,7 @@ function buildPatioCover(w, d, hex, config) {
         ridgeBoardH.position.set(0, ridgeHh - 0.18, 0); ridgeBoardH.castShadow = true; g.add(ridgeBoardH);
         const slopeAngHf = Math.atan2(ridgeRise, d/2);
         const slopeLenHf = Math.sqrt((d/2)**2 + ridgeRise**2);
-        const offYHf = Math.cos(slopeAngHf)*0.22, offZHf = Math.sin(slopeAngHf)*0.22;
+        const offYHf = Math.cos(slopeAngHf)*0.36, offZHf = Math.sin(slopeAngHf)*0.36;
         for (let rx = -rlh + raftSpacC; rx < rlh; rx += raftSpacC) {
           const rF = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.58, slopeLenHf), raftCeilMat);
           rF.position.set(rx, (frontH+ridgeHh)/2-offYHf, -(d/4)-offZHf); rF.rotation.x=-slopeAngHf; rF.castShadow=true; g.add(rF);
@@ -1417,7 +1488,7 @@ function buildPatioCover(w, d, hex, config) {
         }
         const hipSlopeLenX = Math.sqrt((w/2-rlh)**2 + ridgeRise**2);
         const hipSlopeAngX = Math.atan2(ridgeRise, w/2-rlh);
-        const offYHx = Math.cos(hipSlopeAngX)*0.22;
+        const offYHx = Math.cos(hipSlopeAngX)*0.32;
         [-1,1].forEach(side => {
           const x0 = side*(w/2), xR = side*rlh;
           for(let i=0;i<3;i++){
@@ -2139,6 +2210,136 @@ function buildTree(type, hex) {
   return g;
 }
 
+function buildBoxwood(hex) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: hex, roughness: 0.95 });
+  // Dense rounded globe
+  const body = new THREE.Mesh(new THREE.SphereGeometry(1.4, 12, 12), mat);
+  body.position.y = 1.4; body.castShadow = true; g.add(body);
+  // Slight squash for realism
+  const body2 = new THREE.Mesh(new THREE.SphereGeometry(1.2, 10, 10), mat);
+  body2.scale.y = 0.75; body2.position.y = 1.1; body2.castShadow = true; g.add(body2);
+  return g;
+}
+
+function buildOrnamentalGrass(hex) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: hex, roughness: 0.85, side: THREE.DoubleSide });
+  const darkMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(hex).multiplyScalar(0.7), roughness: 0.9, side: THREE.DoubleSide });
+  const count = 22;
+  for (let i = 0; i < count; i++) {
+    const ang = (i / count) * Math.PI * 2;
+    const r = 0.15 + Math.random() * 0.55;
+    const h = 2.5 + Math.random() * 1.8;
+    const tilt = 0.45 + Math.random() * 0.4;
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.08, h, 0.04), i % 3 === 0 ? darkMat : mat);
+    blade.position.set(Math.sin(ang) * r, h / 2, Math.cos(ang) * r);
+    blade.rotation.set(Math.sin(ang) * tilt, ang, Math.cos(ang) * tilt * 0.5);
+    blade.castShadow = true; g.add(blade);
+  }
+  // Seed heads
+  for (let i = 0; i < 8; i++) {
+    const ang = (i / 8) * Math.PI * 2;
+    const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.02, 0.6, 6), new THREE.MeshStandardMaterial({ color: 0xC8A84B, roughness: 0.8 }));
+    sh.position.set(Math.sin(ang) * 0.4, 3.8 + Math.random() * 0.5, Math.cos(ang) * 0.4);
+    sh.rotation.set(Math.sin(ang) * 0.5, 0, Math.cos(ang) * 0.4);
+    g.add(sh);
+  }
+  return g;
+}
+
+function buildAgave(hex) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: hex, roughness: 0.7 });
+  const leafCount = 16;
+  for (let i = 0; i < leafCount; i++) {
+    const ang = (i / leafCount) * Math.PI * 2;
+    const layer = Math.floor(i / 6);
+    const lenScale = layer === 0 ? 1.0 : layer === 1 ? 0.75 : 0.45;
+    const leafLen = (2.2 + Math.random() * 0.6) * lenScale;
+    const tiltOut = 0.55 + layer * 0.15;
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.08, leafLen), mat);
+    leaf.position.set(Math.sin(ang) * leafLen * 0.35, 0.1 + layer * 0.15, Math.cos(ang) * leafLen * 0.35);
+    leaf.rotation.set(Math.cos(ang) * tiltOut, ang, -Math.sin(ang) * tiltOut);
+    leaf.castShadow = true; g.add(leaf);
+  }
+  // Center spike
+  const spike = new THREE.Mesh(new THREE.ConeGeometry(0.04, 3.5, 6), new THREE.MeshStandardMaterial({ color: new THREE.Color(hex).multiplyScalar(0.65), roughness: 0.6 }));
+  spike.position.y = 1.75; spike.castShadow = true; g.add(spike);
+  return g;
+}
+
+function buildJapaneseMaple(hex) {
+  const g = new THREE.Group();
+  const trunkMat = new THREE.MeshStandardMaterial({ map: woodTexture(0x4A3728), roughness: 0.92 });
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 5, 10), trunkMat);
+  trunk.position.y = 2.5; trunk.castShadow = true; g.add(trunk);
+  // Multi-cluster canopy — layered, spread shape
+  const clusters = [
+    { x: 0,    y: 7.5, z: 0,    r: 3.2 },
+    { x: 2.5,  y: 6.5, z: 1,    r: 2.4 },
+    { x: -2.2, y: 6.8, z: 0.5,  r: 2.3 },
+    { x: 1,    y: 6.0, z: -2,   r: 2.2 },
+    { x: -1.5, y: 5.8, z: -1.5, r: 2.0 },
+    { x: 0.5,  y: 5.2, z: 2.5,  r: 1.8 },
+  ];
+  clusters.forEach(({x,y,z,r},idx)=>{
+    const shade = idx % 2 === 0 ? hex : new THREE.Color(hex).multiplyScalar(0.82).getHex();
+    const c = new THREE.Mesh(new THREE.SphereGeometry(r,10,10), new THREE.MeshStandardMaterial({ color: shade, roughness: 0.95 }));
+    c.position.set(x,y,z); c.castShadow=true; g.add(c);
+  });
+  return g;
+}
+
+function buildCrapeMyrtle(hex) {
+  const g = new THREE.Group();
+  const trunkMat = new THREE.MeshStandardMaterial({ map: woodTexture(0x7A6352), roughness: 0.9 });
+  const flowerMat = new THREE.MeshStandardMaterial({ color: hex, roughness: 0.8, emissive: new THREE.Color(hex), emissiveIntensity: 0.12 });
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x3A6E28, roughness: 0.95 });
+  const trunks = [
+    { x: 0.4,  z: 0.2,  tilt: 0.18, h: 8 },
+    { x: -0.4, z: 0.1,  tilt: 0.15, h: 7.5 },
+    { x: 0.1,  z: -0.5, tilt: 0.20, h: 8.5 },
+  ];
+  trunks.forEach(({x,z,tilt,h})=>{
+    const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.18, h, 8), trunkMat);
+    tr.position.set(x, h/2, z); tr.rotation.set(0, 0, tilt); tr.castShadow = true; g.add(tr);
+    // Leaf cluster at top
+    const leaves = new THREE.Mesh(new THREE.SphereGeometry(1.6, 10, 10), leafMat);
+    leaves.position.set(x + Math.sin(tilt)*h*0.3, h + 0.5, z); leaves.castShadow = true; g.add(leaves);
+    // Flower clusters on top
+    for (let f = 0; f < 5; f++) {
+      const fa = (f/5)*Math.PI*2;
+      const fl = new THREE.Mesh(new THREE.SphereGeometry(0.55, 8, 8), flowerMat);
+      fl.position.set(x + Math.sin(fa)*0.9, h + 1.3 + Math.random()*0.4, z + Math.cos(fa)*0.9);
+      g.add(fl);
+    }
+  });
+  return g;
+}
+
+function buildRoseBush(hex) {
+  const g = new THREE.Group();
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x3A6020, roughness: 0.95 });
+  const flowerMat = new THREE.MeshStandardMaterial({ color: hex, roughness: 0.6, emissive: new THREE.Color(hex), emissiveIntensity: 0.08 });
+  // Mounded foliage
+  const base = new THREE.Mesh(new THREE.SphereGeometry(1.5, 10, 10), leafMat);
+  base.scale.y = 0.72; base.position.y = 1.1; base.castShadow = true; g.add(base);
+  const top = new THREE.Mesh(new THREE.SphereGeometry(1.2, 10, 10), leafMat);
+  top.scale.y = 0.65; top.position.y = 1.55; top.castShadow = true; g.add(top);
+  // Flowers scattered on surface
+  const flowerPositions = [
+    [0, 2.05, 0], [0.8, 1.7, 0.4], [-0.7, 1.75, 0.5],
+    [0.5, 1.65, -0.8], [-0.6, 1.6, -0.6], [0.9, 1.5, -0.3],
+    [-0.9, 1.5, 0.2], [0.3, 1.9, 0.9], [-0.4, 1.85, -0.9],
+  ];
+  flowerPositions.forEach(([x,y,z])=>{
+    const fl = new THREE.Mesh(new THREE.SphereGeometry(0.22+Math.random()*0.08, 8, 8), flowerMat);
+    fl.position.set(x,y,z); g.add(fl);
+  });
+  return g;
+}
+
 function buildFirepit(_hex, config) {
   const cfg = config || {};
   const r   = (cfg.diameterFt || 4) / 2;
@@ -2702,6 +2903,12 @@ function buildStructureGroup(el) {
     case "spa":            mg = buildSpa(hex,bc); break;
     case "tree_palm":
     case "tree_shade":     mg = buildTree(el.type,hex); break;
+    case "japanese_maple": mg = buildJapaneseMaple(hex); break;
+    case "crape_myrtle":   mg = buildCrapeMyrtle(hex); break;
+    case "boxwood":        mg = buildBoxwood(hex); break;
+    case "ornamental_grass": mg = buildOrnamentalGrass(hex); break;
+    case "agave":          mg = buildAgave(hex); break;
+    case "rose_bush":      mg = buildRoseBush(hex); break;
     case "firepit":
     case "fire_table":     mg = buildFirepit(hex,bc); break;
     case "kitchen_island":
@@ -4534,6 +4741,7 @@ export default function DesignEditor() {
   const cameraRef       = useRef(null);
   const controlsRef     = useRef(null);
   const groupsRef       = useRef({});
+  const needsRebuildRef = useRef(new Set());
   const groundGroupRef  = useRef(null);
   const satMeshRef      = useRef(null);
   const selectedIdRef   = useRef(null);
@@ -5197,21 +5405,30 @@ export default function DesignEditor() {
       if(!cur.has(id)){scene.remove(groupsRef.current[id]); delete groupsRef.current[id];}
     });
     elements.forEach(el=>{
-      if(!groupsRef.current[el.id]){
+      const needsRebuild = needsRebuildRef.current.has(el.id);
+      if(needsRebuild) needsRebuildRef.current.delete(el.id);
+      if(!groupsRef.current[el.id] || needsRebuild){
+        const oldGr = groupsRef.current[el.id];
         try {
           const gr=buildStructureGroup(el);
           gr.position.set(el.x??0, 0, el.z??0);
           gr.rotation.y=(el.rotation||0)*Math.PI/180;
-          scene.add(gr); groupsRef.current[el.id]=gr;
+          scene.add(gr);
+          if(oldGr) scene.remove(oldGr);
+          groupsRef.current[el.id]=gr;
         } catch(e) {
           console.error('buildStructureGroup failed for', el.id, e);
-          // Placeholder so the element stays selectable/visible until next rebuild
-          const ph=new THREE.Group();
-          ph.position.set(el.x??0, 0, el.z??0);
-          scene.add(ph); groupsRef.current[el.id]=ph;
+          if(!oldGr){
+            const ph=new THREE.Group();
+            ph.position.set(el.x??0, 0, el.z??0);
+            scene.add(ph); groupsRef.current[el.id]=ph;
+          }
+          // If old group exists, keep it visible rather than replacing with an empty placeholder
         }
       } else {
         groupsRef.current[el.id].rotation.y=(el.rotation||0)*Math.PI/180;
+        const gr=groupsRef.current[el.id];
+        gr.position.x=el.x??gr.position.x; gr.position.z=el.z??gr.position.z;
       }
     });
     invalidate();
@@ -5261,14 +5478,7 @@ export default function DesignEditor() {
   const updateElement=(id,patch)=>{
     setElements(prev=>prev.map(el=>el.id===id?{...el,...patch}:el));
     if(patch.color!==undefined||patch.w!==undefined||patch.d!==undefined||patch.kitchenConfig!==undefined||patch.buildConfig!==undefined){
-      const scene=sceneRef.current;
-      if(scene&&groupsRef.current[id]){
-        // Keep old group in scene until the new one successfully rebuilds
-        // (useEffect will remove the old group when it adds the new one)
-        const old=groupsRef.current[id];
-        scene.remove(old);
-        delete groupsRef.current[id];
-      }
+      needsRebuildRef.current.add(id);
     }
   };
 
