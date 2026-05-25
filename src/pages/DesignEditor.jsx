@@ -4959,8 +4959,9 @@ export default function DesignEditor() {
           renderer.domElement.style.cursor="grabbing";
           const pt=planeHit(); const gr=groupsRef.current[hitId];
           if(pt&&gr) dragOffset.set(gr.position.x-pt.x, 0, gr.position.z-pt.z);
+          needsRenderRef.current=true;
         }
-      } else { setSelectedId(null); selectedIdRef.current=null; }
+      } else { setSelectedId(null); selectedIdRef.current=null; needsRenderRef.current=true; }
     };
     const onPointerMove = e => {
       ndc(e);
@@ -4993,14 +4994,19 @@ export default function DesignEditor() {
       if(pt&&gr){
         let nx=pt.x+dragOffset.x, nz=pt.z+dragOffset.z;
         if(snapRef.current){const s=2;nx=Math.round(nx/s)*s;nz=Math.round(nz/s)*s;}
-        // Clamp to lot boundaries
-        const {w:lw,d:ld,ox:lox,oz:loz}=lotRef.current;
+        // Clamp to lot boundaries — when the element is larger than the lot the
+        // bounds invert; keep it centered instead of flinging it to a corner.
+        // Lot center/size default to 0/DEFAULT so a missing value can never NaN the position.
+        const lr=lotRef.current||{};
+        const lw=Number.isFinite(lr.w)?lr.w:DEFAULT_LOT_W, ld=Number.isFinite(lr.d)?lr.d:DEFAULT_LOT_D;
+        const lox=Number.isFinite(lr.ox)?lr.ox:0, loz=Number.isFinite(lr.oz)?lr.oz:0;
         const dragEl=elementsRef.current.find(el=>el.id===dragId);
         const hw=(dragEl?.w||4)/2, hd=(dragEl?.d||4)/2;
-        nx=Math.max(lox-lw/2+hw, Math.min(lox+lw/2-hw, nx));
-        nz=Math.max(loz-ld/2+hd, Math.min(loz+ld/2-hd, nz));
-        gr.position.x=nx; gr.position.z=nz;
-        needsRenderRef.current=true;
+        const minX=lox-lw/2+hw, maxX=lox+lw/2-hw;
+        const minZ=loz-ld/2+hd, maxZ=loz+ld/2-hd;
+        nx = minX<=maxX ? Math.max(minX, Math.min(maxX, nx)) : lox;
+        nz = minZ<=maxZ ? Math.max(minZ, Math.min(maxZ, nz)) : loz;
+        if(Number.isFinite(nx)&&Number.isFinite(nz)){ gr.position.x=nx; gr.position.z=nz; needsRenderRef.current=true; }
       }
     };
     const onPointerUp = () => {
@@ -5010,8 +5016,9 @@ export default function DesignEditor() {
         return;
       }
       if(dragging&&dragId){
-        const gr=groupsRef.current[dragId];
-        if(gr) setElements(prev=>prev.map(el=>el.id===dragId?{...el,x:gr.position.x,z:gr.position.z}:el));
+        const id=dragId;
+        const gr=groupsRef.current[id];
+        if(gr) setElements(prev=>prev.map(el=>el.id===id?{...el,x:gr.position.x,z:gr.position.z}:el));
       }
       dragging=false; dragId=null; controls.enabled=true;
       renderer.domElement.style.cursor="auto";
@@ -5858,7 +5865,8 @@ export default function DesignEditor() {
       {showLotSetup&&(
         <LotSetup lotW={lotW} lotD={lotD} designAddress={design?.address||""}
           onApply={(w,d,coords)=>{
-            setLotW(w); setLotD(d); lotRef.current={w,d};
+            setLotW(w); setLotD(d);
+            lotRef.current={...lotRef.current, w, d, ox:lotRef.current.ox??0, oz:lotRef.current.oz??0};
             if(coords) setGeoCoords(coords);
             setShowLotSetup(false);
           }}

@@ -3,7 +3,7 @@ import { HardHat, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 export default function Login() {
-  const [mode, setMode]         = useState('login');   // 'login' | 'signup' | 'reset' | 'update_password'
+  const [mode, setMode]         = useState(() => new URLSearchParams(window.location.search).get('mode') === 'signup' ? 'signup' : 'login');   // 'login' | 'signup' | 'reset' | 'update_password'
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');

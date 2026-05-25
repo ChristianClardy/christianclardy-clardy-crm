@@ -2,7 +2,7 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { useTenant } from "@/lib/TenantContext";
-import { Building2, HardHat, Loader2, ArrowRight, Link as LinkIcon } from "lucide-react";
+import { Building2, HardHat, Loader2, ArrowRight, Link as LinkIcon, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,8 @@ export default function Onboarding() {
   const { reload } = useTenant();
   const [mode, setMode] = useState("choose"); // "choose" | "create" | "join"
   const [orgName, setOrgName] = useState("");
+  const [extraOpen, setExtraOpen] = useState(false);
+  const [profile, setProfile] = useState({ phone: "", email: "", address: "", website: "", license_number: "" });
   const [inviteToken, setInviteToken] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -22,7 +24,6 @@ export default function Onboarding() {
     setLoading(true);
     setError("");
     try {
-      // Create org
       const slug = orgName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
       const { data: org, error: orgErr } = await supabase
         .from("organizations")
@@ -31,11 +32,19 @@ export default function Onboarding() {
         .single();
       if (orgErr) throw orgErr;
 
-      // Add user as admin
       const { error: memErr } = await supabase
         .from("organization_members")
         .insert({ organization_id: org.id, user_id: user.id, role: "admin", status: "active" });
       if (memErr) throw memErr;
+
+      // Create company profile (always; optional fields only included if filled)
+      const profilePayload = { name: orgName.trim() };
+      if (profile.phone.trim())          profilePayload.phone          = profile.phone.trim();
+      if (profile.email.trim())          profilePayload.email          = profile.email.trim();
+      if (profile.address.trim())        profilePayload.address        = profile.address.trim();
+      if (profile.website.trim())        profilePayload.website        = profile.website.trim();
+      if (profile.license_number.trim()) profilePayload.license_number = profile.license_number.trim();
+      await supabase.from("company_profiles").insert(profilePayload);
 
       await reload();
     } catch (err) {
@@ -142,8 +151,9 @@ export default function Onboarding() {
                 <h2 className="text-xl font-semibold" style={{ color: "#3d3530" }}>Create organization</h2>
                 <p className="text-sm mt-1" style={{ color: "#7a6e66" }}>This will be your company workspace. You can invite your team after setup.</p>
               </div>
+
               <div>
-                <Label>Organization Name</Label>
+                <Label>Company Name <span style={{ color: "#b5965a" }}>*</span></Label>
                 <Input
                   value={orgName}
                   onChange={e => setOrgName(e.target.value)}
@@ -153,6 +163,48 @@ export default function Onboarding() {
                   autoFocus
                 />
               </div>
+
+              {/* Optional details toggle */}
+              <button
+                type="button"
+                onClick={() => setExtraOpen(o => !o)}
+                className="flex items-center gap-2 text-sm font-medium w-full pt-1"
+                style={{ color: "#b5965a" }}
+              >
+                {extraOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                {extraOpen ? "Hide optional details" : "Add company details (optional)"}
+              </button>
+
+              {extraOpen && (
+                <div className="space-y-4 rounded-xl border p-4" style={{ borderColor: "#ddd5c8", backgroundColor: "#faf8f5" }}>
+                  <p className="text-xs" style={{ color: "#7a6e66" }}>You can fill these in now or later in Settings.</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">Phone</Label>
+                      <Input value={profile.phone} onChange={e => setProfile(p => ({ ...p, phone: e.target.value }))} placeholder="(555) 000-0000" className="mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Email</Label>
+                      <Input type="email" value={profile.email} onChange={e => setProfile(p => ({ ...p, email: e.target.value }))} placeholder="info@company.com" className="mt-1" />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Address</Label>
+                    <Input value={profile.address} onChange={e => setProfile(p => ({ ...p, address: e.target.value }))} placeholder="123 Main St, City, State" className="mt-1" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">Website</Label>
+                      <Input value={profile.website} onChange={e => setProfile(p => ({ ...p, website: e.target.value }))} placeholder="www.company.com" className="mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs">License #</Label>
+                      <Input value={profile.license_number} onChange={e => setProfile(p => ({ ...p, license_number: e.target.value }))} placeholder="GC-12345" className="mt-1" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {error && <p className="text-sm text-rose-600">{error}</p>}
               <Button type="submit" disabled={loading || !orgName.trim()} className="w-full" style={{ backgroundColor: "#3d3530", color: "#f5f0eb" }}>
                 {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
