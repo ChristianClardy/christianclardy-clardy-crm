@@ -88,8 +88,15 @@ export default function ProjectAccounting({ project }) {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [activeSection, setActiveSection] = useState("ap");
+  const [costCodeOptions, setCostCodeOptions] = useState(COST_CODES);
 
   useEffect(() => { load(); }, [project.id]);
+
+  useEffect(() => {
+    base44.entities.CostCode.list("sort_order")
+      .then(rows => setCostCodeOptions(rows.length ? rows.map(r => r.name) : COST_CODES))
+      .catch(() => setCostCodeOptions(COST_CODES));
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -594,7 +601,7 @@ export default function ProjectAccounting({ project }) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">— Unassigned —</SelectItem>
-                  {COST_CODES.map(cc => <SelectItem key={cc} value={cc}>{cc}</SelectItem>)}
+                  {costCodeOptions.map(cc => <SelectItem key={cc} value={cc}>{cc}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

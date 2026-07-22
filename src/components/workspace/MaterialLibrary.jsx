@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import MaterialImportDialog from "./MaterialImportDialog";
+import AssemblyLibrary from "./AssemblyLibrary";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -140,6 +141,7 @@ function mergeMaterial(...mats) {
   const mc = pick("material_cost", true), lc = pick("labor_cost", true), sc = pick("sub_cost", true);
   return {
     name: pick("name"), description: pick("description"), category: pick("category"), unit: pick("unit"),
+    cost_code_id: pick("cost_code_id"),
     material_cost: mc, labor_cost: lc, sub_cost: sc, unit_cost: mc + lc + sc || pick("unit_cost", true),
     markup_type: pick("markup_type"), markup_value: pick("markup_value", true),
     overhead_percent: pick("overhead_percent", true), profit_percent: pick("profit_percent", true),
@@ -157,6 +159,7 @@ function mergeMaterial(...mats) {
 const EMPTY_MATERIAL = {
   name: "", description: "", category: "Other", unit: "EA", is_active: true,
   manufacturer: "", manufacturer_part: "", item_code: "",
+  cost_code_id: "",
   material_cost: "", labor_cost: "", sub_cost: "",
   markup_type: "markup_percent", markup_value: "", overhead_percent: "", profit_percent: "",
   cost_method: "standard", standard_cost: "", average_cost: "", last_purchase_price: "",
@@ -318,6 +321,7 @@ function PriceHistoryPanel({ history, currentCost, onAddEntry }) {
 export default function MaterialLibrary({ canManage = true }) {
   const [libType, setLibType] = useState("material");
   const [materials, setMaterials] = useState([]);
+  const [costCodes, setCostCodes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
@@ -339,6 +343,7 @@ export default function MaterialLibrary({ canManage = true }) {
     const data = await base44.entities.Material.list("-created_date");
     setMaterials(data || []);
     setLoading(false);
+    base44.entities.CostCode.list("sort_order").then(setCostCodes).catch(() => setCostCodes([]));
   };
 
   const openNew = () => {
@@ -353,6 +358,7 @@ export default function MaterialLibrary({ canManage = true }) {
     setForm({
       ...EMPTY_MATERIAL,
       ...m,
+      cost_code_id: m.cost_code_id ?? "",
       material_cost: m.material_cost ?? "",
       labor_cost: m.labor_cost ?? "",
       sub_cost: m.sub_cost ?? "",
@@ -419,6 +425,7 @@ export default function MaterialLibrary({ canManage = true }) {
       item_code: form.item_code,
       manufacturer: form.manufacturer,
       manufacturer_part: form.manufacturer_part,
+      cost_code_id: form.cost_code_id || null,
       material_cost: mc,
       labor_cost: lc,
       sub_cost: sc,
@@ -551,7 +558,7 @@ export default function MaterialLibrary({ canManage = true }) {
     <div className="space-y-5">
       {/* Library switcher */}
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
-        {[{ key: "material", label: "Material Library" }, { key: "labor", label: "Labor Library" }].map(t => (
+        {[{ key: "material", label: "Material Library" }, { key: "labor", label: "Labor Library" }, { key: "assembly", label: "Assemblies" }].map(t => (
           <button key={t.key} onClick={() => { setLibType(t.key); setCategoryFilter("All"); setSearch(""); }}
             className={cn("text-sm px-4 py-2 rounded-lg font-medium transition-all", libType === t.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700")}>
             {t.label}
@@ -559,6 +566,10 @@ export default function MaterialLibrary({ canManage = true }) {
         ))}
       </div>
 
+      {libType === "assembly" ? (
+        <AssemblyLibrary materials={materials} costCodes={costCodes} canManage={canManage} />
+      ) : (
+      <>
       {/* KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatCard label="Total Items" value={scoped.filter(m => m.is_active !== false).length} sub={`${inactiveCount} inactive`} icon={Package} />
@@ -773,7 +784,7 @@ export default function MaterialLibrary({ canManage = true }) {
                   </div>
                 </div>
                 <div><Label className="text-xs">Description</Label><Textarea value={form.description} onChange={e => ff("description", e.target.value)} className="mt-1 text-sm" rows={2} /></div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   <div>
                     <Label className="text-xs">Category</Label>
                     <select value={form.category} onChange={e => ff("category", e.target.value)} className="mt-1 w-full h-9 text-sm border border-slate-200 rounded-md px-2 outline-none focus:ring-1 focus:ring-amber-400 bg-white">
@@ -784,6 +795,13 @@ export default function MaterialLibrary({ canManage = true }) {
                     <Label className="text-xs">Unit of Measure</Label>
                     <select value={form.unit} onChange={e => ff("unit", e.target.value)} className="mt-1 w-full h-9 text-sm border border-slate-200 rounded-md px-2 outline-none focus:ring-1 focus:ring-amber-400 bg-white">
                       {UNITS.map(u => <option key={u}>{u}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Cost Code (optional)</Label>
+                    <select value={form.cost_code_id || ""} onChange={e => ff("cost_code_id", e.target.value)} className="mt-1 w-full h-9 text-sm border border-slate-200 rounded-md px-2 outline-none focus:ring-1 focus:ring-amber-400 bg-white">
+                      <option value="">— None —</option>
+                      {costCodes.map(cc => <option key={cc.id} value={cc.id}>{cc.code} · {cc.name}</option>)}
                     </select>
                   </div>
                 </div>
@@ -991,6 +1009,8 @@ export default function MaterialLibrary({ canManage = true }) {
       </Dialog>
 
       <MaterialImportDialog open={importOpen} onOpenChange={setImportOpen} onImported={() => { setImportOpen(false); load(); }} />
+      </>
+      )}
     </div>
   );
 }

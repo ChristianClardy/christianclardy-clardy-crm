@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { jsPDF } from "jspdf";
 import { supabase } from "@/lib/supabase";
@@ -79,6 +80,11 @@ function blankItem(sectionName, description = "", unit = "SF", qty = 1, sectionT
     unit,
     quantity: qty,
     cost_per_unit: "",
+    cost_code_id: null,
+    cost_code_label: "",
+    material_cost_per_unit: "",
+    labor_cost_per_unit: "",
+    subcontract_cost_per_unit: "",
   };
 }
 
@@ -192,6 +198,16 @@ function itemTotals(item, marginPct = 40) {
   };
 }
 
+// Sums the optional material/labor/subcontract split fields on an item.
+// Returns null when none of the three are set, so callers can fall back
+// to the item's existing (manually-entered) cost_per_unit.
+function splitSum(item) {
+  const m = Number(item.material_cost_per_unit) || 0;
+  const l = Number(item.labor_cost_per_unit) || 0;
+  const s = Number(item.subcontract_cost_per_unit) || 0;
+  return (item.material_cost_per_unit || item.labor_cost_per_unit || item.subcontract_cost_per_unit) ? m + l + s : null;
+}
+
 function summaryTotals(items, marginPct = 40, sectionMargins = {}) {
   let totalCost = 0, totalSell = 0;
   for (const it of items) {
@@ -258,7 +274,7 @@ function TemplatePicker({ onSelect, onClose }) {
 
 // ─── Description Autocomplete Cell ───────────────────────────────────────────
 
-function DescriptionCell({ item, onChange, materials, onAddToLibrary }) {
+function DescriptionCell({ item, onChange, materials, onAddToLibrary, costCodes = [] }) {
   const [open, setOpen]     = useState(false);
   const [adding, setAdding] = useState(false);
   const ref = useRef(null);
@@ -276,13 +292,22 @@ function DescriptionCell({ item, onChange, materials, onAddToLibrary }) {
   }, []);
 
   const handleSelect = (mat) => {
-    const unitCost = (mat.material_cost || 0) + (mat.labor_cost || 0) + (mat.sub_cost || 0) || mat.unit_cost || 0;
+    const m = Number(mat.material_cost) || 0;
+    const l = Number(mat.labor_cost) || 0;
+    const s = Number(mat.sub_cost) || 0;
+    const hasSplit = m || l || s;
+    const unitCost = hasSplit ? m + l + s : (mat.unit_cost || 0);
     onChange({
       ...item,
       description:   mat.name,
       notes:         mat.description || item.notes || "",
       unit:          mat.unit || item.unit,
       cost_per_unit: unitCost > 0 ? String(unitCost) : item.cost_per_unit,
+      material_cost_per_unit:    hasSplit ? String(m) : item.material_cost_per_unit,
+      labor_cost_per_unit:       hasSplit ? String(l) : item.labor_cost_per_unit,
+      subcontract_cost_per_unit: hasSplit ? String(s) : item.subcontract_cost_per_unit,
+      cost_code_id:    mat.cost_code_id || item.cost_code_id || null,
+      cost_code_label: costCodes.find(c => c.id === mat.cost_code_id)?.name || item.cost_code_label || "",
     });
     setOpen(false);
   };
@@ -359,10 +384,11 @@ function DescriptionCell({ item, onChange, materials, onAddToLibrary }) {
 
 // ─── Line Item Row ────────────────────────────────────────────────────────────
 
-function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, marginPct = 40, locked = false }) {
+function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, costCodes = [], marginPct = 40, locked = false }) {
   const { sell_per_unit, has_sell_override, has_margin_override, effective_margin, total_cost, total_sell } = itemTotals(item, marginPct);
   const hasCost = Number(item.cost_per_unit) > 0;
   const calcSell = sellFromCost(Number(item.cost_per_unit) || 0, marginPct);
+  const hasBreakdown = splitSum(item) != null;
 
   const isMaterialItem = item.sectionType === "material";
   return (
@@ -374,6 +400,7 @@ function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, marg
           onChange={locked ? () => {} : onChange}
           materials={materials}
           onAddToLibrary={onAddToLibrary}
+          costCodes={costCodes}
         />
       </td>
       <td className="px-2 py-1.5 w-32">
@@ -472,23 +499,79 @@ function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, marg
         {hasCost ? fmt(total_sell) : <span className="text-slate-300">—</span>}
       </td>
       <td className="px-2 py-1.5 w-16 text-center">
-        {!locked && (
-          <div className="flex items-center gap-1">
-            <button
-              title="Link to material library"
-              className="p-1 rounded hover:bg-slate-100 text-slate-300 hover:text-amber-500 transition-colors"
-              onClick={() => {/* placeholder for material library hook */}}
-            >
-              <Package className="w-3.5 h-3.5" />
-            </button>
+        <div className="flex items-center gap-1 justify-center">
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                title="Cost breakdown & cost code"
+                className={cn("p-1 rounded hover:bg-slate-100 transition-colors", hasBreakdown ? "text-amber-500" : "text-slate-300 hover:text-amber-500")}
+              >
+                <Package className="w-3.5 h-3.5" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72" align="end">
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs">Cost Code</Label>
+                  <select
+                    value={item.cost_code_id || ""}
+                    disabled={locked}
+                    onChange={e => {
+                      const cc = costCodes.find(c => c.id === e.target.value);
+                      onChange({ ...item, cost_code_id: cc?.id || null, cost_code_label: cc?.name || "" });
+                    }}
+                    className="mt-1 w-full h-8 text-xs border border-slate-200 rounded-md px-2 outline-none focus:ring-1 focus:ring-amber-400 bg-white disabled:opacity-60"
+                  >
+                    <option value="">— No cost code —</option>
+                    {costCodes.map(cc => <option key={cc.id} value={cc.id}>{cc.code} · {cc.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Cost Breakdown (per unit)</p>
+                  <div className="space-y-1.5">
+                    {[
+                      ["material_cost_per_unit", "Material"],
+                      ["labor_cost_per_unit", "Labor"],
+                      ["subcontract_cost_per_unit", "Subcontract"],
+                    ].map(([field, label]) => (
+                      <div key={field} className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500 w-24 flex-shrink-0">{label}</span>
+                        <div className="relative flex-1">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={item[field] ?? ""}
+                            disabled={locked}
+                            onChange={e => {
+                              const next = { ...item, [field]: e.target.value };
+                              const sum = splitSum(next);
+                              onChange({ ...next, cost_per_unit: sum != null ? String(sum) : next.cost_per_unit });
+                            }}
+                            placeholder="0.00"
+                            className="w-full pl-5 pr-2 h-8 text-xs text-right border border-slate-200 rounded-md outline-none focus:ring-1 focus:ring-amber-400 disabled:opacity-60"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {hasBreakdown && (
+                    <p className="text-[10px] text-slate-400 mt-2">Cost/Unit is synced to the sum above.</p>
+                  )}
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+          {!locked && (
             <button
               onClick={() => onDelete(item.id)}
               className="p-1 rounded hover:bg-rose-100 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </td>
     </tr>
   );
@@ -496,7 +579,7 @@ function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, marg
 
 // ─── Trade / Material Section ─────────────────────────────────────────────────
 
-function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onDeleteSection, materials, onAddToLibrary, sectionType = "trade", marginPct = 40, sectionMarginOverride, onSectionMarginChange, locked = false }) {
+function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onDeleteSection, materials, onAddToLibrary, costCodes = [], sectionType = "trade", marginPct = 40, sectionMarginOverride, onSectionMarginChange, locked = false }) {
   const [collapsed, setCollapsed] = useState(false);
   const effectiveSectionMargin = sectionMarginOverride != null ? Number(sectionMarginOverride) : marginPct;
   const tradeItems = items.filter(it => it.trade === trade);
@@ -601,6 +684,7 @@ function TradeSection({ trade, items, onChangeItem, onDeleteItem, onAddItem, onD
                       onDelete={onDeleteItem}
                       materials={materials}
                       onAddToLibrary={onAddToLibrary}
+                      costCodes={costCodes}
                       marginPct={effectiveSectionMargin}
                       locked={locked}
                     />
@@ -789,6 +873,29 @@ function SummaryPanel({ items, estimate, onEstimateChange, sectionMargins = {}, 
                 <span className="font-medium text-slate-700">{fmt(sell)}</span>
               </div>
             ))}
+          </div>
+        );
+      })()}
+
+      {/* Cost breakdown by type — internal only, never shown in PDF/client preview */}
+      {items.length > 0 && (() => {
+        let mat = 0, lab = 0, sub = 0, other = 0;
+        for (const it of items) {
+          const m = Number(it.material_cost_per_unit) || 0;
+          const l = Number(it.labor_cost_per_unit) || 0;
+          const s = Number(it.subcontract_cost_per_unit) || 0;
+          const qty = Number(it.quantity) || 0;
+          if (m || l || s) { mat += qty * m; lab += qty * l; sub += qty * s; }
+          else other += qty * (Number(it.cost_per_unit) || 0);
+        }
+        if (!mat && !lab && !sub) return null;
+        return (
+          <div className="border-t border-slate-100 pt-3 space-y-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Cost Breakdown</p>
+            {mat > 0 && <div className="flex justify-between text-xs"><span className="text-slate-500">Material</span><span className="font-medium text-slate-700">{fmt(mat)}</span></div>}
+            {lab > 0 && <div className="flex justify-between text-xs"><span className="text-slate-500">Labor</span><span className="font-medium text-slate-700">{fmt(lab)}</span></div>}
+            {sub > 0 && <div className="flex justify-between text-xs"><span className="text-slate-500">Subcontract</span><span className="font-medium text-slate-700">{fmt(sub)}</span></div>}
+            {other > 0 && <div className="flex justify-between text-xs"><span className="text-slate-400 italic">Unclassified</span><span className="text-slate-400">{fmt(other)}</span></div>}
           </div>
         );
       })()}
@@ -1411,6 +1518,83 @@ function AddTradeDialog({ activeTrades, onAdd, onClose, customCategories = [], o
   );
 }
 
+// ─── Apply Assembly Dialog ─────────────────────────────────────────────────────
+
+function ApplyAssemblyDialog({ assemblies, onApply, onClose }) {
+  const [assemblyId, setAssemblyId] = useState(assemblies[0]?.id || "");
+  const [qty, setQty] = useState("");
+  const [baseName, setBaseName] = useState(assemblies[0]?.name || "");
+
+  const assembly = assemblies.find(a => a.id === assemblyId);
+
+  const handleAssemblyChange = (id) => {
+    setAssemblyId(id);
+    const a = assemblies.find(x => x.id === id);
+    setBaseName(a?.name || "");
+  };
+
+  const handleSubmit = () => {
+    if (!assembly || !qty || !baseName.trim()) return;
+    onApply(assembly, baseName.trim(), qty);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="font-bold text-slate-900">Apply Assembly</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><span className="text-xl leading-none">×</span></button>
+        </div>
+        <div className="p-4 space-y-3">
+          <div>
+            <Label className="text-xs">Assembly</Label>
+            <select
+              value={assemblyId}
+              onChange={e => handleAssemblyChange(e.target.value)}
+              className="mt-1 w-full h-9 text-sm border border-slate-200 rounded-md px-2 outline-none focus:ring-1 focus:ring-amber-400 bg-white"
+            >
+              {assemblies.map(a => <option key={a.id} value={a.id}>{a.name} (per {a.output_unit})</option>)}
+            </select>
+          </div>
+          <div>
+            <Label className="text-xs">Quantity {assembly ? `(${assembly.output_unit})` : ""}</Label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={qty}
+              onChange={e => setQty(e.target.value)}
+              placeholder="0"
+              className="mt-1 w-full h-9 text-sm border border-slate-200 rounded-md px-2 outline-none focus:ring-1 focus:ring-amber-400"
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Section Name</Label>
+            <input
+              type="text"
+              value={baseName}
+              onChange={e => setBaseName(e.target.value)}
+              className="mt-1 w-full h-9 text-sm border border-slate-200 rounded-md px-2 outline-none focus:ring-1 focus:ring-amber-400"
+            />
+            <p className="text-[11px] text-slate-400 mt-1">Materials go to "{baseName || "…"} Materials", labor/other go to "{baseName || "…"}".</p>
+          </div>
+        </div>
+        <div className="p-4 border-t border-slate-100 flex justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100">Cancel</button>
+          <button
+            onClick={handleSubmit}
+            disabled={!assembly || !qty || !baseName.trim()}
+            className="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-sm font-medium disabled:opacity-40 hover:bg-amber-600 transition-colors"
+          >
+            Generate Line Items
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function EstimateDetail() {
@@ -1422,6 +1606,7 @@ export default function EstimateDetail() {
   const [showPicker, setShowPicker]           = useState(isNew);
   const [showAddTrade, setShowAddTrade]       = useState(false);
   const [showAddMaterial, setShowAddMaterial] = useState(false);
+  const [showApplyAssembly, setShowApplyAssembly] = useState(false);
   const [showPreview, setShowPreview]         = useState(false);
   const [saving, setSaving]             = useState(false);
   const [saved, setSaved]               = useState(false);
@@ -1441,6 +1626,8 @@ export default function EstimateDetail() {
   const currentIdRef = useRef(existingId);
   const [clients, setClients]           = useState([]);
   const [materials, setMaterials]       = useState([]);
+  const [costCodes, setCostCodes]       = useState([]);
+  const [assemblies, setAssemblies]     = useState([]);
   const [company, setCompany]           = useState(null);
   const [allCompanyProfiles, setAllCompanyProfiles] = useState([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState(null);
@@ -1486,6 +1673,8 @@ export default function EstimateDetail() {
       setClients([...clientData, ...leadsAsClients]);
     });
     base44.entities.Material.list("name").then(setMaterials);
+    base44.entities.CostCode.list("sort_order").then(setCostCodes).catch(() => setCostCodes([]));
+    base44.entities.Assembly.list("sort_order").then(setAssemblies).catch(() => setAssemblies([]));
     base44.entities.CompanyProfile.list().then(rows => {
       setAllCompanyProfiles(rows || []);
       if (rows.length) {
@@ -1615,6 +1804,30 @@ export default function EstimateDetail() {
     setSaved(false);
   };
 
+  const handleApplyAssembly = (assembly, baseName, targetQty) => {
+    const qty = Number(targetQty) || 0;
+    if (!qty || !Array.isArray(assembly.components) || !assembly.components.length) return;
+    const costCode = costCodes.find(c => c.id === assembly.cost_code_id);
+    const generated = assembly.components.map(comp => {
+      const mat = comp.material_id ? materials.find(m => m.id === comp.material_id) : null;
+      const resolvedCost = mat
+        ? (Number(mat.material_cost) || 0) + (Number(mat.labor_cost) || 0) + (Number(mat.sub_cost) || 0) || Number(mat.unit_cost) || 0
+        : Number(comp.cost_per_unit) || 0;
+      const isMaterial = comp.type === "material";
+      const trade = isMaterial ? `${baseName} Materials` : baseName;
+      const item = blankItem(trade, comp.description, comp.unit || "EA", (Number(comp.qty_per_unit) || 0) * qty, isMaterial ? "material" : "trade");
+      item.cost_per_unit = resolvedCost > 0 ? String(resolvedCost) : "";
+      if (comp.type === "material") item.material_cost_per_unit = resolvedCost > 0 ? String(resolvedCost) : "";
+      else if (comp.type === "labor") item.labor_cost_per_unit = resolvedCost > 0 ? String(resolvedCost) : "";
+      else if (comp.type === "subcontract") item.subcontract_cost_per_unit = resolvedCost > 0 ? String(resolvedCost) : "";
+      item.cost_code_id = assembly.cost_code_id || null;
+      item.cost_code_label = costCode?.name || "";
+      return item;
+    });
+    setItems(prev => [...prev, ...generated]);
+    setSaved(false);
+  };
+
   const handleDeleteSection = (name, sectionType) => {
     if (sectionType === "material") {
       setActiveMaterialSections(prev => prev.filter(s => s !== name));
@@ -1724,12 +1937,20 @@ export default function EstimateDetail() {
         const key = name.toLowerCase();
         const existing = libIndex[key];
         const isLaborItem = item.sectionType === "labor" || LABOR_TRADES.has(item.trade);
+        const sum = splitSum(item);
         const matData = {
           name,
           unit: item.unit || "EA",
-          ...(isLaborItem
-            ? { labor_cost: cost, material_cost: 0 }
-            : { material_cost: cost, labor_cost: 0 }),
+          ...(sum != null
+            ? {
+                material_cost: Number(item.material_cost_per_unit) || 0,
+                labor_cost:    Number(item.labor_cost_per_unit) || 0,
+                sub_cost:      Number(item.subcontract_cost_per_unit) || 0,
+                ...(item.cost_code_id ? { cost_code_id: item.cost_code_id } : {}),
+              }
+            : isLaborItem
+              ? { labor_cost: cost, material_cost: 0 }
+              : { material_cost: cost, labor_cost: 0 }),
         };
         if (existing) {
           // Only update if the library entry has no pricing yet
@@ -1917,6 +2138,13 @@ export default function EstimateDetail() {
           onClose={() => setShowAddMaterial(false)}
           customCategories={customMaterialCategories}
           onAddCustomCategory={handleAddCustomCategory}
+        />
+      )}
+      {showApplyAssembly && (
+        <ApplyAssemblyDialog
+          assemblies={assemblies}
+          onApply={handleApplyAssembly}
+          onClose={() => setShowApplyAssembly(false)}
         />
       )}
 
@@ -2261,6 +2489,7 @@ export default function EstimateDetail() {
               onDeleteSection={handleDeleteSection}
               materials={materials}
               onAddToLibrary={handleAddToLibrary}
+              costCodes={costCodes}
               sectionType="material"
               marginPct={effectiveMarginPct}
               sectionMarginOverride={sectionMargins[sec] ?? null}
@@ -2281,6 +2510,7 @@ export default function EstimateDetail() {
               onDeleteSection={handleDeleteSection}
               materials={materials}
               onAddToLibrary={handleAddToLibrary}
+              costCodes={costCodes}
               sectionType="trade"
               marginPct={effectiveMarginPct}
               sectionMarginOverride={sectionMargins[trade] ?? null}
@@ -2301,6 +2531,7 @@ export default function EstimateDetail() {
               onDeleteSection={handleDeleteSection}
               materials={materials}
               onAddToLibrary={handleAddToLibrary}
+              costCodes={costCodes}
               sectionType="trade"
               marginPct={effectiveMarginPct}
               sectionMarginOverride={sectionMargins[trade] ?? null}
@@ -2329,6 +2560,14 @@ export default function EstimateDetail() {
               >
                 <FileText className="w-4 h-4" /> Load Template
               </button>
+              {assemblies.length > 0 && (
+                <button
+                  onClick={() => setShowApplyAssembly(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-violet-200 text-sm text-slate-500 hover:border-violet-400 hover:text-violet-600 hover:bg-violet-50 transition-all"
+                >
+                  <Package className="w-4 h-4" /> Apply Assembly
+                </button>
+              )}
             </div>
           )}
 
