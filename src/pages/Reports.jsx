@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
+import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 
 const SECTIONS = [
   { key: "progress", label: "Progress & Completion", icon: BarChart3 },
@@ -23,8 +24,11 @@ const SECTIONS = [
 ];
 
 export default function Reports() {
-  const [projects, setProjects] = useState([]);
-  const [clients, setClients] = useState([]);
+  const companyScope = useCompanyScope();
+  const [projectsRaw, setProjects] = useState([]);
+  const [clientsRaw, setClients] = useState([]);
+  const projects = scopeFilter(projectsRaw, companyScope);
+  const clients = scopeFilter(clientsRaw, companyScope);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
 

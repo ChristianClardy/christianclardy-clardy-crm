@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import LeadFormDialog from "@/components/crm/LeadFormDialog";
 import { cn } from "@/lib/utils";
+import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 
 const ContactDetailSlider = lazy(() => import("@/components/crm/ContactDetailSlider"));
 
@@ -137,6 +138,7 @@ function KanbanColumn({ column, leads, onDrop, onDragStart, onDragOver, dragging
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function ContactsView() {
+  const companyScope = useCompanyScope();
   const [leads, setLeads]         = useState([]);
   const [loading, setLoading]     = useState(true);
   const [search, setSearch]       = useState("");
@@ -165,10 +167,12 @@ export default function ContactsView() {
     return unsub;
   }, []);
 
-  const reps = useMemo(() => [...new Set(leads.map(l => l.assigned_sales_rep).filter(Boolean))], [leads]);
+  const scopedLeads = useMemo(() => scopeFilter(leads, companyScope), [leads, companyScope]);
+
+  const reps = useMemo(() => [...new Set(scopedLeads.map(l => l.assigned_sales_rep).filter(Boolean))], [scopedLeads]);
 
   // Normalise statuses so enum defaults ('new','contacted',etc.) map correctly
-  const leadsNorm = useMemo(() => leads.map(l => ({ ...l, _status: normalizeStatus(l.status) })), [leads]);
+  const leadsNorm = useMemo(() => scopedLeads.map(l => ({ ...l, _status: normalizeStatus(l.status) })), [scopedLeads]);
 
   const activeLeads = useMemo(() => leadsNorm.filter(l => !DEAD.includes(l._status)), [leadsNorm]);
 

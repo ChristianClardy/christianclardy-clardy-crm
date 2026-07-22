@@ -12,6 +12,7 @@ import WorkflowBadge, { WORKFLOW_STAGES } from "@/components/prospects/WorkflowB
 import WorkflowDrawer from "@/components/prospects/WorkflowDrawer";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
+import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 
 const statusColors = {
   draft: "bg-slate-100 text-slate-600",
@@ -27,6 +28,7 @@ function fmt(n) {
 }
 
 export default function Prospects({ initialBucket = "all", showBucketTabs = true }) {
+  const companyScope = useCompanyScope();
   const bucketTitles = {
     all: "Pipeline",
     leads: "Leads",
@@ -200,8 +202,10 @@ export default function Prospects({ initialBucket = "all", showBucketTabs = true
     }[bucket] || 0;
   };
 
+  const scopedProspects = scopeFilter(prospects, companyScope);
+
   const consolidatedProspects = Object.values(
-    prospects.filter(isPipelineRelevant).reduce((acc, prospect) => {
+    scopedProspects.filter(isPipelineRelevant).reduce((acc, prospect) => {
       const key = normalizeProspectName(prospect.name) || prospect.id;
       const existing = acc[key];
 

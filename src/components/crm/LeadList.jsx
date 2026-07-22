@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import LeadFormDialog from "@/components/crm/LeadFormDialog";
 import { cn } from "@/lib/utils";
+import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 
 // ─── Column definitions ───────────────────────────────────────────────────────
 
@@ -180,6 +181,7 @@ function KanbanColumn({ column, leads, onDrop, onDragStart, onDragOver, dragging
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function LeadList({ archived = false }) {
+  const companyScope = useCompanyScope();
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -205,12 +207,14 @@ export default function LeadList({ archived = false }) {
     return unsubscribe;
   }, []);
 
+  const scopedLeads = useMemo(() => scopeFilter(leads, companyScope), [leads, companyScope]);
+
   const visibleLeads = useMemo(() =>
-    leads.filter((lead) =>
+    scopedLeads.filter((lead) =>
       archived
         ? DEAD_STATUSES.includes(lead.status)
         : !DEAD_STATUSES.includes(lead.status)
-    ), [leads, archived]);
+    ), [scopedLeads, archived]);
 
   const filteredLeads = useMemo(() => visibleLeads.filter((lead) => {
     const value = search.toLowerCase();

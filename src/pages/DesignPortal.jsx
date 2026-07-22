@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 import {
   Plus, Search, Compass, Pencil, Trash2, Receipt, MapPin,
   Clock, CheckCircle, Send, X, Loader2, ChevronRight,
@@ -408,7 +409,9 @@ function DesignCard({ design, linkedEstimate, onEdit, onDelete, onOpenEstimate, 
 
 export default function DesignPortal() {
   const navigate = useNavigate();
-  const [designs, setDesigns]   = useState([]);
+  const companyScope = useCompanyScope();
+  const [designsRaw, setDesigns]   = useState([]);
+  const designs = scopeFilter(designsRaw, companyScope);
   const [estimates, setEstimates] = useState([]);
   const [clients, setClients]   = useState([]);
   const [loading, setLoading]   = useState(true);

@@ -9,6 +9,7 @@ import {
   CheckCircle2, Clock, ChevronRight, ExternalLink,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -71,13 +72,21 @@ function ProjectLink({ project, navigate }) {
 // ── Main page ──────────────────────────────────────────────────────────────────
 export default function FinanceDashboard() {
   const navigate = useNavigate();
+  const companyScope = useCompanyScope();
   const [tab, setTab] = useState("overview");
-  const [projects, setProjects]       = useState([]);
-  const [draws, setDraws]             = useState([]);
-  const [subInvoices, setSubInvoices] = useState([]);
-  const [payments, setPayments]       = useState([]);
-  const [invoices, setInvoices]       = useState([]);
+  const [projectsRaw, setProjects]       = useState([]);
+  const [drawsRaw, setDraws]             = useState([]);
+  const [subInvoicesRaw, setSubInvoices] = useState([]);
+  const [paymentsRaw, setPayments]       = useState([]);
+  const [invoicesRaw, setInvoices]       = useState([]);
   const [loading, setLoading]         = useState(true);
+
+  // Scoped to the active company-scope switcher selection
+  const projects    = useMemo(() => scopeFilter(projectsRaw, companyScope),    [projectsRaw, companyScope]);
+  const draws        = useMemo(() => scopeFilter(drawsRaw, companyScope),       [drawsRaw, companyScope]);
+  const subInvoices  = useMemo(() => scopeFilter(subInvoicesRaw, companyScope), [subInvoicesRaw, companyScope]);
+  const payments      = useMemo(() => scopeFilter(paymentsRaw, companyScope),    [paymentsRaw, companyScope]);
+  const invoices      = useMemo(() => scopeFilter(invoicesRaw, companyScope),    [invoicesRaw, companyScope]);
 
   useEffect(() => {
     load();

@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import ClientWorkflowControl from "@/components/clients/ClientWorkflowControl";
+import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 
 const statusStyles = {
   active:   { label: "Active",   class: "bg-emerald-100 text-emerald-700" },
@@ -48,6 +49,7 @@ const statusStyles = {
 
 export default function Clients() {
   const navigate = useNavigate();
+  const companyScope = useCompanyScope();
   const [clients, setClients]           = useState([]);
   const [projects, setProjects]         = useState([]);
   const [companyProfiles, setCompanyProfiles] = useState([]);
@@ -115,9 +117,11 @@ export default function Clients() {
   const getClientProjectCount = (clientId) =>
     projects.filter((p) => p.client_id === clientId).length;
 
+  const scopedClients = useMemo(() => scopeFilter(clients, companyScope), [clients, companyScope]);
+
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase();
-    return clients.filter(c => {
+    return scopedClients.filter(c => {
       const matchesSearch =
         c.name?.toLowerCase().includes(q) ||
         c.contact_person?.toLowerCase().includes(q) ||
@@ -128,7 +132,7 @@ export default function Clients() {
         (selectedCompany === "__none__" ? !c.company?.trim() : (c.company || "").trim() === selectedCompany);
       return matchesSearch && matchesCompany;
     });
-  }, [clients, searchQuery, selectedCompany]);
+  }, [scopedClients, searchQuery, selectedCompany]);
 
   // When viewing "all", group by company then unassigned
   const groups = useMemo(() => {
@@ -245,7 +249,7 @@ export default function Clients() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold text-slate-900 tracking-tight">Contacts</h1>
-          <p className="text-slate-500 mt-1">{clients.length} total contacts</p>
+          <p className="text-slate-500 mt-1">{scopedClients.length} total contacts</p>
         </div>
         <Button
           onClick={openNewDialog}

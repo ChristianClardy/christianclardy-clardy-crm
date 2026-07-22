@@ -1885,6 +1885,7 @@ export default function EstimateDetail() {
         // Convert empty strings to null for FK / nullable fields
         client_id:       estimate.client_id  || null,
         project_id:      estimate.project_id || null,
+        company_id:      selectedCompanyId   || null,
         line_items:      items,
         section_margins: sectionMargins,
         total:           effectiveTotal,
@@ -2023,6 +2024,7 @@ export default function EstimateDetail() {
       title:            `Amendment #${amendNum} — ${baseTitle}`,
       client_id:        estimate.client_id  || null,
       project_id:       estimate.project_id || null,
+      company_id:       selectedCompanyId   || null,
       status:           "draft",
       issue_date:       new Date().toISOString().slice(0, 10),
       line_items:       items,

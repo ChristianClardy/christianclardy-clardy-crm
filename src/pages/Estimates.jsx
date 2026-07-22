@@ -6,6 +6,7 @@ import { Plus, Search, FileText, Send, CheckCircle, XCircle, Clock, RefreshCw, C
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 
 const STATUS_STYLES = {
   draft:    { label: "Draft",    className: "bg-slate-100 text-slate-600",   icon: Clock },
@@ -17,6 +18,7 @@ const STATUS_STYLES = {
 
 export default function Estimates() {
   const navigate = useNavigate();
+  const companyScope = useCompanyScope();
   const [estimates, setEstimates] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -89,7 +91,9 @@ export default function Estimates() {
     setEstimates(prev => prev.filter(e => e.id !== est.id));
   };
 
-  const filtered = estimates.filter(e =>
+  const scopedEstimates = scopeFilter(estimates, companyScope);
+
+  const filtered = scopedEstimates.filter(e =>
     e.title?.toLowerCase().includes(search.toLowerCase()) ||
     clientMap[e.client_id]?.name?.toLowerCase().includes(search.toLowerCase()) ||
     e.estimate_number?.toLowerCase().includes(search.toLowerCase())
@@ -137,7 +141,7 @@ export default function Estimates() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold text-slate-900 tracking-tight">Estimates</h1>
-          <p className="text-slate-500 mt-1">{estimates.length} total estimates</p>
+          <p className="text-slate-500 mt-1">{scopedEstimates.length} total estimates</p>
         </div>
         <Button
           onClick={() => navigate(createPageUrl("EstimateDetail?new=true"))}

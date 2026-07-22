@@ -8,6 +8,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { getSelectedCompanyScope } from '@/lib/companyScope';
 
 // ─── Entity → table name map ────────────────────────────────────────────────
 const TABLE_MAP = {
@@ -125,6 +126,16 @@ const GLOBAL_TABLES = new Set(['municipalities']);
 // All original tables use USING(true) RLS policies and have no org column.
 const ORG_SCOPED_TABLES = new Set(['designs', 'deals', 'crm_companies', 'crm_activities']);
 
+// Tables scoped to one of Christian's business brands (company_profiles.id).
+// New records auto-tag with the active company-scope switcher selection.
+// Shared infrastructure (materials, cost_codes, assemblies, subcontractors,
+// employees, municipalities) is intentionally excluded — stays global.
+const COMPANY_SCOPED_TABLES = new Set([
+  'leads', 'clients', 'estimates', 'invoices', 'payments', 'calendar_events',
+  'tasks', 'change_orders', 'draws', 'sub_invoices', 'designs',
+  'projects', 'documents',
+]);
+
 export function setCurrentOrgId(id) {
   _currentOrgId = id;
 }
@@ -200,6 +211,11 @@ function createEntity(tableName) {
       // Auto-inject organization_id so every new record is scoped to the active org
       if (needsOrg() && !payload.organization_id) {
         payload.organization_id = _currentOrgId;
+      }
+      // Auto-tag with the active company scope so new records aren't orphaned
+      if (COMPANY_SCOPED_TABLES.has(tableName) && !payload.company_id) {
+        const scope = getSelectedCompanyScope();
+        if (scope !== 'all') payload.company_id = scope;
       }
       let { data, error } = await supabase.from(tableName).insert(payload).select().single();
       // If a column is missing from the schema cache, strip optional fields and retry once
