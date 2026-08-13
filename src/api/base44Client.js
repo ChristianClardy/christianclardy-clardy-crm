@@ -51,7 +51,6 @@ const TABLE_MAP = {
   ChatMessage:            'chat_messages',
   SubInvoice:             'sub_invoices',
   DocuSignEnvelope:       'docusign_envelopes',
-  Design:                 'designs',
   Deal:                   'deals',
   CRMCompany:             'crm_companies',
   CRMActivity:            'crm_activities',
@@ -124,7 +123,7 @@ const GLOBAL_TABLES = new Set(['municipalities']);
 
 // Only these tables actually have an organization_id column.
 // All original tables use USING(true) RLS policies and have no org column.
-const ORG_SCOPED_TABLES = new Set(['designs', 'deals', 'crm_companies', 'crm_activities']);
+const ORG_SCOPED_TABLES = new Set(['deals', 'crm_companies', 'crm_activities']);
 
 // Tables scoped to one of Christian's business brands (company_profiles.id).
 // New records auto-tag with the active company-scope switcher selection.
@@ -132,7 +131,7 @@ const ORG_SCOPED_TABLES = new Set(['designs', 'deals', 'crm_companies', 'crm_act
 // employees, municipalities) is intentionally excluded — stays global.
 const COMPANY_SCOPED_TABLES = new Set([
   'leads', 'clients', 'estimates', 'invoices', 'payments', 'calendar_events',
-  'tasks', 'change_orders', 'draws', 'sub_invoices', 'designs',
+  'tasks', 'change_orders', 'draws', 'sub_invoices',
   'projects', 'documents',
 ]);
 
@@ -420,7 +419,6 @@ export const {
   ChatMessage,
   SubInvoice,
   DocuSignEnvelope,
-  Design,
   Deal,
   CRMCompany,
   CRMActivity,
