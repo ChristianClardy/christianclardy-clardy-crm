@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, CalendarDays, Mail, Phone, UserRound } from "lucide-react";
+import { ArrowLeft, CalendarDays, Mail, Pencil, Phone, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import LeadFormDialog from "@/components/crm/LeadFormDialog";
 import LeadFollowUpPanel from "@/components/crm/LeadFollowUpPanel";
 import ContactHistoryPanel from "@/components/crm/ContactHistoryPanel";
 import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
@@ -31,6 +32,7 @@ export default function LeadDetail() {
   const [lead, setLead] = useState(null);
   const [followUps, setFollowUps] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [editOpen, setEditOpen] = useState(false);
 
   const loadData = async () => {
     if (!leadId) return;
@@ -99,9 +101,14 @@ export default function LeadDetail() {
             </div>
           </div>
           <div className="flex w-full flex-col gap-3 xl:max-w-xs">
-            <Button variant="outline" onClick={() => navigate(`/Calendar?mode=calendar&new=task&clientId=${lead.linked_contact_id || lead.id}`)}>
-              Add Task
-            </Button>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setEditOpen(true)}>
+                <Pencil className="mr-2 h-4 w-4" /> Edit Lead
+              </Button>
+              <Button variant="outline" className="flex-1" onClick={() => navigate(`/Calendar?mode=calendar&new=task&clientId=${lead.linked_contact_id || lead.id}`)}>
+                Add Task
+              </Button>
+            </div>
             <p className="text-sm font-medium text-slate-600">Current stage</p>
             <Select value={lead.status || "New Lead"} onValueChange={updateStatus}>
               <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
@@ -166,6 +173,8 @@ export default function LeadDetail() {
         linkedClientId={lead.linked_contact_id || ""}
         sourceEntity="lead"
       />
+
+      <LeadFormDialog open={editOpen} onOpenChange={setEditOpen} lead={lead} onCreated={loadData} />
     </div>
   );
 }

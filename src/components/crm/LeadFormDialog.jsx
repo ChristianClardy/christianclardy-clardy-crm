@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LEAD_SOURCE_OPTIONS } from "@/lib/leadSources";
+import { useLeadSources } from "@/lib/leadSources";
 
 const initialForm = {
   full_name: "",
@@ -21,19 +21,37 @@ const initialForm = {
   notes: "",
 };
 
-export default function LeadFormDialog({ open, onOpenChange, onCreated }) {
+export default function LeadFormDialog({ open, onOpenChange, onCreated, lead = null }) {
+  const isEditing = Boolean(lead);
   const [form, setForm] = useState(initialForm);
   const [saving, setSaving] = useState(false);
   const [employees, setEmployees] = useState([]);
   const [existingLeads, setExistingLeads] = useState([]);
   const [dupError, setDupError] = useState("");
+  const leadSourceOptions = useLeadSources();
 
   useEffect(() => {
     if (!open) return;
     setDupError("");
+    setForm(
+      isEditing
+        ? {
+            full_name: lead.full_name || "",
+            email: lead.email || "",
+            phone: lead.phone || "",
+            property_address: lead.property_address || "",
+            project_type: lead.project_type || "Other",
+            lead_source: lead.lead_source || "Website",
+            assigned_sales_rep: lead.assigned_sales_rep || "",
+            follow_up_date: lead.follow_up_date || "",
+            project_description: lead.project_description || "",
+            notes: lead.notes || "",
+          }
+        : initialForm
+    );
     base44.entities.Employee.list("full_name", 500).then((data) => setEmployees((data || []).filter((employee) => employee.status !== "inactive")));
     base44.entities.Lead.list("-created_date", 5000).then(setExistingLeads);
-  }, [open]);
+  }, [open, lead, isEditing]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -44,9 +62,11 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated }) {
     const normPhone = form.phone?.trim().replace(/\D/g, "");
 
     const dup = existingLeads.find((l) =>
-      l.full_name?.trim().toLowerCase() === normName ||
-      (normEmail && l.email?.trim().toLowerCase() === normEmail) ||
-      (normPhone && l.phone?.replace(/\D/g, "") === normPhone)
+      l.id !== lead?.id && (
+        l.full_name?.trim().toLowerCase() === normName ||
+        (normEmail && l.email?.trim().toLowerCase() === normEmail) ||
+        (normPhone && l.phone?.replace(/\D/g, "") === normPhone)
+      )
     );
 
     if (dup) {
@@ -60,8 +80,12 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated }) {
 
     setSaving(true);
     try {
-      await base44.entities.Lead.create({ ...form, status: "New Lead" });
-      setForm(initialForm);
+      if (isEditing) {
+        await base44.entities.Lead.update(lead.id, form);
+      } else {
+        await base44.entities.Lead.create({ ...form, status: "New Lead" });
+        setForm(initialForm);
+      }
       onOpenChange(false);
       onCreated?.();
     } catch {
@@ -75,7 +99,7 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated }) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Add Lead</DialogTitle>
+          <DialogTitle>{isEditing ? "Edit Lead" : "Add Lead"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
@@ -110,7 +134,7 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated }) {
               <Select value={form.lead_source} onValueChange={(value) => setForm({ ...form, lead_source: value })}>
                 <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {LEAD_SOURCE_OPTIONS.map((source) => <SelectItem key={source} value={source}>{source}</SelectItem>)}
+                  {leadSourceOptions.map((source) => <SelectItem key={source} value={source}>{source}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -120,7 +144,7 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated }) {
                 <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {[
-                    "Pergola", "Covered Patio", "Cabana", "Outdoor Kitchen", "Remodel", "Addition", "Backyard Revamp", "Other"
+                    "Pergola", "Covered Patio", "Cabana", "Outdoor Kitchen", "Pool", "Remodel", "Addition", "Backyard Revamp", "Other"
                   ].map((type) => <SelectItem key={type} value={type}>{type}</SelectItem>)}
                 </SelectContent>
               </Select>
@@ -140,7 +164,9 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated }) {
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={saving}>{saving ? "Creating..." : "Create Lead"}</Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? (isEditing ? "Saving..." : "Creating...") : (isEditing ? "Save Changes" : "Create Lead")}
+            </Button>
           </div>
         </form>
       </DialogContent>

@@ -5,7 +5,7 @@ import {
   Users, ShieldCheck, Plus, Edit2, Trash2, Search,
   Save, Check, X, CalendarDays, Copy, CheckCheck,
   Building2, UserPlus, Mail, Phone, Loader2, Palette, Moon, Sun,
-  FileSignature, Link as LinkIcon,
+  FileSignature, Link as LinkIcon, Tag,
 } from "lucide-react";
 import { useTheme } from "@/lib/ThemeContext";
 import { COLOR_SCHEMES } from "@/lib/colorSchemes";
@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import CompanyManager from "@/components/company/CompanyManager";
 import OrganizationTab from "@/components/settings/OrganizationTab";
 import { useAuth } from "@/lib/AuthContext";
+import { DEFAULT_LEAD_SOURCE_OPTIONS, fetchCustomLeadSources, addCustomLeadSource, removeCustomLeadSource } from "@/lib/leadSources";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -752,6 +753,110 @@ function DocuSignTab() {
   );
 }
 
+// ─── Lead Sources tab ────────────────────────────────────────────────────────
+
+function LeadSourcesTab() {
+  const [customSources, setCustomSources] = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [newSource, setNewSource] = useState("");
+  const [adding, setAdding]       = useState(false);
+  const [removing, setRemoving]   = useState(null);
+  const [error, setError]         = useState("");
+
+  useEffect(() => { load(); }, []);
+
+  const load = async () => {
+    setLoading(true);
+    const custom = await fetchCustomLeadSources();
+    setCustomSources(custom);
+    setLoading(false);
+  };
+
+  const handleAdd = async (e) => {
+    e.preventDefault();
+    setError("");
+    setAdding(true);
+    try {
+      await addCustomLeadSource(newSource);
+      setNewSource("");
+      await load();
+    } catch (err) {
+      setError(err.message || "Could not add lead source.");
+    }
+    setAdding(false);
+  };
+
+  const handleRemove = async (source) => {
+    if (!confirm(`Remove lead source "${source}"? Leads already using it will keep it, but it won't be offered for new leads.`)) return;
+    setRemoving(source);
+    try {
+      await removeCustomLeadSource(source);
+      await load();
+    } catch (err) {
+      alert(err.message || "Could not remove lead source.");
+    }
+    setRemoving(null);
+  };
+
+  return (
+    <div className="space-y-4 max-w-2xl">
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <h2 className="text-base font-semibold text-slate-900 mb-1">Add a Lead Source</h2>
+        <p className="text-sm text-slate-500 mb-4">Create your own lead sources to show up in the "Lead Source" dropdown when adding or editing a lead.</p>
+        <form onSubmit={handleAdd} className="flex items-start gap-3">
+          <div className="flex-1">
+            <Input
+              value={newSource}
+              onChange={(e) => { setNewSource(e.target.value); setError(""); }}
+              placeholder="e.g. Home Show, Instagram, Nextdoor"
+            />
+            {error && <p className="text-xs text-rose-600 mt-1">{error}</p>}
+          </div>
+          <Button type="submit" disabled={adding || !newSource.trim()} className="bg-gradient-to-r from-amber-500 to-orange-500">
+            {adding ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Plus className="w-4 h-4 mr-1" />}
+            Add
+          </Button>
+        </form>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <h2 className="text-base font-semibold text-slate-900 mb-4">Default Sources</h2>
+        <div className="flex flex-wrap gap-2 mb-6">
+          {DEFAULT_LEAD_SOURCE_OPTIONS.map((source) => (
+            <span key={source} className="text-xs font-medium px-3 py-1.5 rounded-full bg-slate-100 text-slate-600">
+              {source}
+            </span>
+          ))}
+        </div>
+
+        <h2 className="text-base font-semibold text-slate-900 mb-4">Custom Sources</h2>
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <div className="w-6 h-6 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : customSources.length === 0 ? (
+          <p className="text-sm text-slate-400">No custom lead sources yet. Add one above.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {customSources.map((source) => (
+              <span key={source} className="flex items-center gap-1.5 text-xs font-medium pl-3 pr-1.5 py-1.5 rounded-full bg-amber-100 text-amber-700">
+                {source}
+                <button
+                  onClick={() => handleRemove(source)}
+                  disabled={removing === source}
+                  className="rounded-full p-0.5 hover:bg-amber-200 text-amber-700"
+                >
+                  {removing === source ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 const ALL_TABS = [
@@ -759,6 +864,7 @@ const ALL_TABS = [
   { key: "team",         label: "Team Members",        icon: Users,          adminOnly: false },
   { key: "permissions",  label: "Roles & Permissions", icon: ShieldCheck,    adminOnly: false },
   { key: "companies",    label: "Companies",           icon: Building2,      adminOnly: false },
+  { key: "leadSources",  label: "Lead Sources",        icon: Tag,            adminOnly: false },
   { key: "invite",       label: "Invite & Logins",     icon: UserPlus,       adminOnly: false },
   { key: "calendar",     label: "Calendar Feed",       icon: CalendarDays,   adminOnly: false },
   { key: "appearance",   label: "Appearance",          icon: Palette,        adminOnly: false },
@@ -803,6 +909,7 @@ export default function Settings() {
       {activeTab === "team"        && <TeamTab />}
       {activeTab === "permissions" && <PermissionsTab />}
       {activeTab === "companies"   && <CompanyManager />}
+      {activeTab === "leadSources" && <LeadSourcesTab />}
       {activeTab === "invite"      && <InviteTab />}
       {activeTab === "calendar"    && <CalendarFeedTab />}
       {activeTab === "appearance"  && <AppearanceTab />}
