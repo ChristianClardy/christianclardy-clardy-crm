@@ -25,8 +25,24 @@ function mergeSources(custom) {
   return merged;
 }
 
+// Lead sources are a shared, company-wide taxonomy (not per-brand like trade
+// categories), so they live on a single deterministic anchor row: the oldest
+// company_profiles record. Without an explicit ORDER BY, Postgres/PostgREST
+// can return a different "first" row on different requests (especially right
+// after an UPDATE rewrites a row's physical tuple), which made adds look like
+// they silently failed — the write landed on one row, the next read picked
+// a different one.
 async function loadCompanySettings() {
-  const { data } = await supabase.from("company_profiles").select("id, settings").limit(1).single();
+  const { data, error } = await supabase
+    .from("company_profiles")
+    .select("id, settings")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .single();
+  if (error) {
+    console.error("Failed to load company profile for lead sources:", error.message);
+    return null;
+  }
   return data || null;
 }
 
@@ -53,9 +69,10 @@ export async function addCustomLeadSource(name) {
   }
 
   const updatedCustom = [...existingCustom, trimmed];
-  await supabase.from("company_profiles").update({
+  const { error } = await supabase.from("company_profiles").update({
     settings: { ...(data.settings || {}), custom_lead_sources: updatedCustom },
   }).eq("id", data.id);
+  if (error) throw new Error(error.message || "Could not save the new lead source.");
 
   return mergeSources(updatedCustom);
 }
@@ -66,9 +83,10 @@ export async function removeCustomLeadSource(name) {
 
   const existingCustom = data.settings?.custom_lead_sources || [];
   const updatedCustom = existingCustom.filter((s) => s !== name);
-  await supabase.from("company_profiles").update({
+  const { error } = await supabase.from("company_profiles").update({
     settings: { ...(data.settings || {}), custom_lead_sources: updatedCustom },
   }).eq("id", data.id);
+  if (error) throw new Error(error.message || "Could not remove the lead source.");
 
   return mergeSources(updatedCustom);
 }
