@@ -244,11 +244,13 @@ export default function CalendarEventDialog({ open, onOpenChange, event, initial
                 value={form.linked_client_id || "__none__"}
                 onValueChange={(value) => {
                   const selectedPerson = peopleOptions.find((item) => item.id === value);
+                  const customerName = clients.find((client) => client.id === value)?.name || "";
                   setForm((current) => ({
                     ...current,
                     linked_client_id: value === "__none__" ? "" : value,
                     linked_project_id: value === "__none__" ? current.linked_project_id : (selectedPerson?.projectId || current.linked_project_id),
                     location: value === "__none__" ? current.location : (selectedPerson?.address || current.location),
+                    title: value === "__none__" || current.title.trim() || !customerName ? current.title : `${customerName} - Appointment`,
                   }));
                 }}
               >

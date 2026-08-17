@@ -255,7 +255,7 @@ export default function ClientDetail() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <AppointmentsPanel title="Appointments" linkedClientId={clientId} />
+        <AppointmentsPanel title="Appointments" linkedClientId={clientId} defaultLocation={client.address || ""} />
         <NextStepsPanel title="Follow-Up / Next Steps" linkedClientId={clientId} />
       </div>
 

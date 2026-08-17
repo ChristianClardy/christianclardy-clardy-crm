@@ -59,13 +59,16 @@ export default function AppointmentsPanel({
   }, [linkedClientId, linkedProjectId]);
 
   const projectMap = useMemo(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
+  const clientMap = useMemo(() => Object.fromEntries(clients.map((client) => [client.id, client])), [clients]);
 
   const openNew = () => {
+    const linkedClient = linkedClientId ? clientMap[linkedClientId] : null;
     setEditingEvent(null);
     setDefaultValues({
       linked_client_id: linkedClientId || "",
       linked_project_id: linkedProjectId || "",
       location: defaultLocation || "",
+      title: linkedClient?.name ? `${linkedClient.name} - Appointment` : "",
       event_type: "meeting",
       status: "scheduled",
     });

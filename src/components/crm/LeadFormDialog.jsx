@@ -123,7 +123,7 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated, lead = n
             const client = await ensureContactForLead(createdLead);
             const endTime = appointment.end_time || addMinutes(appointment.start_time, 60);
             await base44.entities.CalendarEvent.create({
-              title: appointment.title || `${createdLead.full_name} — Appointment`,
+              title: appointment.title || `${createdLead.full_name} - Appointment`,
               description: appointment.notes || "",
               location: appointment.location || createdLead.property_address || "",
               start_datetime: `${appointment.date}T${appointment.start_time}:00`,
@@ -256,7 +256,7 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated, lead = n
                       <Input
                         value={appointment.title}
                         onChange={(e) => setAppointment({ ...appointment, title: e.target.value })}
-                        placeholder={`${form.full_name || "Lead"} — Appointment`}
+                        placeholder={`${form.full_name || "Lead"} - Appointment`}
                         className="mt-1.5"
                       />
                     </div>
