@@ -105,9 +105,13 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated, lead = n
       if (isEditing) {
         await base44.entities.Lead.update(lead.id, form);
       } else {
-        const createdLead = await base44.entities.Lead.create({ ...form, status: "New Lead" });
+        const hasAppointment = scheduleAppointment && appointment.date && appointment.start_time;
+        const createdLead = await base44.entities.Lead.create({
+          ...form,
+          status: hasAppointment ? "Appointment Scheduled" : "New Lead",
+        });
 
-        if (scheduleAppointment && appointment.date && appointment.start_time) {
+        if (hasAppointment) {
           try {
             const client = await ensureContactForLead(createdLead);
             const endTime = appointment.end_time || addMinutes(appointment.start_time, 60);
