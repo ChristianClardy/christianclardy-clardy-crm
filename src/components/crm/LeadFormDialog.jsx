@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLeadSources } from "@/lib/leadSources";
@@ -22,6 +23,22 @@ const initialForm = {
   notes: "",
 };
 
+const initialAppointment = {
+  title: "",
+  date: "",
+  start_time: "",
+  end_time: "",
+  location: "",
+  notes: "",
+};
+
+function addMinutes(timeStr, mins) {
+  const [h, m] = timeStr.split(":").map(Number);
+  const total = h * 60 + m + mins;
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(Math.floor(total / 60) % 24)}:${pad(total % 60)}`;
+}
+
 export default function LeadFormDialog({ open, onOpenChange, onCreated, lead = null }) {
   const isEditing = Boolean(lead);
   const [form, setForm] = useState(initialForm);
@@ -29,6 +46,8 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated, lead = n
   const [employees, setEmployees] = useState([]);
   const [existingLeads, setExistingLeads] = useState([]);
   const [dupError, setDupError] = useState("");
+  const [scheduleAppointment, setScheduleAppointment] = useState(false);
+  const [appointment, setAppointment] = useState(initialAppointment);
   const leadSourceOptions = useLeadSources();
 
   useEffect(() => {
@@ -50,6 +69,8 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated, lead = n
           }
         : initialForm
     );
+    setScheduleAppointment(false);
+    setAppointment(initialAppointment);
     base44.entities.Employee.list("full_name", 500).then((data) => setEmployees((data || []).filter((employee) => employee.status !== "inactive")));
     base44.entities.Lead.list("-created_date", 5000).then(setExistingLeads);
   }, [open, lead, isEditing]);
@@ -85,10 +106,36 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated, lead = n
         await base44.entities.Lead.update(lead.id, form);
       } else {
         const createdLead = await base44.entities.Lead.create({ ...form, status: "New Lead" });
-        ensureContactForLead(createdLead).catch((err) =>
-          console.error("Failed to add lead to contact book:", err?.message)
-        );
+
+        if (scheduleAppointment && appointment.date && appointment.start_time) {
+          try {
+            const client = await ensureContactForLead(createdLead);
+            const endTime = appointment.end_time || addMinutes(appointment.start_time, 60);
+            await base44.entities.CalendarEvent.create({
+              title: appointment.title || `${createdLead.full_name} — Appointment`,
+              description: appointment.notes || "",
+              location: appointment.location || createdLead.property_address || "",
+              start_datetime: `${appointment.date}T${appointment.start_time}:00`,
+              end_datetime: `${appointment.date}T${endTime}:00`,
+              event_type: "meeting",
+              status: "scheduled",
+              assigned_users: createdLead.assigned_sales_rep ? [createdLead.assigned_sales_rep] : [],
+              visibility: "team",
+              linked_client_id: client?.id || null,
+              lead_id: createdLead.id,
+            });
+          } catch (err) {
+            console.error("Failed to schedule appointment:", err?.message);
+          }
+        } else {
+          ensureContactForLead(createdLead).catch((err) =>
+            console.error("Failed to add lead to contact book:", err?.message)
+          );
+        }
+
         setForm(initialForm);
+        setScheduleAppointment(false);
+        setAppointment(initialAppointment);
       }
       onOpenChange(false);
       onCreated?.();
@@ -166,6 +213,84 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated, lead = n
             <Label>Notes</Label>
             <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="mt-1.5" rows={3} />
           </div>
+
+          {!isEditing && (
+            <div className="rounded-xl border border-slate-200 p-4">
+              <div className="flex items-center gap-3">
+                <Checkbox checked={scheduleAppointment} onCheckedChange={(checked) => setScheduleAppointment(Boolean(checked))} />
+                <Label>Schedule an appointment for this lead</Label>
+              </div>
+              {scheduleAppointment && (
+                <div className="mt-4 space-y-4">
+                  <p className="text-sm text-slate-500">
+                    This will be added to {form.assigned_sales_rep || "the assigned sales rep"}'s calendar.
+                  </p>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <Label>Title</Label>
+                      <Input
+                        value={appointment.title}
+                        onChange={(e) => setAppointment({ ...appointment, title: e.target.value })}
+                        placeholder={`${form.full_name || "Lead"} — Appointment`}
+                        className="mt-1.5"
+                      />
+                    </div>
+                    <div>
+                      <Label>Location</Label>
+                      <Input
+                        value={appointment.location}
+                        onChange={(e) => setAppointment({ ...appointment, location: e.target.value })}
+                        placeholder={form.property_address || "Address or job site"}
+                        className="mt-1.5"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div>
+                      <Label>Date *</Label>
+                      <Input
+                        type="date"
+                        value={appointment.date}
+                        onChange={(e) => setAppointment({ ...appointment, date: e.target.value })}
+                        className="mt-1.5"
+                        required={scheduleAppointment}
+                      />
+                    </div>
+                    <div>
+                      <Label>Start Time *</Label>
+                      <Input
+                        type="time"
+                        value={appointment.start_time}
+                        onChange={(e) => setAppointment({ ...appointment, start_time: e.target.value })}
+                        className="mt-1.5"
+                        required={scheduleAppointment}
+                      />
+                    </div>
+                    <div>
+                      <Label>End Time</Label>
+                      <Input
+                        type="time"
+                        value={appointment.end_time}
+                        onChange={(e) => setAppointment({ ...appointment, end_time: e.target.value })}
+                        className="mt-1.5"
+                        placeholder="+1 hr"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label>Appointment Notes</Label>
+                    <Textarea
+                      value={appointment.notes}
+                      onChange={(e) => setAppointment({ ...appointment, notes: e.target.value })}
+                      className="mt-1.5"
+                      rows={2}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={saving}>
