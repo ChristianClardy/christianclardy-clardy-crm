@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, CalendarDays, Mail, Pencil, Phone, UserRound } from "lucide-react";
+import { ArrowLeft, CalendarDays, Mail, Pencil, Phone, TrendingUp, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -9,6 +9,7 @@ import LeadFormDialog from "@/components/crm/LeadFormDialog";
 import LeadFollowUpPanel from "@/components/crm/LeadFollowUpPanel";
 import ContactHistoryPanel from "@/components/crm/ContactHistoryPanel";
 import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
+import { convertLeadToProspect } from "@/lib/leadConversion";
 
 const funnelSteps = [
   "New Lead",
@@ -33,6 +34,8 @@ export default function LeadDetail() {
   const [followUps, setFollowUps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
+  const [linkedClient, setLinkedClient] = useState(null);
+  const [converting, setConverting] = useState(false);
 
   const loadData = async () => {
     if (!leadId) return;
@@ -41,12 +44,35 @@ export default function LeadDetail() {
         base44.entities.Lead.filter({ id: leadId }),
         base44.entities.LeadFollowUp.filter({ lead_id: leadId }, "-created_date", 200),
       ]);
-      setLead(leadRows[0] || null);
+      const leadRow = leadRows[0] || null;
+      setLead(leadRow);
       setFollowUps(followUpRows || []);
+      if (leadRow?.linked_contact_id) {
+        base44.entities.Client.filter({ id: leadRow.linked_contact_id })
+          .then((rows) => setLinkedClient(rows[0] || null))
+          .catch(() => setLinkedClient(null));
+      } else {
+        setLinkedClient(null);
+      }
     } catch (err) {
       console.error("Failed to load lead:", err?.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const isProspect = linkedClient?.status === "prospect";
+
+  const handleConvertToProspect = async () => {
+    setConverting(true);
+    try {
+      await convertLeadToProspect(lead);
+      await loadData();
+    } catch (err) {
+      console.error("Failed to convert lead to prospect:", err?.message);
+      alert("Could not convert this lead to a prospect. Please try again.");
+    } finally {
+      setConverting(false);
     }
   };
 
@@ -101,6 +127,15 @@ export default function LeadDetail() {
             </div>
           </div>
           <div className="flex w-full flex-col gap-3 xl:max-w-xs">
+            <Button onClick={handleConvertToProspect} disabled={converting || isProspect}>
+              <TrendingUp className="mr-2 h-4 w-4" />
+              {converting ? "Converting..." : isProspect ? "In Prospects Pipeline" : "Convert to Prospect"}
+            </Button>
+            {isProspect && (
+              <Link to="/CRM?tab=prospects" className="text-center text-xs font-medium text-amber-700 hover:underline">
+                View in Prospects →
+              </Link>
+            )}
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1" onClick={() => setEditOpen(true)}>
                 <Pencil className="mr-2 h-4 w-4" /> Edit Lead

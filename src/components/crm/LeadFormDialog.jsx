@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLeadSources } from "@/lib/leadSources";
+import { ensureContactForLead } from "@/lib/leadConversion";
 
 const initialForm = {
   full_name: "",
@@ -83,7 +84,10 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated, lead = n
       if (isEditing) {
         await base44.entities.Lead.update(lead.id, form);
       } else {
-        await base44.entities.Lead.create({ ...form, status: "New Lead" });
+        const createdLead = await base44.entities.Lead.create({ ...form, status: "New Lead" });
+        ensureContactForLead(createdLead).catch((err) =>
+          console.error("Failed to add lead to contact book:", err?.message)
+        );
         setForm(initialForm);
       }
       onOpenChange(false);

@@ -3,13 +3,14 @@ import { base44 } from "@/api/base44Client";
 import {
   X, Phone, Mail, Calendar, StickyNote, CheckSquare,
   MessageSquare, Edit2, Check, ChevronRight, User,
-  MapPin, Briefcase, UserRound, ExternalLink,
+  MapPin, Briefcase, UserRound, ExternalLink, TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { convertLeadToProspect } from "@/lib/leadConversion";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -253,6 +254,8 @@ export default function ContactDetailSlider({ lead, onClose, onUpdate }) {
   const [notesDraft, setNotesDraft] = useState("");
   const [followUpDate, setFollowUpDate] = useState("");
   const [quickLogType, setQuickLogType] = useState(null); // null | "call" | "email" | "note" | "meeting"
+  const [linkedClient, setLinkedClient] = useState(null);
+  const [converting, setConverting] = useState(false);
 
   const nameInputRef = useRef(null);
 
@@ -283,7 +286,31 @@ export default function ContactDetailSlider({ lead, onClose, onUpdate }) {
       }
     };
     loadRelated();
+
+    if (lead.linked_contact_id) {
+      base44.entities.Client.filter({ id: lead.linked_contact_id })
+        .then((rows) => setLinkedClient(rows[0] || null))
+        .catch(() => setLinkedClient(null));
+    } else {
+      setLinkedClient(null);
+    }
   }, [lead?.id]);
+
+  const isProspect = linkedClient?.status === "prospect";
+
+  const handleConvertToProspect = async () => {
+    if (!lead) return;
+    setConverting(true);
+    try {
+      const client = await convertLeadToProspect(lead);
+      setLinkedClient(client);
+      if (lead.linked_contact_id !== client.id) onUpdate?.({ ...lead, linked_contact_id: client.id });
+    } catch (err) {
+      console.error("Failed to convert lead to prospect:", err?.message);
+    } finally {
+      setConverting(false);
+    }
+  };
 
   useEffect(() => {
     if (editingName) nameInputRef.current?.focus();
@@ -416,6 +443,19 @@ export default function ContactDetailSlider({ lead, onClose, onUpdate }) {
 
             {/* Scrollable body */}
             <div className="flex-1 overflow-y-auto">
+              {/* Convert to prospect */}
+              <div className="border-b border-slate-100 px-5 py-3">
+                <Button
+                  className="w-full"
+                  size="sm"
+                  onClick={handleConvertToProspect}
+                  disabled={converting || isProspect}
+                >
+                  <TrendingUp className="mr-2 h-4 w-4" />
+                  {converting ? "Converting..." : isProspect ? "In Prospects Pipeline" : "Convert to Prospect"}
+                </Button>
+              </div>
+
               {/* Quick actions */}
               <div className="border-b border-slate-100 px-5 py-3">
                 <div className="flex items-center gap-2">
