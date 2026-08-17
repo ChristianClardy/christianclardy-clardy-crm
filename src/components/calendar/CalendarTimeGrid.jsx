@@ -45,9 +45,10 @@ export default function CalendarTimeGrid({ dates, entries, onEntryClick, onCreat
       const dayEnd = endOfDay(day);
       return entries
         .map((entry) => {
+          if (entry.all_day) return null;
           const rawStart = parseISO(entry.start_datetime);
           const rawEnd = parseISO(entry.end_datetime);
-          if (entry.all_day || rawStart > dayEnd || rawEnd < dayStart) return null;
+          if (rawStart > dayEnd || rawEnd < dayStart) return null;
           const start = max([rawStart, dayStart]);
           const end = min([rawEnd, dayEnd]);
           const startMinutes = start.getHours() * 60 + start.getMinutes();
@@ -59,6 +60,21 @@ export default function CalendarTimeGrid({ dates, entries, onEntryClick, onCreat
         .filter(Boolean);
     });
   }, [dates, entries]);
+
+  const allDayEntries = useMemo(() => {
+    return dates.map((day) => {
+      const dayStart = startOfDay(day);
+      const dayEnd = endOfDay(day);
+      return entries.filter((entry) => {
+        if (!entry.all_day) return false;
+        const rawStart = parseISO(entry.start_datetime);
+        const rawEnd = parseISO(entry.end_datetime);
+        return rawStart <= dayEnd && rawEnd >= dayStart;
+      });
+    });
+  }, [dates, entries]);
+
+  const hasAllDayEntries = allDayEntries.some((dayList) => dayList.length > 0);
 
   useEffect(() => {
     if (!interaction) return;
@@ -118,6 +134,27 @@ export default function CalendarTimeGrid({ dates, entries, onEntryClick, onCreat
           </div>
         ))}
       </div>
+
+      {/* All-day row */}
+      {hasAllDayEntries && (
+        <div className="grid border-b border-slate-200 bg-white" style={{ gridTemplateColumns: gridCols }}>
+          <div className="border-r border-slate-200 px-2 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">All day</div>
+          {dates.map((day, dayIndex) => (
+            <div key={`allday-${day.toISOString()}`} className="space-y-1 border-r border-slate-200 px-1 py-2 last:border-r-0">
+              {allDayEntries[dayIndex].map((entry) => (
+                <button
+                  key={`${entry.id}-allday-${dayIndex}`}
+                  type="button"
+                  onClick={() => onEntryClick?.(entry)}
+                  className={cn("block w-full truncate rounded-lg px-2 py-1 text-left text-xs font-medium text-white shadow-sm", getEventClassName?.(entry))}
+                >
+                  {entry.title}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Scrollable time body */}
       <div ref={scrollRef} className="overflow-y-auto" style={{ maxHeight: 580 }}>

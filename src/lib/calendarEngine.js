@@ -30,8 +30,8 @@ export function getVisibleRange(currentDate, viewMode) {
   }
 
   return {
-    start: startOfWeek(currentDate, { weekStartsOn: 1 }),
-    end: endOfWeek(currentDate, { weekStartsOn: 1 }),
+    start: startOfWeek(currentDate, { weekStartsOn: 0 }),
+    end: endOfWeek(currentDate, { weekStartsOn: 0 }),
   };
 }
 
