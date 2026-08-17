@@ -167,7 +167,7 @@ export default function LeadDetail() {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-4">
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Lead source</p>
           <p className="mt-2 text-lg font-semibold text-slate-900">{lead.lead_source || "—"}</p>
@@ -179,6 +179,12 @@ export default function LeadDetail() {
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Next action</p>
           <p className="mt-2 text-lg font-semibold text-slate-900">{lead.next_action || "—"}</p>
+        </div>
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Estimated budget</p>
+          <p className="mt-2 text-lg font-semibold text-slate-900">
+            {lead.estimated_budget != null && lead.estimated_budget !== "" ? `$${Number(lead.estimated_budget).toLocaleString()}` : "—"}
+          </p>
         </div>
       </div>
 

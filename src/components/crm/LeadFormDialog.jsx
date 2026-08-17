@@ -19,6 +19,7 @@ const initialForm = {
   lead_source: "Website",
   assigned_sales_rep: "",
   follow_up_date: "",
+  estimated_budget: "",
   project_description: "",
   notes: "",
 };
@@ -64,6 +65,7 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated, lead = n
             lead_source: lead.lead_source || "Website",
             assigned_sales_rep: lead.assigned_sales_rep || "",
             follow_up_date: lead.follow_up_date || "",
+            estimated_budget: lead.estimated_budget ?? "",
             project_description: lead.project_description || "",
             notes: lead.notes || "",
           }
@@ -100,14 +102,19 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated, lead = n
       return;
     }
 
+    const payload = {
+      ...form,
+      estimated_budget: form.estimated_budget === "" ? null : Number(form.estimated_budget),
+    };
+
     setSaving(true);
     try {
       if (isEditing) {
-        await base44.entities.Lead.update(lead.id, form);
+        await base44.entities.Lead.update(lead.id, payload);
       } else {
         const hasAppointment = scheduleAppointment && appointment.date && appointment.start_time;
         const createdLead = await base44.entities.Lead.create({
-          ...form,
+          ...payload,
           status: hasAppointment ? "Appointment Scheduled" : "New Lead",
         });
 
@@ -205,9 +212,23 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated, lead = n
               </Select>
             </div>
           </div>
-          <div>
-            <Label>Next Follow Up</Label>
-            <Input type="date" value={form.follow_up_date} onChange={(e) => setForm({ ...form, follow_up_date: e.target.value })} className="mt-1.5 max-w-xs" />
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <Label>Next Follow Up</Label>
+              <Input type="date" value={form.follow_up_date} onChange={(e) => setForm({ ...form, follow_up_date: e.target.value })} className="mt-1.5" />
+            </div>
+            <div>
+              <Label>Estimated Budget</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="e.g. 25000"
+                value={form.estimated_budget}
+                onChange={(e) => setForm({ ...form, estimated_budget: e.target.value })}
+                className="mt-1.5"
+              />
+            </div>
           </div>
           <div>
             <Label>Project Description</Label>

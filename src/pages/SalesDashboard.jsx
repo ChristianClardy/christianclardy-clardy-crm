@@ -106,6 +106,27 @@ export default function SalesDashboard() {
   const lostLeads = scopedLeads.filter((lead) => lead.status === "Lost").length;
   const followUpsDueToday = scopedTasks.filter((task) => task.due_date === today && ["Call", "Follow Up"].includes(task.task_type)).length;
 
+  const openLeads = useMemo(
+    () => scopedLeads.filter((lead) => !["Won", "Lost"].includes(lead.status)),
+    [scopedLeads]
+  );
+  const pipelineValue = useMemo(
+    () => openLeads.reduce((sum, lead) => sum + (Number(lead.estimated_budget) || 0), 0),
+    [openLeads]
+  );
+  const pipelineBySource = useMemo(() => {
+    const grouped = {};
+    for (const lead of openLeads) {
+      const source = lead.lead_source || "Unknown";
+      grouped[source] = (grouped[source] || 0) + (Number(lead.estimated_budget) || 0);
+    }
+    return Object.entries(grouped)
+      .map(([source, value]) => ({ source, value }))
+      .filter((row) => row.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }, [openLeads]);
+  const pipelineBySourceMax = Math.max(...pipelineBySource.map((row) => row.value), 1);
+
   if (loading) return <div className="flex min-h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-amber-500 border-t-transparent" /></div>;
 
   return (
@@ -123,6 +144,12 @@ export default function SalesDashboard() {
         <MetricCard label="Lost Leads" value={lostLeads} accent="text-rose-700" />
         <MetricCard label="Follow Ups Due Today" value={followUpsDueToday} accent="text-amber-700" />
         <MetricCard label="Leads by Status" value={Object.keys(leadsByStatus).length} subtext="active statuses" />
+        <MetricCard
+          label="Lead Pipeline Value"
+          value={`$${pipelineValue.toLocaleString()}`}
+          subtext={`${openLeads.length} open leads`}
+          accent="text-indigo-700"
+        />
       </div>
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -142,6 +169,27 @@ export default function SalesDashboard() {
                     />
                   </div>
                   <span className="w-6 shrink-0 text-right font-semibold text-slate-900">{count}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Pipeline Value by Source</h2>
+          <p className="mt-0.5 text-xs text-slate-400">Estimated budget across {openLeads.length} open leads</p>
+          <div className="mt-4 space-y-2">
+            {pipelineBySource.length === 0 && (
+              <p className="text-sm text-slate-400">No estimated budgets entered yet.</p>
+            )}
+            {pipelineBySource.map(({ source, value }) => {
+              const pct = Math.round((value / pipelineBySourceMax) * 100);
+              return (
+                <div key={source} className="flex items-center gap-3 text-sm">
+                  <span className="w-28 shrink-0 truncate text-slate-600 font-medium">{source}</span>
+                  <div className="flex-1 rounded-full bg-slate-100 h-5 overflow-hidden">
+                    <div className="h-full rounded-full bg-indigo-400 transition-all" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="w-20 shrink-0 text-right font-semibold text-slate-900">${value.toLocaleString()}</span>
                 </div>
               );
             })}

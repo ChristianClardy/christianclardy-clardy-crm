@@ -38,7 +38,7 @@ export default function PublicLeadCaptureForm() {
     preferred_contact_method: "phone",
     lead_source: defaultSource,
     project_type: "Other",
-    budget_range: "",
+    estimated_budget: "",
     timeline: "",
     project_description: "",
     notes: "",
@@ -50,7 +50,11 @@ export default function PublicLeadCaptureForm() {
       const res = await fetch('/api/public-lead', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, org: orgParam }),
+        body: JSON.stringify({
+          ...form,
+          estimated_budget: form.estimated_budget === "" ? null : Number(form.estimated_budget),
+          org: orgParam,
+        }),
       });
       const data = await res.json();
       if (data?.success) setSubmitted(true);
@@ -78,7 +82,7 @@ export default function PublicLeadCaptureForm() {
             preferred_contact_method: "phone",
             lead_source: defaultSource,
             project_type: "Other",
-            budget_range: "",
+            estimated_budget: "",
             timeline: "",
             project_description: "",
             notes: "",
@@ -169,8 +173,16 @@ export default function PublicLeadCaptureForm() {
         </div>
 
         <div>
-          <Label>Budget Range</Label>
-          <Input className="mt-1.5" value={form.budget_range} onChange={(e) => setForm({ ...form, budget_range: e.target.value })} />
+          <Label>Estimated Budget</Label>
+          <Input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="e.g. 25000"
+            className="mt-1.5"
+            value={form.estimated_budget}
+            onChange={(e) => setForm({ ...form, estimated_budget: e.target.value })}
+          />
         </div>
 
         <div className="md:col-span-2">

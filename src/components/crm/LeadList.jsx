@@ -113,9 +113,12 @@ function LeadCard({ lead, draggable, onDragStart }) {
         </Badge>
       </div>
 
-      {lead.project_type && (
-        <p className="mt-1 text-xs text-slate-500">{lead.project_type}</p>
-      )}
+      <div className="mt-1 flex items-center gap-2">
+        {lead.project_type && <p className="text-xs text-slate-500">{lead.project_type}</p>}
+        {lead.estimated_budget != null && lead.estimated_budget !== "" && (
+          <p className="text-xs font-semibold text-emerald-700">${Number(lead.estimated_budget).toLocaleString()}</p>
+        )}
+      </div>
 
       <div className="mt-2.5 space-y-1 text-xs text-slate-400">
         {lead.phone && <div className="flex items-center gap-1.5"><Phone className="h-3 w-3" />{lead.phone}</div>}
@@ -234,6 +237,13 @@ export default function LeadList({ archived = false }) {
     { label: "Won",         count: visibleLeads.filter(l => l.status === "Won").length },
   ], [visibleLeads]);
 
+  // Total projected value across all active (non-lost) leads. Leads move out
+  // of visibleLeads (and out of this total) as soon as they're marked Lost.
+  const activePipelineValue = useMemo(
+    () => visibleLeads.reduce((sum, l) => sum + (Number(l.estimated_budget) || 0), 0),
+    [visibleLeads]
+  );
+
   // Group leads into kanban columns
   const columnLeads = useMemo(() =>
     Object.fromEntries(
@@ -300,14 +310,21 @@ export default function LeadList({ archived = false }) {
 
       {/* Funnel summary */}
       {!archived && (
-        <div className="grid gap-3 grid-cols-2 sm:grid-cols-5">
-          {funnelCounts.map((b) => (
-            <div key={b.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{b.label}</p>
-              <p className="mt-2 text-3xl font-bold text-slate-900">{b.count}</p>
-            </div>
-          ))}
-        </div>
+        <>
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Active Pipeline Value</p>
+            <p className="mt-2 text-3xl font-bold text-emerald-900">${activePipelineValue.toLocaleString()}</p>
+            <p className="mt-1 text-xs text-emerald-700/80">Projected total across {visibleLeads.length} active leads — drops off once a lead is marked Lost.</p>
+          </div>
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-5">
+            {funnelCounts.map((b) => (
+              <div key={b.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{b.label}</p>
+                <p className="mt-2 text-3xl font-bold text-slate-900">{b.count}</p>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       {/* Toolbar */}
