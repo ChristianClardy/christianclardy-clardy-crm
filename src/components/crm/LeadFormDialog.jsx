@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLeadSources } from "@/lib/leadSources";
 import { ensureContactForLead } from "@/lib/leadConversion";
+import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 
 const initialForm = {
   full_name: "",
@@ -50,6 +51,7 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated, lead = n
   const [scheduleAppointment, setScheduleAppointment] = useState(false);
   const [appointment, setAppointment] = useState(initialAppointment);
   const leadSourceOptions = useLeadSources();
+  const companyScope = useCompanyScope();
 
   useEffect(() => {
     if (!open) return;
@@ -85,7 +87,8 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated, lead = n
     const normEmail = form.email?.trim().toLowerCase();
     const normPhone = form.phone?.trim().replace(/\D/g, "");
 
-    const dup = existingLeads.find((l) =>
+    const scopedLeads = scopeFilter(existingLeads, companyScope);
+    const dup = scopedLeads.find((l) =>
       l.id !== lead?.id && (
         l.full_name?.trim().toLowerCase() === normName ||
         (normEmail && l.email?.trim().toLowerCase() === normEmail) ||
