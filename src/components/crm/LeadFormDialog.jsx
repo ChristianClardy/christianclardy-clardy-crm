@@ -127,7 +127,7 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated, lead = n
             const endTime = appointment.end_time || addMinutes(appointment.start_time, 60);
             await base44.entities.CalendarEvent.create({
               title: appointment.title || `${createdLead.full_name} - Appointment`,
-              description: appointment.notes || "",
+              description: [form.project_description, appointment.notes].filter(Boolean).join("\n\n"),
               location: appointment.location || createdLead.property_address || "",
               start_datetime: `${appointment.date}T${appointment.start_time}:00`,
               end_datetime: `${appointment.date}T${endTime}:00`,
