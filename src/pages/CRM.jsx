@@ -1,12 +1,10 @@
 import { useState } from "react";
-import { Users, Target, CheckCircle2, Archive } from "lucide-react";
+import { Target, CheckCircle2, Archive } from "lucide-react";
 import { cn } from "@/lib/utils";
-import Clients from "./Clients";
 import Prospects from "./Prospects";
 import LeadList from "@/components/crm/LeadList";
 
 const tabs = [
-  { key: "clients",   label: "Contacts",  icon: Users },
   { key: "leads",     label: "Leads",     icon: Target },
   { key: "prospects", label: "Prospects", icon: Target },
   { key: "approved",  label: "Approved",  icon: CheckCircle2 },
@@ -16,7 +14,6 @@ const tabs = [
 ];
 
 const tabDescriptions = {
-  clients:   "Manage all contacts in one place.",
   leads:     "Active leads moving through the sales funnel.",
   prospects: "View contacts with active estimates.",
   approved:  "View approved contacts and active projects.",
@@ -28,7 +25,7 @@ const tabDescriptions = {
 export default function CRM() {
   const urlParams = new URLSearchParams(window.location.search);
   const requestedTab = urlParams.get("tab");
-  const initialTab = tabs.some((tab) => tab.key === requestedTab) ? requestedTab : "clients";
+  const initialTab = tabs.some((tab) => tab.key === requestedTab) ? requestedTab : "leads";
   const [activeTab, setActiveTab] = useState(initialTab);
 
   return (
@@ -62,9 +59,7 @@ export default function CRM() {
       </div>
 
       <div>
-        {activeTab === "clients" ? (
-          <Clients />
-        ) : activeTab === "leads" ? (
+        {activeTab === "leads" ? (
           <LeadList />
         ) : activeTab === "archived" ? (
           <LeadList archived />
