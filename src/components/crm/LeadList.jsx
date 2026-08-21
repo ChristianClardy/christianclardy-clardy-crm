@@ -171,6 +171,15 @@ function LeadCard({ lead, draggable, onDragStart }) {
         )}
       </div>
 
+      {lead.status === "Appointment Scheduled" && lead._appointmentDate && (
+        <div className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-purple-700">
+          <CalendarDays className="h-3 w-3" />
+          {new Date(lead._appointmentDate).toLocaleString(undefined, {
+            month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+          })}
+        </div>
+      )}
+
       <div className="mt-2.5 space-y-1 text-xs text-slate-400">
         {lead.phone && <div className="flex items-center gap-1.5"><Phone className="h-3 w-3" />{lead.phone}</div>}
         {lead.email && <div className="flex items-center gap-1.5 truncate"><Mail className="h-3 w-3 shrink-0" /><span className="truncate">{lead.email}</span></div>}
@@ -238,6 +247,7 @@ function KanbanColumn({ column, leads, onDrop, onDragStart, onDragOver, dragging
 export default function LeadList({ archived = false }) {
   const companyScope = useCompanyScope();
   const [leads, setLeads] = useState([]);
+  const [calendarEvents, setCalendarEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -256,13 +266,48 @@ export default function LeadList({ archived = false }) {
     }
   };
 
+  const loadCalendarEvents = async () => {
+    try {
+      const data = await base44.entities.CalendarEvent.list("start_datetime", 2000);
+      setCalendarEvents(data || []);
+    } catch (err) {
+      console.error("Failed to load calendar events:", err?.message);
+    }
+  };
+
   useEffect(() => {
     loadLeads();
-    const unsubscribe = base44.entities.Lead.subscribe(() => loadLeads());
-    return unsubscribe;
+    loadCalendarEvents();
+    const unsubLeads = base44.entities.Lead.subscribe(() => loadLeads());
+    const unsubEvents = base44.entities.CalendarEvent.subscribe(() => loadCalendarEvents());
+    return () => {
+      unsubLeads();
+      unsubEvents();
+    };
   }, []);
 
-  const scopedLeads = useMemo(() => scopeFilter(leads, companyScope), [leads, companyScope]);
+  // Soonest calendar event booked against each lead (via lead_id, set when an
+  // appointment is scheduled — see LeadFormDialog.jsx's "Schedule an
+  // appointment" flow), keyed by lead id.
+  const appointmentByLeadId = useMemo(() => {
+    const map = {};
+    for (const event of calendarEvents) {
+      if (!event.lead_id) continue;
+      const existing = map[event.lead_id];
+      if (!existing || new Date(event.start_datetime) < new Date(existing.start_datetime)) {
+        map[event.lead_id] = event;
+      }
+    }
+    return map;
+  }, [calendarEvents]);
+
+  const scopedLeads = useMemo(
+    () => scopeFilter(leads, companyScope).map((lead) => ({
+      ...lead,
+      _appointmentDate: appointmentByLeadId[lead.id]?.start_datetime || null,
+    })),
+    [leads, companyScope, appointmentByLeadId]
+  );
 
   const visibleLeads = useMemo(() =>
     scopedLeads.filter((lead) =>
