@@ -55,12 +55,21 @@ const COLUMNS = [
   },
   {
     key: "estimate",
-    label: "Estimate",
-    match: ["Estimate In Progress", "Quote Delivered/Price Locked"],
+    label: "Estimate In Progress",
+    match: ["Estimate In Progress"],
     defaultStatus: "Estimate In Progress",
     color: "bg-indigo-400",
     headerBg: "bg-indigo-50",
     dropBg: "bg-indigo-100",
+  },
+  {
+    key: "quote",
+    label: "Quote Delivered",
+    match: ["Quote Delivered/Price Locked"],
+    defaultStatus: "Quote Delivered/Price Locked",
+    color: "bg-cyan-400",
+    headerBg: "bg-cyan-50",
+    dropBg: "bg-cyan-100",
   },
   {
     key: "negotiating",
