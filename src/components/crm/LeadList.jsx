@@ -173,9 +173,9 @@ function KanbanColumn({ column, leads, onDrop, onDragStart, onDragOver, dragging
   const isOver = draggingOver === column.key;
 
   return (
-    <div className="flex flex-col min-w-[220px] w-[220px] shrink-0">
+    <div className="flex flex-col min-w-[220px] w-[220px] shrink-0 max-h-[calc(100vh-320px)]">
       {/* Header */}
-      <div className={cn("rounded-xl px-3 py-2 mb-2 flex items-center justify-between", column.headerBg)}>
+      <div className={cn("rounded-xl px-3 py-2 mb-2 flex items-center justify-between shrink-0", column.headerBg)}>
         <div className="flex items-center gap-2">
           <div className={cn("w-2 h-2 rounded-full", column.color)} />
           <span className="text-xs font-bold uppercase tracking-wider text-slate-600">{column.label}</span>
@@ -185,12 +185,13 @@ function KanbanColumn({ column, leads, onDrop, onDragStart, onDragOver, dragging
         </span>
       </div>
 
-      {/* Drop zone */}
+      {/* Drop zone — scrolls internally so a long column doesn't stretch the
+          whole page and push the board's horizontal scrollbar out of view */}
       <div
         onDragOver={onDragOver}
         onDrop={(e) => onDrop(e, column)}
         className={cn(
-          "flex-1 rounded-xl border-2 border-dashed p-2 space-y-2 min-h-[120px] transition-all duration-150",
+          "flex-1 min-h-[120px] overflow-y-auto rounded-xl border-2 border-dashed p-2 space-y-2 transition-all duration-150",
           isOver
             ? cn("border-slate-400", column.dropBg)
             : "border-transparent"
