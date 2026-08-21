@@ -64,7 +64,7 @@ const COLUMNS = [
   },
   {
     key: "quote",
-    label: "Quote Delivered",
+    label: "Quote and Design Delivered",
     match: ["Quote Delivered/Price Locked"],
     defaultStatus: "Quote Delivered/Price Locked",
     color: "bg-cyan-400",
