@@ -10,31 +10,30 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { convertLeadToProspect } from "@/lib/leadConversion";
+import { promoteLeadToProspect } from "@/lib/leadConversion";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const FUNNEL_STAGES = [
   { key: "new",         label: "New",         match: ["New Lead", "Contact Attempted"] },
-  { key: "contacted",   label: "Contacted",   match: ["Contacted", "Follow Up"] },
+  { key: "contacted",   label: "Contacted",   match: ["Contacted"] },
   { key: "appointment", label: "Appointment", match: ["Appointment Scheduled", "Site Visit Complete"] },
-  { key: "estimate",    label: "Estimate",    match: ["Estimate In Progress", "Estimate Sent", "Negotiation"] },
-  { key: "won",         label: "Won",         match: ["Won"] },
+  { key: "design",      label: "Design/Estimate", match: ["In Design", "Estimate In Progress", "Quote Delivered/Price Locked", "Negotiating/Revising Scope"] },
+  { key: "won",         label: "Won",         match: ["Contract Signed/Deposit Collected (Won)"] },
 ];
 
 const STATUS_COLORS = {
-  "New Lead":              "bg-slate-100 text-slate-700",
-  "Contact Attempted":     "bg-amber-100 text-amber-700",
-  Contacted:               "bg-blue-100 text-blue-700",
-  "Appointment Scheduled": "bg-purple-100 text-purple-700",
-  "Site Visit Complete":   "bg-violet-100 text-violet-700",
-  "Estimate In Progress":  "bg-indigo-100 text-indigo-700",
-  "Estimate Sent":         "bg-cyan-100 text-cyan-700",
-  "Follow Up":             "bg-orange-100 text-orange-700",
-  Negotiation:             "bg-yellow-100 text-yellow-700",
-  Won:                     "bg-emerald-100 text-emerald-700",
-  Lost:                    "bg-rose-100 text-rose-700",
-  "On Hold":               "bg-slate-200 text-slate-600",
+  "New Lead":                                 "bg-slate-100 text-slate-700",
+  "Contact Attempted":                        "bg-amber-100 text-amber-700",
+  Contacted:                                  "bg-blue-100 text-blue-700",
+  "Appointment Scheduled":                    "bg-purple-100 text-purple-700",
+  "Site Visit Complete":                      "bg-violet-100 text-violet-700",
+  "In Design":                                "bg-fuchsia-100 text-fuchsia-700",
+  "Estimate In Progress":                     "bg-indigo-100 text-indigo-700",
+  "Quote Delivered/Price Locked":              "bg-cyan-100 text-cyan-700",
+  "Negotiating/Revising Scope":                "bg-yellow-100 text-yellow-700",
+  "Contract Signed/Deposit Collected (Won)":   "bg-emerald-100 text-emerald-700",
+  "Lost/No Decision":                          "bg-rose-100 text-rose-700",
 };
 
 const ACTIVITY_ICON = {
@@ -254,7 +253,6 @@ export default function ContactDetailSlider({ lead, onClose, onUpdate }) {
   const [notesDraft, setNotesDraft] = useState("");
   const [followUpDate, setFollowUpDate] = useState("");
   const [quickLogType, setQuickLogType] = useState(null); // null | "call" | "email" | "note" | "meeting"
-  const [linkedClient, setLinkedClient] = useState(null);
   const [converting, setConverting] = useState(false);
 
   const nameInputRef = useRef(null);
@@ -286,27 +284,18 @@ export default function ContactDetailSlider({ lead, onClose, onUpdate }) {
       }
     };
     loadRelated();
-
-    if (lead.linked_contact_id) {
-      base44.entities.Client.filter({ id: lead.linked_contact_id })
-        .then((rows) => setLinkedClient(rows[0] || null))
-        .catch(() => setLinkedClient(null));
-    } else {
-      setLinkedClient(null);
-    }
   }, [lead?.id]);
 
-  const isProspect = linkedClient?.status === "prospect";
+  const isProspect = Boolean(lead?.is_prospect);
 
   const handleConvertToProspect = async () => {
     if (!lead) return;
     setConverting(true);
     try {
-      const client = await convertLeadToProspect(lead);
-      setLinkedClient(client);
-      if (lead.linked_contact_id !== client.id) onUpdate?.({ ...lead, linked_contact_id: client.id });
+      await promoteLeadToProspect(lead);
+      onUpdate?.({ ...lead, is_prospect: true });
     } catch (err) {
-      console.error("Failed to convert lead to prospect:", err?.message);
+      console.error("Failed to promote lead to prospect:", err?.message);
     } finally {
       setConverting(false);
     }
@@ -452,7 +441,7 @@ export default function ContactDetailSlider({ lead, onClose, onUpdate }) {
                   disabled={converting || isProspect}
                 >
                   <TrendingUp className="mr-2 h-4 w-4" />
-                  {converting ? "Converting..." : isProspect ? "In Prospects Pipeline" : "Convert to Prospect"}
+                  {converting ? "Promoting..." : isProspect ? "Prospect" : "Promote to Prospect"}
                 </Button>
               </div>
 

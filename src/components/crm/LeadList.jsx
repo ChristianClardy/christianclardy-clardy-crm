@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import LeadFormDialog from "@/components/crm/LeadFormDialog";
 import { cn } from "@/lib/utils";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
+import { setLeadStatus } from "@/lib/leadConversion";
+import { DEAD_LEAD_STATUSES } from "@/lib/leadStages";
 
 // ─── Column definitions ───────────────────────────────────────────────────────
 
@@ -27,7 +29,7 @@ const COLUMNS = [
   {
     key: "contacted",
     label: "Contacted",
-    match: ["Contact Attempted", "Contacted", "Follow Up"],
+    match: ["Contact Attempted", "Contacted"],
     defaultStatus: "Contacted",
     color: "bg-blue-400",
     headerBg: "bg-blue-50",
@@ -43,19 +45,37 @@ const COLUMNS = [
     dropBg: "bg-purple-100",
   },
   {
+    key: "design",
+    label: "In Design",
+    match: ["In Design"],
+    defaultStatus: "In Design",
+    color: "bg-fuchsia-400",
+    headerBg: "bg-fuchsia-50",
+    dropBg: "bg-fuchsia-100",
+  },
+  {
     key: "estimate",
     label: "Estimate",
-    match: ["Estimate In Progress", "Estimate Sent", "Negotiation"],
+    match: ["Estimate In Progress", "Quote Delivered/Price Locked"],
     defaultStatus: "Estimate In Progress",
     color: "bg-indigo-400",
     headerBg: "bg-indigo-50",
     dropBg: "bg-indigo-100",
   },
   {
+    key: "negotiating",
+    label: "Negotiating",
+    match: ["Negotiating/Revising Scope"],
+    defaultStatus: "Negotiating/Revising Scope",
+    color: "bg-yellow-400",
+    headerBg: "bg-yellow-50",
+    dropBg: "bg-yellow-100",
+  },
+  {
     key: "won",
     label: "Won",
-    match: ["Won"],
-    defaultStatus: "Won",
+    match: ["Contract Signed/Deposit Collected (Won)"],
+    defaultStatus: "Contract Signed/Deposit Collected (Won)",
     color: "bg-emerald-400",
     headerBg: "bg-emerald-50",
     dropBg: "bg-emerald-100",
@@ -63,8 +83,8 @@ const COLUMNS = [
   {
     key: "lost",
     label: "Lost",
-    match: ["Lost", "On Hold"],
-    defaultStatus: "Lost",
+    match: ["Lost/No Decision"],
+    defaultStatus: "Lost/No Decision",
     color: "bg-rose-400",
     headerBg: "bg-rose-50",
     dropBg: "bg-rose-100",
@@ -72,21 +92,20 @@ const COLUMNS = [
 ];
 
 const statusStyles = {
-  "New Lead":             "bg-slate-100 text-slate-700",
-  "Contact Attempted":   "bg-amber-100 text-amber-700",
-  Contacted:             "bg-blue-100 text-blue-700",
-  "Appointment Scheduled": "bg-purple-100 text-purple-700",
-  "Site Visit Complete": "bg-violet-100 text-violet-700",
-  "Estimate In Progress": "bg-indigo-100 text-indigo-700",
-  "Estimate Sent":       "bg-cyan-100 text-cyan-700",
-  "Follow Up":           "bg-orange-100 text-orange-700",
-  Negotiation:           "bg-yellow-100 text-yellow-700",
-  Won:                   "bg-emerald-100 text-emerald-700",
-  Lost:                  "bg-rose-100 text-rose-700",
-  "On Hold":             "bg-slate-200 text-slate-700",
+  "New Lead":                                 "bg-slate-100 text-slate-700",
+  "Contact Attempted":                        "bg-amber-100 text-amber-700",
+  Contacted:                                  "bg-blue-100 text-blue-700",
+  "Appointment Scheduled":                    "bg-purple-100 text-purple-700",
+  "Site Visit Complete":                      "bg-violet-100 text-violet-700",
+  "In Design":                                "bg-fuchsia-100 text-fuchsia-700",
+  "Estimate In Progress":                     "bg-indigo-100 text-indigo-700",
+  "Quote Delivered/Price Locked":              "bg-cyan-100 text-cyan-700",
+  "Negotiating/Revising Scope":                "bg-yellow-100 text-yellow-700",
+  "Contract Signed/Deposit Collected (Won)":   "bg-emerald-100 text-emerald-700",
+  "Lost/No Decision":                          "bg-rose-100 text-rose-700",
 };
 
-const DEAD_STATUSES = ["Lost"];
+const DEAD_STATUSES = DEAD_LEAD_STATUSES;
 
 // ─── Lead card (shared by both views) ────────────────────────────────────────
 
@@ -108,9 +127,14 @@ function LeadCard({ lead, draggable, onDragStart }) {
     >
       <div className="flex items-start justify-between gap-2">
         <h3 className="text-sm font-semibold text-slate-900 leading-snug">{lead.full_name}</h3>
-        <Badge className={cn("shrink-0 text-[10px]", statusStyles[lead.status] || "bg-slate-100 text-slate-700")}>
-          {lead.status || "New Lead"}
-        </Badge>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <Badge className={cn("text-[10px]", statusStyles[lead.status] || "bg-slate-100 text-slate-700")}>
+            {lead.status || "New Lead"}
+          </Badge>
+          {lead.is_prospect && (
+            <Badge className="bg-amber-100 text-[10px] text-amber-700">Prospect</Badge>
+          )}
+        </div>
       </div>
 
       <div className="mt-1 flex items-center gap-2">
@@ -228,13 +252,14 @@ export default function LeadList({ archived = false }) {
       (lead.project_description || "").toLowerCase().includes(value);
   }), [visibleLeads, search]);
 
-  // Funnel summary counts (using original 5-bucket grouping for the header stats)
+  // Funnel summary counts for the header stats
   const funnelCounts = useMemo(() => [
     { label: "New",         count: visibleLeads.filter(l => ["New Lead"].includes(l.status || "New Lead")).length },
-    { label: "Contacted",   count: visibleLeads.filter(l => ["Contact Attempted", "Contacted", "Follow Up"].includes(l.status)).length },
+    { label: "Contacted",   count: visibleLeads.filter(l => ["Contact Attempted", "Contacted"].includes(l.status)).length },
     { label: "Appointment", count: visibleLeads.filter(l => ["Appointment Scheduled", "Site Visit Complete"].includes(l.status)).length },
-    { label: "Estimate",    count: visibleLeads.filter(l => ["Estimate In Progress", "Estimate Sent", "Negotiation"].includes(l.status)).length },
-    { label: "Won",         count: visibleLeads.filter(l => l.status === "Won").length },
+    { label: "In Design",   count: visibleLeads.filter(l => l.status === "In Design").length },
+    { label: "Estimate",    count: visibleLeads.filter(l => ["Estimate In Progress", "Quote Delivered/Price Locked", "Negotiating/Revising Scope"].includes(l.status)).length },
+    { label: "Won",         count: visibleLeads.filter(l => l.status === "Contract Signed/Deposit Collected (Won)").length },
   ], [visibleLeads]);
 
   // Total projected value across all active (non-lost) leads. Leads move out
@@ -283,7 +308,7 @@ export default function LeadList({ archived = false }) {
     );
 
     try {
-      await base44.entities.Lead.update(lead.id, { status: column.defaultStatus });
+      await setLeadStatus(lead, column.defaultStatus);
     } catch {
       // Revert on failure
       setLeads((prev) =>
@@ -316,7 +341,7 @@ export default function LeadList({ archived = false }) {
             <p className="mt-2 text-3xl font-bold text-emerald-900">${activePipelineValue.toLocaleString()}</p>
             <p className="mt-1 text-xs text-emerald-700/80">Projected total across {visibleLeads.length} active leads — drops off once a lead is marked Lost.</p>
           </div>
-          <div className="grid gap-3 grid-cols-2 sm:grid-cols-5">
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
             {funnelCounts.map((b) => (
               <div key={b.label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{b.label}</p>

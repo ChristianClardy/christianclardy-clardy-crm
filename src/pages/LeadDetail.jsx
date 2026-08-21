@@ -9,22 +9,10 @@ import LeadFormDialog from "@/components/crm/LeadFormDialog";
 import LeadFollowUpPanel from "@/components/crm/LeadFollowUpPanel";
 import ContactHistoryPanel from "@/components/crm/ContactHistoryPanel";
 import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
-import { convertLeadToProspect } from "@/lib/leadConversion";
+import { promoteLeadToProspect, setLeadStatus } from "@/lib/leadConversion";
+import { LEAD_STAGES } from "@/lib/leadStages";
 
-const funnelSteps = [
-  "New Lead",
-  "Contact Attempted",
-  "Contacted",
-  "Appointment Scheduled",
-  "Site Visit Complete",
-  "Estimate In Progress",
-  "Estimate Sent",
-  "Follow Up",
-  "Negotiation",
-  "Won",
-  "Lost",
-  "On Hold",
-];
+const funnelSteps = LEAD_STAGES;
 
 export default function LeadDetail() {
   const navigate = useNavigate();
@@ -34,7 +22,6 @@ export default function LeadDetail() {
   const [followUps, setFollowUps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
-  const [linkedClient, setLinkedClient] = useState(null);
   const [converting, setConverting] = useState(false);
 
   const loadData = async () => {
@@ -47,13 +34,6 @@ export default function LeadDetail() {
       const leadRow = leadRows[0] || null;
       setLead(leadRow);
       setFollowUps(followUpRows || []);
-      if (leadRow?.linked_contact_id) {
-        base44.entities.Client.filter({ id: leadRow.linked_contact_id })
-          .then((rows) => setLinkedClient(rows[0] || null))
-          .catch(() => setLinkedClient(null));
-      } else {
-        setLinkedClient(null);
-      }
     } catch (err) {
       console.error("Failed to load lead:", err?.message);
     } finally {
@@ -61,16 +41,16 @@ export default function LeadDetail() {
     }
   };
 
-  const isProspect = linkedClient?.status === "prospect";
+  const isProspect = Boolean(lead?.is_prospect);
 
   const handleConvertToProspect = async () => {
     setConverting(true);
     try {
-      await convertLeadToProspect(lead);
+      await promoteLeadToProspect(lead);
       await loadData();
     } catch (err) {
-      console.error("Failed to convert lead to prospect:", err?.message);
-      alert("Could not convert this lead to a prospect. Please try again.");
+      console.error("Failed to promote lead to prospect:", err?.message);
+      alert("Could not promote this lead to a prospect. Please try again.");
     } finally {
       setConverting(false);
     }
@@ -93,7 +73,7 @@ export default function LeadDetail() {
   const activeStepIndex = useMemo(() => Math.max(funnelSteps.indexOf(lead?.status || "New Lead"), 0), [lead]);
 
   const updateStatus = async (value) => {
-    await base44.entities.Lead.update(lead.id, { status: value }).catch(err => {
+    await setLeadStatus(lead, value).catch(err => {
       console.error("Status update failed:", err?.message);
       alert(`Could not set status "${value}".\n\nRun this in Supabase SQL editor:\nALTER TYPE lead_status_enum ADD VALUE IF NOT EXISTS '${value}';`);
     });
@@ -118,7 +98,12 @@ export default function LeadDetail() {
         <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">Sales funnel</p>
-            <h1 className="mt-1 text-3xl font-bold text-slate-900">{lead.full_name}</h1>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <h1 className="text-3xl font-bold text-slate-900">{lead.full_name}</h1>
+              {isProspect && (
+                <Badge className="bg-amber-100 text-amber-700">Prospect</Badge>
+              )}
+            </div>
             <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-slate-500">
               {lead.phone && <span className="flex items-center gap-2"><Phone className="h-4 w-4" />{lead.phone}</span>}
               {lead.email && <span className="flex items-center gap-2"><Mail className="h-4 w-4" />{lead.email}</span>}
@@ -129,13 +114,8 @@ export default function LeadDetail() {
           <div className="flex w-full flex-col gap-3 xl:max-w-xs">
             <Button onClick={handleConvertToProspect} disabled={converting || isProspect}>
               <TrendingUp className="mr-2 h-4 w-4" />
-              {converting ? "Converting..." : isProspect ? "In Prospects Pipeline" : "Convert to Prospect"}
+              {converting ? "Promoting..." : isProspect ? "Prospect" : "Promote to Prospect"}
             </Button>
-            {isProspect && (
-              <Link to="/CRM?tab=prospects" className="text-center text-xs font-medium text-amber-700 hover:underline">
-                View in Prospects →
-              </Link>
-            )}
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1" onClick={() => setEditOpen(true)}>
                 <Pencil className="mr-2 h-4 w-4" /> Edit Lead

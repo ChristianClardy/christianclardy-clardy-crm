@@ -87,7 +87,7 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated, lead = n
     const normEmail = form.email?.trim().toLowerCase();
     const normPhone = form.phone?.trim().replace(/\D/g, "");
 
-    const scopedLeads = scopeFilter(existingLeads, companyScope).filter((l) => l.status !== "Lost");
+    const scopedLeads = scopeFilter(existingLeads, companyScope).filter((l) => l.status !== "Lost/No Decision");
     const dup = scopedLeads.find((l) =>
       l.id !== lead?.id && (
         l.full_name?.trim().toLowerCase() === normName ||

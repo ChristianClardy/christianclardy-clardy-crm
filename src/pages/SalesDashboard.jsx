@@ -103,11 +103,11 @@ export default function SalesDashboard() {
     ? `${Math.round((approvedEstimates.length / (approvedEstimates.length + rejectedEstimates.length)) * 100)}%`
     : "0%";
   const wonRevenue = approvedEstimates.reduce((sum, estimate) => sum + (estimate.total || estimate.estimated_revenue || 0), 0);
-  const lostLeads = scopedLeads.filter((lead) => lead.status === "Lost").length;
+  const lostLeads = scopedLeads.filter((lead) => lead.status === "Lost/No Decision").length;
   const followUpsDueToday = scopedTasks.filter((task) => task.due_date === today && ["Call", "Follow Up"].includes(task.task_type)).length;
 
   const openLeads = useMemo(
-    () => scopedLeads.filter((lead) => !["Won", "Lost"].includes(lead.status)),
+    () => scopedLeads.filter((lead) => !["Contract Signed/Deposit Collected (Won)", "Lost/No Decision"].includes(lead.status)),
     [scopedLeads]
   );
   const pipelineValue = useMemo(

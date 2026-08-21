@@ -41,6 +41,7 @@ export default function Prospects({ initialBucket = "all", showBucketTabs = true
   const [prospects, setProspects] = useState([]);
   const [estimates, setEstimates] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState({});
   const [search, setSearch] = useState("");
@@ -54,11 +55,13 @@ export default function Prospects({ initialBucket = "all", showBucketTabs = true
     const unsubProjects = base44.entities.Project.subscribe(() => loadData());
     const unsubClients = base44.entities.Client.subscribe(() => loadData());
     const unsubEstimates = base44.entities.Estimate.subscribe(() => loadData());
+    const unsubLeads = base44.entities.Lead.subscribe(() => loadData());
 
     return () => {
       unsubProjects();
       unsubClients();
       unsubEstimates();
+      unsubLeads();
     };
   }, []);
 
@@ -68,14 +71,16 @@ export default function Prospects({ initialBucket = "all", showBucketTabs = true
 
   const loadData = async () => {
     try {
-      const [clients, ests, projectData] = await Promise.all([
+      const [clients, ests, projectData, leadRows] = await Promise.all([
         base44.entities.Client.list("-created_date", 5000),
         base44.entities.Estimate.list("-created_date", 2000),
         base44.entities.Project.list("-updated_date", 2000),
+        base44.entities.Lead.list("-created_date", 5000),
       ]);
       setProspects(clients || []);
       setEstimates(ests || []);
       setProjects(projectData || []);
+      setLeads(leadRows || []);
     } catch (err) {
       console.error("Failed to load prospects:", err?.message);
     } finally {
@@ -94,6 +99,16 @@ export default function Prospects({ initialBucket = "all", showBucketTabs = true
     const ids = getProspectIds(prospect);
     return projects.filter((project) => ids.includes(project.client_id) || (prospect.acculynx_job_id && project.acculynx_job_id === prospect.acculynx_job_id));
   };
+
+  // A Lead flips `is_prospect` on the Lead row itself (see leadStages.js /
+  // leadConversion.js) — it's the source of truth for "is this a prospect,"
+  // Client.workflow_stage only tracks what happens after that.
+  const getLinkedLead = (prospect) => {
+    const ids = getProspectIds(prospect);
+    return leads.find((lead) => ids.includes(lead.linked_contact_id) || (prospect.linked_lead_id && lead.id === prospect.linked_lead_id));
+  };
+
+  const isProspectLead = (prospect) => Boolean(getLinkedLead(prospect)?.is_prospect);
 
   const hasActiveProject = (prospect) => getLinkedProjects(prospect).some((project) => !["closed", "completed", "cancelled"].includes(project.status));
   const hasCompletedProject = (prospect) => getLinkedProjects(prospect).some((project) => ["completed", "substantially_complete"].includes(project.status));
@@ -163,7 +178,7 @@ export default function Prospects({ initialBucket = "all", showBucketTabs = true
     if (isClosedProspect(prospect)) return "closed";
     if (isCompletedProspect(prospect)) return "completed";
     if (hasActiveProject(prospect) || isApprovedProspect(prospect)) return "approved";
-    if (hasAttachedEstimate(prospect)) return "prospects";
+    if (isProspectLead(prospect) || hasAttachedEstimate(prospect)) return "prospects";
     return "leads";
   };
 
@@ -173,7 +188,9 @@ export default function Prospects({ initialBucket = "all", showBucketTabs = true
     if (isClosedProspect(prospect)) return "closed";
     if (isCompletedProspect(prospect)) return "completed";
     if (isApprovedProspect(prospect)) return "approved";
-    return prospect.workflow_stage || "new_lead";
+    if (prospect.workflow_stage) return prospect.workflow_stage;
+    if (isProspectLead(prospect)) return "proposal_sent";
+    return "new_lead";
   };
 
   const isPipelineRelevant = (prospect) => {
@@ -183,6 +200,7 @@ export default function Prospects({ initialBucket = "all", showBucketTabs = true
       getLinkedProjects(prospect).length > 0 ||
       getEstimatesForClient(prospect).length > 0 ||
       prospect.status === "prospect" ||
+      isProspectLead(prospect) ||
       ["approved", "completed", "closed", "dead_lead", "proposal_sent", "contacted", "negotiating", "new_lead"].includes(prospect.workflow_stage || "")
     );
   };

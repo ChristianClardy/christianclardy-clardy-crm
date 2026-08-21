@@ -1,8 +1,5 @@
 import { base44 } from "@/api/base44Client";
-
-// Client.workflow_stage values that already represent an active prospect or
-// further along the pipeline — conversion should never downgrade these.
-const PROSPECT_OR_LATER = new Set(["proposal_sent", "negotiating", "approved", "completed", "closed"]);
+import { LEAD_STAGES, PROSPECT_THRESHOLD_STAGE } from "@/lib/leadStages";
 
 function firstMatch(rows) {
   return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
@@ -58,21 +55,28 @@ export async function ensureContactForLead(lead) {
 }
 
 /**
- * Promotes a Lead into the Prospects pipeline: ensures its contact-book
- * record exists, then flags it as a prospect using the same fields the
- * Prospects workflow board already reads (see WorkflowDrawer.jsx).
+ * Updates a Lead's pipeline stage. Reaching PROSPECT_THRESHOLD_STAGE or later
+ * flips the persistent is_prospect badge on — it never reverts automatically.
  */
-export async function convertLeadToProspect(lead) {
-  const client = await ensureContactForLead(lead);
+export async function setLeadStatus(lead, newStatus) {
+  const shouldBeProspect = LEAD_STAGES.indexOf(newStatus) >= LEAD_STAGES.indexOf(PROSPECT_THRESHOLD_STAGE);
+  const is_prospect = lead.is_prospect || shouldBeProspect;
+  // Crossing the threshold needs a Client row to exist — Prospects.jsx is a
+  // Client-based board and has nothing to show without one.
+  if (is_prospect && !lead.linked_contact_id) {
+    await ensureContactForLead(lead);
+  }
+  await base44.entities.Lead.update(lead.id, { status: newStatus, is_prospect });
+  return { ...lead, status: newStatus, is_prospect };
+}
 
-  const nextStage = PROSPECT_OR_LATER.has(client.workflow_stage) ? client.workflow_stage : "proposal_sent";
-
-  await base44.entities.Client.update(client.id, {
-    status: "prospect",
-    workflow_stage: nextStage,
-    sync_locked: true,
-    linked_lead_id: lead.id,
-  });
-
-  return { ...client, status: "prospect", workflow_stage: nextStage, sync_locked: true };
+/**
+ * Manually promotes a Lead to Prospect (e.g. before it reaches the normal
+ * threshold stage). Ensures its contact-book record exists so billing/project
+ * flows have a Client to attach to, then flags the Lead itself as a prospect.
+ */
+export async function promoteLeadToProspect(lead) {
+  await ensureContactForLead(lead);
+  await base44.entities.Lead.update(lead.id, { is_prospect: true });
+  return { ...lead, is_prospect: true };
 }
