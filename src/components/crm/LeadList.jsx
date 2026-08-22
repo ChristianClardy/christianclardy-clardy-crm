@@ -7,7 +7,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import LeadFormDialog from "@/components/crm/LeadFormDialog";
 import { cn } from "@/lib/utils";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
@@ -171,7 +173,7 @@ function LeadCard({ lead, draggable, onDragStart }) {
         )}
       </div>
 
-      {lead.status === "Appointment Scheduled" && lead._appointmentDate && (
+      {["Appointment Scheduled", "Site Visit Complete"].includes(lead.status) && lead._appointmentDate && (
         <div className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-purple-700">
           <CalendarDays className="h-3 w-3" />
           {new Date(lead._appointmentDate).toLocaleString(undefined, {
@@ -242,6 +244,49 @@ function KanbanColumn({ column, leads, onDrop, onDragStart, onDragOver, dragging
   );
 }
 
+// ─── Design appointment prompt ─────────────────────────────────────────────────
+
+function addMinutes(timeStr, mins) {
+  const [h, m] = timeStr.split(":").map(Number);
+  const total = h * 60 + m + mins;
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(Math.floor(total / 60) % 24)}:${pad(total % 60)}`;
+}
+
+function DesignAppointmentDialog({ lead, saving, onSkip, onSave }) {
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open && !saving) onSkip(); }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Schedule design appointment</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-slate-500">
+          When is the design appointment for {lead.full_name}?
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Date</Label>
+            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1.5" />
+          </div>
+          <div>
+            <Label>Time</Label>
+            <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="mt-1.5" />
+          </div>
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="outline" onClick={onSkip} disabled={saving}>Skip</Button>
+          <Button onClick={() => onSave({ date, time })} disabled={saving || !date || !time}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function LeadList({ archived = false }) {
@@ -253,6 +298,8 @@ export default function LeadList({ archived = false }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [view, setView] = useState("kanban"); // "kanban" | "list"
   const [draggingOver, setDraggingOver] = useState(null);
+  const [appointmentPrompt, setAppointmentPrompt] = useState(null); // { lead, column } | null
+  const [schedulingAppointment, setSchedulingAppointment] = useState(false);
   const dragLeadRef = useRef(null);
 
   const loadLeads = async () => {
@@ -286,16 +333,34 @@ export default function LeadList({ archived = false }) {
     };
   }, []);
 
-  // Soonest calendar event booked against each lead (via lead_id, set when an
+  // Calendar event to surface on each lead's card (via lead_id, set when an
   // appointment is scheduled — see LeadFormDialog.jsx's "Schedule an
-  // appointment" flow), keyed by lead id.
+  // appointment" flow and the design-appointment prompt below), keyed by lead
+  // id. A lead can have more than one linked event (e.g. the original site
+  // visit plus a later design appointment), so this prefers the soonest
+  // upcoming one and only falls back to a past event if nothing is upcoming.
   const appointmentByLeadId = useMemo(() => {
     const map = {};
+    const now = Date.now();
     for (const event of calendarEvents) {
       if (!event.lead_id) continue;
       const existing = map[event.lead_id];
-      if (!existing || new Date(event.start_datetime) < new Date(existing.start_datetime)) {
+      if (!existing) {
         map[event.lead_id] = event;
+        continue;
+      }
+
+      const eventTime = new Date(event.start_datetime).getTime();
+      const existingTime = new Date(existing.start_datetime).getTime();
+      const eventUpcoming = eventTime >= now;
+      const existingUpcoming = existingTime >= now;
+
+      if (eventUpcoming !== existingUpcoming) {
+        if (eventUpcoming) map[event.lead_id] = event;
+      } else if (eventUpcoming) {
+        if (eventTime < existingTime) map[event.lead_id] = event;
+      } else {
+        if (eventTime > existingTime) map[event.lead_id] = event;
       }
     }
     return map;
@@ -365,16 +430,7 @@ export default function LeadList({ archived = false }) {
     setDraggingOver(colKey);
   };
 
-  const handleDrop = async (e, column) => {
-    e.preventDefault();
-    setDraggingOver(null);
-    const lead = dragLeadRef.current;
-    dragLeadRef.current = null;
-    if (!lead) return;
-
-    const alreadyInColumn = column.match.includes(lead.status || "New Lead");
-    if (alreadyInColumn) return;
-
+  const moveLeadToColumn = async (lead, column) => {
     // Optimistic update
     setLeads((prev) =>
       prev.map((l) => l.id === lead.id ? { ...l, status: column.defaultStatus } : l)
@@ -390,9 +446,63 @@ export default function LeadList({ archived = false }) {
     }
   };
 
+  const handleDrop = async (e, column) => {
+    e.preventDefault();
+    setDraggingOver(null);
+    const lead = dragLeadRef.current;
+    dragLeadRef.current = null;
+    if (!lead) return;
+
+    const alreadyInColumn = column.match.includes(lead.status || "New Lead");
+    if (alreadyInColumn) return;
+
+    // Moving into "Site Visit Complete" is when the design appointment gets
+    // booked, so pause here and ask for the date/time before committing the
+    // status change.
+    if (column.key === "site_visit") {
+      setAppointmentPrompt({ lead, column });
+      return;
+    }
+
+    await moveLeadToColumn(lead, column);
+  };
+
   const handleDragEnd = () => {
     setDraggingOver(null);
     dragLeadRef.current = null;
+  };
+
+  const handleSkipAppointment = () => {
+    if (!appointmentPrompt) return;
+    const { lead, column } = appointmentPrompt;
+    setAppointmentPrompt(null);
+    moveLeadToColumn(lead, column);
+  };
+
+  const handleSaveAppointment = async ({ date, time }) => {
+    if (!appointmentPrompt) return;
+    const { lead, column } = appointmentPrompt;
+    setSchedulingAppointment(true);
+    try {
+      const endTime = addMinutes(time, 60);
+      await base44.entities.CalendarEvent.create({
+        title: `${lead.full_name} - Design Appointment`,
+        start_datetime: `${date}T${time}:00`,
+        end_datetime: `${date}T${endTime}:00`,
+        event_type: "meeting",
+        status: "scheduled",
+        assigned_users: lead.assigned_sales_rep ? [lead.assigned_sales_rep] : [],
+        visibility: "team",
+        linked_client_id: lead.linked_contact_id || null,
+        lead_id: lead.id,
+      });
+    } catch (err) {
+      console.error("Failed to schedule design appointment:", err?.message);
+    } finally {
+      setSchedulingAppointment(false);
+    }
+    setAppointmentPrompt(null);
+    await moveLeadToColumn(lead, column);
   };
 
   if (loading) {
@@ -516,6 +626,15 @@ export default function LeadList({ archived = false }) {
       )}
 
       <LeadFormDialog open={dialogOpen} onOpenChange={setDialogOpen} onCreated={loadLeads} />
+
+      {appointmentPrompt && (
+        <DesignAppointmentDialog
+          lead={appointmentPrompt.lead}
+          saving={schedulingAppointment}
+          onSkip={handleSkipAppointment}
+          onSave={handleSaveAppointment}
+        />
+      )}
     </div>
   );
 }
