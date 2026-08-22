@@ -55,7 +55,7 @@ const COLUMNS = [
   },
   {
     key: "site_visit",
-    label: "Site Visit Complete",
+    label: "Site Visit Complete/Design Appointment Scheduled",
     match: ["Site Visit Complete"],
     defaultStatus: "Site Visit Complete",
     color: "bg-violet-400",
