@@ -17,7 +17,7 @@ import { promoteLeadToProspect } from "@/lib/leadConversion";
 const FUNNEL_STAGES = [
   { key: "new",         label: "New",         match: ["New Lead", "Contact Attempted"] },
   { key: "contacted",   label: "Contacted",   match: ["Contacted"] },
-  { key: "appointment", label: "Appointment", match: ["Appointment Scheduled", "Site Visit Complete"] },
+  { key: "appointment", label: "Appointment", match: ["Appointment Scheduled", "Site Visit Complete", "Design Appointment Scheduled"] },
   { key: "design",      label: "Design/Estimate", match: ["In Design", "Estimate In Progress", "Quote Delivered/Price Locked", "Negotiating/Revising Scope"] },
   { key: "won",         label: "Won",         match: ["Contract Signed/Deposit Collected (Won)"] },
 ];
@@ -28,6 +28,7 @@ const STATUS_COLORS = {
   Contacted:                                  "bg-blue-100 text-blue-700",
   "Appointment Scheduled":                    "bg-purple-100 text-purple-700",
   "Site Visit Complete":                      "bg-violet-100 text-violet-700",
+  "Design Appointment Scheduled":             "bg-fuchsia-50 text-fuchsia-600",
   "In Design":                                "bg-fuchsia-100 text-fuchsia-700",
   "Estimate In Progress":                     "bg-indigo-100 text-indigo-700",
   "Quote Delivered/Price Locked":              "bg-cyan-100 text-cyan-700",

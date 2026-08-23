@@ -7,6 +7,7 @@ export const LEAD_STAGES = [
   "Contacted",
   "Appointment Scheduled",
   "Site Visit Complete",
+  "Design Appointment Scheduled",
   "In Design",
   "Estimate In Progress",
   "Quote Delivered/Price Locked",

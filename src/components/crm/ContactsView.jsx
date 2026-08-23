@@ -32,7 +32,7 @@ const normalizeStatus = (s) => STATUS_MAP[s] ?? s ?? "New Lead";
 const COLUMNS = [
   { key: "new",         label: "New",         match: ["New Lead"],                                                    defaultStatus: "New Lead",             color: "bg-slate-400",   headerBg: "bg-slate-50",   dropBg: "bg-slate-100"   },
   { key: "contacted",   label: "Contacted",   match: ["Contact Attempted","Contacted","Follow Up"],                   defaultStatus: "Contacted",            color: "bg-blue-400",    headerBg: "bg-blue-50",    dropBg: "bg-blue-100"    },
-  { key: "appointment", label: "Appointment", match: ["Appointment Scheduled","Site Visit Complete"],                 defaultStatus: "Appointment Scheduled", color: "bg-purple-400",  headerBg: "bg-purple-50",  dropBg: "bg-purple-100"  },
+  { key: "appointment", label: "Appointment", match: ["Appointment Scheduled","Site Visit Complete","Design Appointment Scheduled"],                 defaultStatus: "Appointment Scheduled", color: "bg-purple-400",  headerBg: "bg-purple-50",  dropBg: "bg-purple-100"  },
   { key: "estimate",    label: "Estimate",    match: ["Estimate In Progress","Estimate Sent","Negotiation"],          defaultStatus: "Estimate In Progress", color: "bg-indigo-400",  headerBg: "bg-indigo-50",  dropBg: "bg-indigo-100"  },
   { key: "won",         label: "Won",         match: ["Won"],                                                         defaultStatus: "Won",                  color: "bg-emerald-400", headerBg: "bg-emerald-50", dropBg: "bg-emerald-100" },
   { key: "lost",        label: "Lost",        match: ["Lost","On Hold"],                                              defaultStatus: "Lost",                 color: "bg-rose-400",    headerBg: "bg-rose-50",    dropBg: "bg-rose-100"    },
@@ -44,6 +44,7 @@ const statusStyles = {
   Contacted:               "bg-blue-100 text-blue-700",
   "Appointment Scheduled": "bg-purple-100 text-purple-700",
   "Site Visit Complete":   "bg-violet-100 text-violet-700",
+  "Design Appointment Scheduled": "bg-fuchsia-50 text-fuchsia-600",
   "Estimate In Progress":  "bg-indigo-100 text-indigo-700",
   "Estimate Sent":         "bg-cyan-100 text-cyan-700",
   "Follow Up":             "bg-orange-100 text-orange-700",
@@ -189,7 +190,7 @@ export default function ContactsView() {
   const funnelCounts = useMemo(() => [
     { label: "New",         count: activeLeads.filter(l => l._status === "New Lead").length },
     { label: "Contacted",   count: activeLeads.filter(l => ["Contact Attempted","Contacted","Follow Up"].includes(l._status)).length },
-    { label: "Appointment", count: activeLeads.filter(l => ["Appointment Scheduled","Site Visit Complete"].includes(l._status)).length },
+    { label: "Appointment", count: activeLeads.filter(l => ["Appointment Scheduled","Site Visit Complete","Design Appointment Scheduled"].includes(l._status)).length },
     { label: "Estimate",    count: activeLeads.filter(l => ["Estimate In Progress","Estimate Sent","Negotiation"].includes(l._status)).length },
     { label: "Won",         count: activeLeads.filter(l => l._status === "Won").length },
   ], [activeLeads]);

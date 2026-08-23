@@ -57,12 +57,21 @@ const COLUMNS = [
   },
   {
     key: "site_visit",
-    label: "Site Visit Complete/Design Appointment Scheduled",
+    label: "Site Visit Complete",
     match: ["Site Visit Complete"],
     defaultStatus: "Site Visit Complete",
     color: "bg-violet-400",
     headerBg: "bg-violet-50",
     dropBg: "bg-violet-100",
+  },
+  {
+    key: "design_appointment",
+    label: "Design Appointment Scheduled",
+    match: ["Design Appointment Scheduled"],
+    defaultStatus: "Design Appointment Scheduled",
+    color: "bg-fuchsia-300",
+    headerBg: "bg-fuchsia-50",
+    dropBg: "bg-fuchsia-100",
   },
   {
     key: "design",
@@ -126,6 +135,7 @@ const statusStyles = {
   Contacted:                                  "bg-blue-100 text-blue-700",
   "Appointment Scheduled":                    "bg-purple-100 text-purple-700",
   "Site Visit Complete":                      "bg-violet-100 text-violet-700",
+  "Design Appointment Scheduled":             "bg-fuchsia-50 text-fuchsia-600",
   "In Design":                                "bg-fuchsia-100 text-fuchsia-700",
   "Estimate In Progress":                     "bg-indigo-100 text-indigo-700",
   "Quote Delivered/Price Locked":              "bg-cyan-100 text-cyan-700",
@@ -173,7 +183,7 @@ function LeadCard({ lead, draggable, onDragStart }) {
         )}
       </div>
 
-      {["Appointment Scheduled", "Site Visit Complete"].includes(lead.status) && lead._appointmentDate && (
+      {["Appointment Scheduled", "Site Visit Complete", "Design Appointment Scheduled"].includes(lead.status) && lead._appointmentDate && (
         <div className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-purple-700">
           <CalendarDays className="h-3 w-3" />
           {new Date(lead._appointmentDate).toLocaleString(undefined, {
@@ -394,7 +404,7 @@ export default function LeadList({ archived = false }) {
   const funnelCounts = useMemo(() => [
     { label: "New",         count: visibleLeads.filter(l => ["New Lead"].includes(l.status || "New Lead")).length },
     { label: "Contacted",   count: visibleLeads.filter(l => ["Contact Attempted", "Contacted"].includes(l.status)).length },
-    { label: "Appointment", count: visibleLeads.filter(l => ["Appointment Scheduled", "Site Visit Complete"].includes(l.status)).length },
+    { label: "Appointment", count: visibleLeads.filter(l => ["Appointment Scheduled", "Site Visit Complete", "Design Appointment Scheduled"].includes(l.status)).length },
     { label: "In Design",   count: visibleLeads.filter(l => l.status === "In Design").length },
     { label: "Estimate",    count: visibleLeads.filter(l => ["Estimate In Progress", "Quote Delivered/Price Locked", "Negotiating/Revising Scope"].includes(l.status)).length },
     { label: "Won",         count: visibleLeads.filter(l => l.status === "Contract Signed/Deposit Collected (Won)").length },
@@ -456,10 +466,10 @@ export default function LeadList({ archived = false }) {
     const alreadyInColumn = column.match.includes(lead.status || "New Lead");
     if (alreadyInColumn) return;
 
-    // Moving into "Site Visit Complete" is when the design appointment gets
-    // booked, so pause here and ask for the date/time before committing the
-    // status change.
-    if (column.key === "site_visit") {
+    // Moving into "Design Appointment Scheduled" is when the design
+    // appointment gets booked, so pause here and ask for the date/time
+    // before committing the status change.
+    if (column.key === "design_appointment") {
       setAppointmentPrompt({ lead, column });
       return;
     }
