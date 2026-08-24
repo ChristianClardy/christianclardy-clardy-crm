@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
+import { ensureContactForLead } from "@/lib/leadConversion";
 
 const reminderOptions = [
   { label: "None", value: "none" },
@@ -124,6 +125,27 @@ export default function CalendarEventDialog({ open, onOpenChange, event, initial
       end_datetime: toLocal(end),
     });
   }, [currentUserName, defaultValues, event, initialRange, open]);
+
+  // Appointments booked straight from a lead (before it had a linked contact
+  // record — e.g. the kanban "design appointment" flow) can end up with no
+  // linked_client_id. Resolve/create that lead's contact so the "Linked
+  // Person / Customer" field auto-fills with whoever this was actually
+  // booked for, instead of showing None.
+  useEffect(() => {
+    if (!open || !event?.id || event.linked_client_id || !event.lead_id) return;
+    let cancelled = false;
+    base44.entities.Lead.filter({ id: event.lead_id })
+      .then(async (rows) => {
+        const lead = rows?.[0];
+        if (!lead || cancelled) return;
+        const client = await ensureContactForLead(lead);
+        if (!cancelled && client?.id) {
+          setForm((current) => (current.linked_client_id ? current : { ...current, linked_client_id: client.id }));
+        }
+      })
+      .catch((err) => console.error("Failed to resolve lead contact for appointment:", err?.message));
+    return () => { cancelled = true; };
+  }, [open, event?.id, event?.linked_client_id, event?.lead_id]);
 
   const selectedProject = useMemo(() => projects.find((project) => project.id === form.linked_project_id), [form.linked_project_id, projects]);
   const peopleOptions = useMemo(() => buildPeopleOptions(clients, projects), [clients, projects]);

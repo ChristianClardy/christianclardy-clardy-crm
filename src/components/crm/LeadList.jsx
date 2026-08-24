@@ -15,7 +15,7 @@ import LeadFormDialog from "@/components/crm/LeadFormDialog";
 import LostReasonDialog from "@/components/crm/LostReasonDialog";
 import { cn } from "@/lib/utils";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
-import { setLeadStatus, markLeadLost } from "@/lib/leadConversion";
+import { setLeadStatus, markLeadLost, ensureContactForLead } from "@/lib/leadConversion";
 import { DEAD_LEAD_STATUSES } from "@/lib/leadStages";
 
 // ─── Column definitions ───────────────────────────────────────────────────────
@@ -530,6 +530,10 @@ export default function LeadList({ archived = false }) {
     setSchedulingAppointment(true);
     try {
       const endTime = addMinutes(time, 60);
+      // Ensure the lead has a linked contact before booking so the
+      // appointment's "Linked Person / Customer" always resolves to who it
+      // was actually created for, instead of being left blank.
+      const client = await ensureContactForLead(lead);
       await base44.entities.CalendarEvent.create({
         title: `${lead.full_name} - Design Appointment`,
         start_datetime: `${date}T${time}:00`,
@@ -538,7 +542,7 @@ export default function LeadList({ archived = false }) {
         status: "scheduled",
         assigned_users: lead.assigned_sales_rep ? [lead.assigned_sales_rep] : [],
         visibility: "team",
-        linked_client_id: lead.linked_contact_id || null,
+        linked_client_id: client?.id || null,
         lead_id: lead.id,
       });
     } catch (err) {
