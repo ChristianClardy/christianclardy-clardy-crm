@@ -13,6 +13,7 @@ import WorkflowDrawer from "@/components/prospects/WorkflowDrawer";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
+import { DEAD_LEAD_STATUSES } from "@/lib/leadStages";
 
 const statusColors = {
   draft: "bg-slate-100 text-slate-600",
@@ -157,8 +158,14 @@ export default function Prospects({ initialBucket = "all", showBucketTabs = true
     return Boolean(getPrimaryEstimate(prospect.id) || prospect.lifetime_value > 0);
   };
 
+  // A Client is archived either because its own workflow_stage says so, or
+  // because the Lead it came from was marked Lost/No Decision — otherwise a
+  // lead archived on the Leads board keeps showing as an active Prospect
+  // here, and the two tabs disagree about the same underlying record.
   const isArchivedProspect = (prospect) => {
-    return (prospect.workflow_stage || "") === "dead_lead";
+    if ((prospect.workflow_stage || "") === "dead_lead") return true;
+    const linkedLead = getLinkedLead(prospect);
+    return Boolean(linkedLead && DEAD_LEAD_STATUSES.includes(linkedLead.status));
   };
 
   const getManualBucket = (stage) => {
