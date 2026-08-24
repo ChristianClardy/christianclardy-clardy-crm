@@ -270,13 +270,20 @@ function LeadCard({ lead, draggable, onDragStart }) {
       }}
     >
       <div className="flex items-start justify-between gap-2">
-        <h3 className="text-sm font-semibold text-slate-900 leading-snug">{lead.full_name}</h3>
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          <Badge className={cn("text-[10px]", statusStyles[lead.status] || "bg-slate-100 text-slate-700")}>
+        <h3 className="min-w-0 text-sm font-semibold text-slate-900 leading-snug">{lead.full_name}</h3>
+        <div className="flex w-[45%] shrink-0 flex-col items-end gap-1">
+          <Badge
+            className={cn(
+              "w-full max-w-full whitespace-normal break-words text-center text-[10px] leading-tight",
+              statusStyles[lead.status] || "bg-slate-100 text-slate-700"
+            )}
+          >
             {lead.status || "New Lead"}
           </Badge>
           {lead.is_prospect && (
-            <Badge className="bg-amber-100 text-[10px] text-amber-700">Prospect</Badge>
+            <Badge className="w-full max-w-full whitespace-normal break-words bg-amber-100 text-center text-[10px] leading-tight text-amber-700">
+              Prospect
+            </Badge>
           )}
         </div>
       </div>
