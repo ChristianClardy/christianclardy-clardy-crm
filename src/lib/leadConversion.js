@@ -102,8 +102,15 @@ export async function setLeadStatus(lead, newStatus) {
   const updatedLead = await base44.entities.Lead.update(lead.id, { status: newStatus, is_prospect });
 
   if (newStatus === WON_STATUS) {
-    const client = await ensureContactForLead(updatedLead);
-    await pushWonLeadToPipeline(updatedLead, client);
+    // The lead's own status change already committed above — a failure
+    // pushing it to the Pipeline board must not look like the whole move
+    // failed (moveLeadToColumn reverts the Kanban card on any thrown error).
+    try {
+      const client = await ensureContactForLead(updatedLead);
+      await pushWonLeadToPipeline(updatedLead, client);
+    } catch (err) {
+      console.error("Failed to push won lead to Pipeline board:", err?.message || err);
+    }
   }
 
   return updatedLead;
