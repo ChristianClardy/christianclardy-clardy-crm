@@ -1,5 +1,8 @@
 import { base44 } from "@/api/base44Client";
-import { LEAD_STAGES, PROSPECT_THRESHOLD_STAGE } from "@/lib/leadStages";
+import { LEAD_STAGES, PROSPECT_THRESHOLD_STAGE, WON_STATUS } from "@/lib/leadStages";
+
+// Deal.stage key the Pipeline board (PipelineView.jsx) uses for a won deal.
+const PIPELINE_WON_STAGE = "Closed Won";
 
 function firstMatch(rows) {
   return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
@@ -54,9 +57,39 @@ export async function ensureContactForLead(lead) {
   return client;
 }
 
+// Finds the Deal already pushed to the Pipeline board for this Lead, if any,
+// so winning a lead twice (or a stray re-render) updates it instead of
+// creating a duplicate.
+async function findExistingDealForLead(leadId) {
+  const matches = await base44.entities.Deal.filter({ lead_id: leadId });
+  return Array.isArray(matches) && matches.length > 0 ? matches[0] : null;
+}
+
+// Reaching WON_STATUS pushes the lead's (and its contact-book Client's)
+// details into a Deal on the Pipeline board, landed directly in Closed Won.
+async function pushWonLeadToPipeline(lead, client) {
+  const payload = {
+    title: client?.name || lead.full_name,
+    value: Number(lead.estimated_budget) || 0,
+    stage: PIPELINE_WON_STAGE,
+    probability: 100,
+    assigned_to: lead.assigned_sales_rep || "",
+    lead_id: lead.id,
+    won_at: new Date().toISOString(),
+  };
+
+  const existingDeal = await findExistingDealForLead(lead.id);
+  if (existingDeal) {
+    await base44.entities.Deal.update(existingDeal.id, payload);
+  } else {
+    await base44.entities.Deal.create(payload);
+  }
+}
+
 /**
  * Updates a Lead's pipeline stage. Reaching PROSPECT_THRESHOLD_STAGE or later
  * flips the persistent is_prospect badge on — it never reverts automatically.
+ * Reaching WON_STATUS also pushes the lead into the Pipeline board as a deal.
  */
 export async function setLeadStatus(lead, newStatus) {
   const shouldBeProspect = LEAD_STAGES.indexOf(newStatus) >= LEAD_STAGES.indexOf(PROSPECT_THRESHOLD_STAGE);
@@ -66,7 +99,14 @@ export async function setLeadStatus(lead, newStatus) {
   if (is_prospect && !lead.linked_contact_id) {
     await ensureContactForLead(lead);
   }
-  return await base44.entities.Lead.update(lead.id, { status: newStatus, is_prospect });
+  const updatedLead = await base44.entities.Lead.update(lead.id, { status: newStatus, is_prospect });
+
+  if (newStatus === WON_STATUS) {
+    const client = await ensureContactForLead(updatedLead);
+    await pushWonLeadToPipeline(updatedLead, client);
+  }
+
+  return updatedLead;
 }
 
 /**

@@ -17,7 +17,7 @@ import LostReasonDialog from "@/components/crm/LostReasonDialog";
 import { cn } from "@/lib/utils";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 import { setLeadStatus, markLeadLost, ensureContactForLead } from "@/lib/leadConversion";
-import { DEAD_LEAD_STATUSES } from "@/lib/leadStages";
+import { DEAD_LEAD_STATUSES, WON_STATUS } from "@/lib/leadStages";
 
 // ─── Column definitions ───────────────────────────────────────────────────────
 
@@ -115,8 +115,8 @@ const COLUMNS = [
   {
     key: "won",
     label: "Contract Signed/Deposit Collected (Won)",
-    match: ["Contract Signed/Deposit Collected (Won)"],
-    defaultStatus: "Contract Signed/Deposit Collected (Won)",
+    match: [WON_STATUS],
+    defaultStatus: WON_STATUS,
     color: "bg-emerald-400",
     headerBg: "bg-emerald-50",
     dropBg: "bg-emerald-100",

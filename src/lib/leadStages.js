@@ -19,6 +19,10 @@ export const LEAD_STAGES = [
 // A lead becomes a Prospect the moment it reaches this stage or later.
 export const PROSPECT_THRESHOLD_STAGE = "In Design";
 
+// Reaching this stage wins the deal — leadConversion.js pushes it into the
+// Pipeline board (Deal entity) as a Closed Won deal.
+export const WON_STATUS = "Contract Signed/Deposit Collected (Won)";
+
 export const DEAD_LEAD_STATUSES = ["Lost/No Decision"];
 
 // Fixed reason codes captured when a lead is marked Lost/No Decision, so the
