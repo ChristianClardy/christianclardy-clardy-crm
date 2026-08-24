@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { Link } from "react-router-dom";
 import {
   Plus, Search, Phone, Mail, CalendarDays, UserRound,
-  LayoutList, Columns3, Tag,
+  LayoutList, Columns3, Tag, Printer, MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -148,6 +148,84 @@ const statusStyles = {
 
 const DEAD_STATUSES = DEAD_LEAD_STATUSES;
 
+// ─── Print helpers ────────────────────────────────────────────────────────────
+
+function escapeHtml(value) {
+  if (value === null || value === undefined) return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function formatMoney(value) {
+  if (value === null || value === undefined || value === "") return "";
+  return `$${Number(value).toLocaleString()}`;
+}
+
+// Builds a print-ready HTML document for one or more stage groupings. Used
+// both for printing a single stage (from the stage detail dialog) and the
+// whole pipeline at once (from the toolbar "Print" button).
+function buildPipelinePrintHtml(groups, subtitle) {
+  const sections = groups.map(({ label, leads }) => {
+    const rows = leads.map((lead) => `
+      <tr>
+        <td>${escapeHtml(lead.full_name)}</td>
+        <td>${escapeHtml(lead.status)}</td>
+        <td>${escapeHtml(lead.phone)}</td>
+        <td>${escapeHtml(lead.email)}</td>
+        <td>${escapeHtml(lead.address)}</td>
+        <td>${escapeHtml(lead.assigned_sales_rep)}</td>
+        <td>${escapeHtml(lead.project_type)}</td>
+        <td>${formatMoney(lead.estimated_budget)}</td>
+        <td>${escapeHtml(lead.follow_up_date)}</td>
+        <td>${escapeHtml(lead.lead_source)}</td>
+        <td>${escapeHtml(lead.next_action)}</td>
+        <td>${escapeHtml(lead.project_description)}</td>
+        <td>${escapeHtml(lead.notes)}</td>
+      </tr>`).join("");
+
+    return `
+      <h2>${escapeHtml(label)} <span class="count">(${leads.length})</span></h2>
+      ${leads.length
+        ? `<table><thead><tr>
+            <th>Name</th><th>Status</th><th>Phone</th><th>Email</th><th>Address</th>
+            <th>Rep</th><th>Project Type</th><th>Budget</th><th>Follow-up</th>
+            <th>Source</th><th>Next Action</th><th>Description</th><th>Notes</th>
+          </tr></thead><tbody>${rows}</tbody></table>`
+        : `<p class="empty">No leads in this stage.</p>`}
+    `;
+  }).join("");
+
+  return `<html><head><title>Pipeline${subtitle ? ` - ${escapeHtml(subtitle)}` : ""}</title>
+    <style>
+      body { font-family: Arial, sans-serif; font-size: 11px; color: #222; margin: 24px; }
+      h1 { font-size: 18px; margin-bottom: 4px; color: #1e293b; }
+      .meta { font-size: 11px; color: #64748b; margin-bottom: 20px; }
+      h2 { font-size: 13px; margin: 20px 0 8px; color: #1e293b; border-bottom: 2px solid #1e293b; padding-bottom: 4px; }
+      .count { font-weight: normal; color: #64748b; font-size: 11px; }
+      table { border-collapse: collapse; width: 100%; margin-bottom: 8px; }
+      th { background: #1e293b; color: #fff; padding: 5px 8px; text-align: left; font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; }
+      td { padding: 5px 8px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+      .empty { color: #94a3b8; font-style: italic; margin-bottom: 8px; }
+      @media print { @page { size: landscape; margin: 1cm; } h2 { page-break-after: avoid; } tr { page-break-inside: avoid; } }
+    </style></head>
+    <body>
+      <h1>Sales Pipeline</h1>
+      <div class="meta">Printed ${escapeHtml(new Date().toLocaleString())}${subtitle ? ` · ${escapeHtml(subtitle)}` : ""}</div>
+      ${sections}
+    </body></html>`;
+}
+
+function openPrintWindow(html) {
+  const win = window.open("", "_blank");
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 400);
+}
+
 // ─── Lead card (shared by both views) ────────────────────────────────────────
 
 function LeadCard({ lead, draggable, onDragStart }) {
@@ -217,13 +295,22 @@ function LeadCard({ lead, draggable, onDragStart }) {
 
 // ─── Kanban column ────────────────────────────────────────────────────────────
 
-function KanbanColumn({ column, leads, onDrop, onDragStart, onDragOver, draggingOver }) {
+function KanbanColumn({ column, leads, onDrop, onDragStart, onDragOver, draggingOver, onHeaderClick }) {
   const isOver = draggingOver === column.key;
 
   return (
     <div className="flex flex-col min-w-[220px] w-[220px] shrink-0 max-h-[calc(100vh-320px)]">
-      {/* Header */}
-      <div className={cn("rounded-xl px-3 py-2 mb-2 flex items-center justify-between shrink-0", column.headerBg)}>
+      {/* Header — click to see the full stage detail/print view */}
+      <button
+        type="button"
+        onClick={() => onHeaderClick(column)}
+        title={`View all ${column.label} leads`}
+        className={cn(
+          "rounded-xl px-3 py-2 mb-2 flex items-center justify-between shrink-0 transition-colors",
+          "hover:brightness-95 cursor-pointer",
+          column.headerBg
+        )}
+      >
         <div className="flex items-center gap-2">
           <div className={cn("w-2 h-2 rounded-full", column.color)} />
           <span className="text-xs font-bold uppercase tracking-wider text-slate-600">{column.label}</span>
@@ -231,7 +318,7 @@ function KanbanColumn({ column, leads, onDrop, onDragStart, onDragOver, dragging
         <span className="text-xs font-bold text-slate-500 bg-white rounded-full px-1.5 py-0.5 border border-slate-200">
           {leads.length}
         </span>
-      </div>
+      </button>
 
       {/* Drop zone — scrolls internally so a long column doesn't stretch the
           whole page and push the board's horizontal scrollbar out of view */}
@@ -260,6 +347,75 @@ function KanbanColumn({ column, leads, onDrop, onDragStart, onDragOver, dragging
         )}
       </div>
     </div>
+  );
+}
+
+// ─── Stage detail dialog ────────────────────────────────────────────────────
+
+function StageDetailDialog({ column, leads, onClose }) {
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <div className="flex items-center justify-between gap-3 pr-6">
+            <div className="flex items-center gap-2">
+              <div className={cn("w-2.5 h-2.5 rounded-full shrink-0", column.color)} />
+              <DialogTitle>{column.label}</DialogTitle>
+              <Badge className="bg-slate-100 text-slate-600">{leads.length}</Badge>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openPrintWindow(buildPipelinePrintHtml([{ label: column.label, leads }]))}
+            >
+              <Printer className="mr-1.5 h-3.5 w-3.5" /> Print Stage
+            </Button>
+          </div>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto -mx-1 px-1 space-y-2">
+          {leads.map((lead) => (
+            <Link
+              key={lead.id}
+              to={`/LeadDetail?id=${lead.id}`}
+              className="block rounded-xl border border-slate-200 p-3 hover:border-slate-300 hover:bg-slate-50 transition-colors"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-semibold text-slate-900">{lead.full_name}</p>
+                {lead.estimated_budget != null && lead.estimated_budget !== "" && (
+                  <p className="shrink-0 text-xs font-semibold text-emerald-700">${Number(lead.estimated_budget).toLocaleString()}</p>
+                )}
+              </div>
+
+              {lead.project_type && <p className="mt-0.5 text-xs text-slate-500">{lead.project_type}</p>}
+
+              <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-500">
+                {lead.phone && <div className="flex items-center gap-1.5"><Phone className="h-3 w-3 shrink-0" />{lead.phone}</div>}
+                {lead.email && <div className="flex items-center gap-1.5 truncate"><Mail className="h-3 w-3 shrink-0" /><span className="truncate">{lead.email}</span></div>}
+                {lead.address && <div className="col-span-2 flex items-center gap-1.5 truncate"><MapPin className="h-3 w-3 shrink-0" /><span className="truncate">{lead.address}</span></div>}
+                {lead.assigned_sales_rep && <div className="flex items-center gap-1.5"><UserRound className="h-3 w-3 shrink-0" />{lead.assigned_sales_rep}</div>}
+                {lead.follow_up_date && <div className="flex items-center gap-1.5"><CalendarDays className="h-3 w-3 shrink-0" />{lead.follow_up_date}</div>}
+                {lead.lead_source && <div className="flex items-center gap-1.5"><Tag className="h-3 w-3 shrink-0" />{lead.lead_source}</div>}
+              </div>
+
+              {lead.next_action && (
+                <p className="mt-2 text-xs text-slate-600"><span className="font-semibold">Next:</span> {lead.next_action}</p>
+              )}
+              {lead.project_description && (
+                <p className="mt-1 text-xs text-slate-500">{lead.project_description}</p>
+              )}
+              {lead.notes && (
+                <p className="mt-1 text-xs text-slate-400 italic">{lead.notes}</p>
+              )}
+            </Link>
+          ))}
+
+          {leads.length === 0 && (
+            <div className="py-10 text-center text-sm text-slate-400">No leads in this stage.</div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -322,6 +478,7 @@ export default function LeadList({ archived = false }) {
   const [lostReasonPrompt, setLostReasonPrompt] = useState(null); // lead | null
   const [savingLostReason, setSavingLostReason] = useState(false);
   const [reasonFilter, setReasonFilter] = useState("all");
+  const [stageDetailKey, setStageDetailKey] = useState(null); // column key | null
   const dragLeadRef = useRef(null);
 
   const loadLeads = async () => {
@@ -554,6 +711,20 @@ export default function LeadList({ archived = false }) {
     await moveLeadToColumn(lead, column);
   };
 
+  // Prints the whole board grouped by stage in kanban view, or the flat
+  // filtered list (list view / archived tab) as a single group.
+  const handlePrintPipeline = () => {
+    if (view === "kanban" && !archived) {
+      openPrintWindow(
+        buildPipelinePrintHtml(COLUMNS.map((col) => ({ label: col.label, leads: columnLeads[col.key] || [] })))
+      );
+    } else {
+      openPrintWindow(
+        buildPipelinePrintHtml([{ label: archived ? "Archived Leads" : "Leads", leads: filteredLeads }])
+      );
+    }
+  };
+
   const handleCancelLostReason = () => setLostReasonPrompt(null);
 
   const handleSaveLostReason = async ({ reason, notes }) => {
@@ -678,6 +849,11 @@ export default function LeadList({ archived = false }) {
             </div>
           )}
 
+          <Button variant="outline" onClick={handlePrintPipeline}>
+            <Printer className="mr-2 h-4 w-4" />
+            Print
+          </Button>
+
           {!archived && (
             <Button onClick={() => setDialogOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
@@ -704,6 +880,7 @@ export default function LeadList({ archived = false }) {
                 onDragStart={handleDragStart}
                 onDragOver={(e) => handleDragOver(e, col.key)}
                 onDrop={handleDrop}
+                onHeaderClick={(c) => setStageDetailKey(c.key)}
               />
             ))}
           </div>
@@ -744,6 +921,14 @@ export default function LeadList({ archived = false }) {
           saving={savingLostReason}
           onCancel={handleCancelLostReason}
           onSave={handleSaveLostReason}
+        />
+      )}
+
+      {stageDetailKey && (
+        <StageDetailDialog
+          column={COLUMNS.find((c) => c.key === stageDetailKey)}
+          leads={columnLeads[stageDetailKey] || []}
+          onClose={() => setStageDetailKey(null)}
         />
       )}
     </div>
