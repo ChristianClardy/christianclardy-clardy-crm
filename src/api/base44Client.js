@@ -79,7 +79,7 @@ const CLIENT_ONLY_FIELDS = new Set(['client_name', 'follow_up_end_time']);
 const TABLE_OPTIONAL_FIELDS = {
   lead_follow_ups: new Set(['title','details','assigned_to','lead_name','follow_up_type','follow_up_date','follow_up_time','status']),
   estimates: new Set(['section_margins','is_locked','locked_at','locked_by','amendment_of','amendment_number']),
-  leads: new Set(['property_address', 'estimated_budget']),
+  leads: new Set(['property_address', 'estimated_budget', 'lost_reason', 'lost_reason_notes']),
   payments: new Set(['acculynx_job_id','acculynx_payment_id','payment_id','source','collected_to_date','remaining_balance']),
   projects: new Set(['collected_to_date','remaining_balance','linked_estimate_ids']),
   draws: new Set(['retainage_percent','retainage_held','retainage_released','percent_of_contract','linked_task_id']),

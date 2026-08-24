@@ -10,7 +10,8 @@ import LeadFollowUpPanel from "@/components/crm/LeadFollowUpPanel";
 import ContactHistoryPanel from "@/components/crm/ContactHistoryPanel";
 import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
 import AppointmentsPanel from "@/components/scheduling/AppointmentsPanel";
-import { promoteLeadToProspect, setLeadStatus } from "@/lib/leadConversion";
+import LostReasonDialog from "@/components/crm/LostReasonDialog";
+import { promoteLeadToProspect, setLeadStatus, markLeadLost } from "@/lib/leadConversion";
 import { LEAD_STAGES } from "@/lib/leadStages";
 
 const funnelSteps = LEAD_STAGES;
@@ -24,6 +25,8 @@ export default function LeadDetail() {
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
   const [converting, setConverting] = useState(false);
+  const [lostReasonOpen, setLostReasonOpen] = useState(false);
+  const [savingLostReason, setSavingLostReason] = useState(false);
 
   const loadData = async () => {
     if (!leadId) return;
@@ -81,6 +84,30 @@ export default function LeadDetail() {
     loadData();
   };
 
+  const handleStatusChange = (value) => {
+    // Lost/No Decision needs a reason code, so pause on a dialog instead of
+    // committing the status change immediately.
+    if (value === "Lost/No Decision") {
+      setLostReasonOpen(true);
+      return;
+    }
+    updateStatus(value);
+  };
+
+  const handleSaveLostReason = async ({ reason, notes }) => {
+    setSavingLostReason(true);
+    try {
+      await markLeadLost(lead, { reason, notes });
+      await loadData();
+      setLostReasonOpen(false);
+    } catch (err) {
+      console.error("Failed to save lost reason:", err?.message);
+      alert("Could not save the lost reason. Please try again.");
+    } finally {
+      setSavingLostReason(false);
+    }
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center py-20"><div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-slate-800" /></div>;
   }
@@ -126,7 +153,7 @@ export default function LeadDetail() {
               </Button>
             </div>
             <p className="text-sm font-medium text-slate-600">Current stage</p>
-            <Select value={lead.status || "New Lead"} onValueChange={updateStatus}>
+            <Select value={lead.status || "New Lead"} onValueChange={handleStatusChange}>
               <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {funnelSteps.map((step) => <SelectItem key={step} value={step}>{step}</SelectItem>)}
@@ -147,6 +174,23 @@ export default function LeadDetail() {
           })}
         </div>
       </div>
+
+      {lead.status === "Lost/No Decision" && (
+        <div className="rounded-3xl border border-rose-200 bg-rose-50 p-5 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-rose-700">Lost reason</p>
+              <p className="mt-2 text-lg font-semibold text-rose-900">{lead.lost_reason || "No reason set"}</p>
+              {lead.lost_reason_notes && (
+                <p className="mt-1 whitespace-pre-wrap text-sm text-rose-700/80">{lead.lost_reason_notes}</p>
+              )}
+            </div>
+            <Button variant="outline" onClick={() => setLostReasonOpen(true)}>
+              <Pencil className="mr-2 h-4 w-4" /> {lead.lost_reason ? "Edit reason" : "Set reason"}
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-4">
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -204,6 +248,15 @@ export default function LeadDetail() {
       />
 
       <LeadFormDialog open={editOpen} onOpenChange={setEditOpen} lead={lead} onCreated={loadData} />
+
+      {lostReasonOpen && (
+        <LostReasonDialog
+          lead={lead}
+          saving={savingLostReason}
+          onCancel={() => setLostReasonOpen(false)}
+          onSave={handleSaveLostReason}
+        />
+      )}
     </div>
   );
 }

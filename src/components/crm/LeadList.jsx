@@ -3,17 +3,19 @@ import { base44 } from "@/api/base44Client";
 import { Link } from "react-router-dom";
 import {
   Plus, Search, Phone, Mail, CalendarDays, UserRound,
-  LayoutList, Columns3,
+  LayoutList, Columns3, Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import LeadFormDialog from "@/components/crm/LeadFormDialog";
+import LostReasonDialog from "@/components/crm/LostReasonDialog";
 import { cn } from "@/lib/utils";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
-import { setLeadStatus } from "@/lib/leadConversion";
+import { setLeadStatus, markLeadLost } from "@/lib/leadConversion";
 import { DEAD_LEAD_STATUSES } from "@/lib/leadStages";
 
 // ─── Column definitions ───────────────────────────────────────────────────────
@@ -192,6 +194,13 @@ function LeadCard({ lead, draggable, onDragStart }) {
         </div>
       )}
 
+      {lead.status === "Lost/No Decision" && (
+        <div className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-rose-700">
+          <Tag className="h-3 w-3" />
+          {lead.lost_reason || "No reason set"}
+        </div>
+      )}
+
       <div className="mt-2.5 space-y-1 text-xs text-slate-400">
         {lead.phone && <div className="flex items-center gap-1.5"><Phone className="h-3 w-3" />{lead.phone}</div>}
         {lead.email && <div className="flex items-center gap-1.5 truncate"><Mail className="h-3 w-3 shrink-0" /><span className="truncate">{lead.email}</span></div>}
@@ -310,6 +319,9 @@ export default function LeadList({ archived = false }) {
   const [draggingOver, setDraggingOver] = useState(null);
   const [appointmentPrompt, setAppointmentPrompt] = useState(null); // { lead, column } | null
   const [schedulingAppointment, setSchedulingAppointment] = useState(false);
+  const [lostReasonPrompt, setLostReasonPrompt] = useState(null); // lead | null
+  const [savingLostReason, setSavingLostReason] = useState(false);
+  const [reasonFilter, setReasonFilter] = useState("all");
   const dragLeadRef = useRef(null);
 
   const loadLeads = async () => {
@@ -392,13 +404,29 @@ export default function LeadList({ archived = false }) {
     ), [scopedLeads, archived]);
 
   const filteredLeads = useMemo(() => visibleLeads.filter((lead) => {
+    if (archived && reasonFilter !== "all") {
+      const leadReason = lead.lost_reason || "Unset";
+      if (leadReason !== reasonFilter) return false;
+    }
     const value = search.toLowerCase();
     return !value ||
       (lead.full_name || "").toLowerCase().includes(value) ||
       (lead.email || "").toLowerCase().includes(value) ||
       (lead.phone || "").toLowerCase().includes(value) ||
       (lead.project_description || "").toLowerCase().includes(value);
-  }), [visibleLeads, search]);
+  }), [visibleLeads, search, archived, reasonFilter]);
+
+  // Lost-reason breakdown, shown on the archived tab so lost leads can be
+  // reviewed and filtered by why the deal was lost.
+  const reasonCounts = useMemo(() => {
+    if (!archived) return [];
+    const counts = {};
+    for (const lead of visibleLeads) {
+      const key = lead.lost_reason || "Unset";
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [visibleLeads, archived]);
 
   // Funnel summary counts for the header stats
   const funnelCounts = useMemo(() => [
@@ -474,6 +502,13 @@ export default function LeadList({ archived = false }) {
       return;
     }
 
+    // Moving into "Lost/No Decision" requires a reason code, so pause here
+    // instead of committing the status change immediately.
+    if (column.key === "lost") {
+      setLostReasonPrompt(lead);
+      return;
+    }
+
     await moveLeadToColumn(lead, column);
   };
 
@@ -515,6 +550,28 @@ export default function LeadList({ archived = false }) {
     await moveLeadToColumn(lead, column);
   };
 
+  const handleCancelLostReason = () => setLostReasonPrompt(null);
+
+  const handleSaveLostReason = async ({ reason, notes }) => {
+    const lead = lostReasonPrompt;
+    if (!lead) return;
+    setSavingLostReason(true);
+    setLeads((prev) =>
+      prev.map((l) => l.id === lead.id ? { ...l, status: "Lost/No Decision", lost_reason: reason, lost_reason_notes: notes } : l)
+    );
+    try {
+      await markLeadLost(lead, { reason, notes });
+    } catch (err) {
+      console.error("Failed to mark lead lost:", err?.message);
+      setLeads((prev) =>
+        prev.map((l) => l.id === lead.id ? { ...l, status: lead.status, lost_reason: lead.lost_reason, lost_reason_notes: lead.lost_reason_notes } : l)
+      );
+    } finally {
+      setSavingLostReason(false);
+    }
+    setLostReasonPrompt(null);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -545,6 +602,28 @@ export default function LeadList({ archived = false }) {
         </>
       )}
 
+      {/* Lost-reason breakdown */}
+      {archived && reasonCounts.length > 0 && (
+        <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+          {reasonCounts.map(([reason, count]) => (
+            <button
+              key={reason}
+              type="button"
+              onClick={() => setReasonFilter((current) => current === reason ? "all" : reason)}
+              className={cn(
+                "rounded-2xl border p-4 text-left shadow-sm transition-colors",
+                reasonFilter === reason
+                  ? "border-rose-400 bg-rose-50"
+                  : "border-slate-200 bg-white hover:border-slate-300"
+              )}
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{reason}</p>
+              <p className="mt-2 text-3xl font-bold text-slate-900">{count}</p>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="relative w-full sm:max-w-md">
@@ -558,6 +637,15 @@ export default function LeadList({ archived = false }) {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {archived && reasonCounts.length > 0 && (
+            <Select value={reasonFilter} onValueChange={setReasonFilter}>
+              <SelectTrigger className="w-[200px]"><SelectValue placeholder="All reasons" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All reasons</SelectItem>
+                {reasonCounts.map(([reason]) => <SelectItem key={reason} value={reason}>{reason}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
           {/* View toggle */}
           {!archived && (
             <div className="flex rounded-lg border border-slate-200 overflow-hidden">
@@ -643,6 +731,15 @@ export default function LeadList({ archived = false }) {
           saving={schedulingAppointment}
           onSkip={handleSkipAppointment}
           onSave={handleSaveAppointment}
+        />
+      )}
+
+      {lostReasonPrompt && (
+        <LostReasonDialog
+          lead={lostReasonPrompt}
+          saving={savingLostReason}
+          onCancel={handleCancelLostReason}
+          onSave={handleSaveLostReason}
         />
       )}
     </div>

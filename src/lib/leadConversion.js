@@ -71,6 +71,19 @@ export async function setLeadStatus(lead, newStatus) {
 }
 
 /**
+ * Marks a Lead Lost/No Decision along with a reason code (and optional free
+ * text detail) for why it was lost. Also used to edit the reason on a lead
+ * that's already in this stage — setLeadStatus is a no-op status-wise then,
+ * but harmless to re-run.
+ */
+export async function markLeadLost(lead, { reason = "", notes = "" } = {}) {
+  await setLeadStatus(lead, "Lost/No Decision");
+  const payload = { lost_reason: reason || null, lost_reason_notes: notes || null };
+  await base44.entities.Lead.update(lead.id, payload);
+  return { ...lead, status: "Lost/No Decision", is_prospect: true, ...payload };
+}
+
+/**
  * Manually promotes a Lead to Prospect (e.g. before it reaches the normal
  * threshold stage). Ensures its contact-book record exists so billing/project
  * flows have a Client to attach to, then flags the Lead itself as a prospect.

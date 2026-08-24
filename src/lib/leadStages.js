@@ -20,3 +20,17 @@ export const LEAD_STAGES = [
 export const PROSPECT_THRESHOLD_STAGE = "In Design";
 
 export const DEAD_LEAD_STATUSES = ["Lost/No Decision"];
+
+// Fixed reason codes captured when a lead is marked Lost/No Decision, so the
+// archived pipeline can be filtered and reported on by why deals were lost.
+export const LOST_REASON_CODES = [
+  "Price too high",
+  "Went with a competitor",
+  "Chose to DIY",
+  "Timing not right",
+  "Unresponsive / went dark",
+  "Budget mismatch",
+  "Outside service area",
+  "Project cancelled",
+  "Other",
+];
