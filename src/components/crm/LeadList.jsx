@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { Link } from "react-router-dom";
+import { formatDistanceToNowStrict } from "date-fns";
 import {
   Plus, Search, Phone, Mail, CalendarDays, UserRound,
-  LayoutList, Columns3, Tag, Printer, MapPin,
+  LayoutList, Columns3, Tag, Printer, MapPin, Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -163,6 +164,15 @@ function formatMoney(value) {
   return `$${Number(value).toLocaleString()}`;
 }
 
+// How long a lead has sat in its current pipeline stage. Falls back to
+// created/updated date if status_changed_at isn't available yet (e.g. the
+// 015_lead_status_changed_at migration hasn't been run against this DB).
+function timeInStage(lead) {
+  const since = lead.status_changed_at || lead.updated_date || lead.created_date;
+  if (!since) return null;
+  return formatDistanceToNowStrict(new Date(since));
+}
+
 // Builds a print-ready HTML document for one or more stage groupings. Used
 // both for printing a single stage (from the stage detail dialog) and the
 // whole pipeline at once (from the toolbar "Print" button).
@@ -262,6 +272,13 @@ function LeadCard({ lead, draggable, onDragStart }) {
           <p className="text-xs font-semibold text-emerald-700">${Number(lead.estimated_budget).toLocaleString()}</p>
         )}
       </div>
+
+      {timeInStage(lead) && (
+        <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-slate-400">
+          <Clock className="h-3 w-3" />
+          {timeInStage(lead)} in stage
+        </div>
+      )}
 
       {["Appointment Scheduled", "Site Visit Complete", "Design Appointment Scheduled"].includes(lead.status) && lead._appointmentDate && (
         <div className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-purple-700">
