@@ -382,6 +382,14 @@ export default function CalendarEventDialog({ open, onOpenChange, event, initial
                     Open Project File
                   </Button>
                 )}
+                {event.lead_id && (
+                  <Button type="button" variant="outline" onClick={() => {
+                    onOpenChange(false);
+                    navigate(createPageUrl(`LeadDetail?id=${event.lead_id}`));
+                  }}>
+                    Open Lead File
+                  </Button>
+                )}
               </div>
               <NextStepsPanel
                 title="Follow-Up / Next Steps"

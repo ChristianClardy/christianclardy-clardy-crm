@@ -14,6 +14,7 @@ export default function AppointmentsPanel({
   title = "Appointments",
   linkedClientId = "",
   linkedProjectId = "",
+  linkedLeadId = "",
   defaultLocation = "",
 }) {
   const [appointments, setAppointments] = useState([]);
@@ -28,9 +29,11 @@ export default function AppointmentsPanel({
   const loadData = async () => {
     const query = linkedProjectId
       ? { linked_project_id: linkedProjectId }
-      : linkedClientId
-        ? { linked_client_id: linkedClientId }
-        : null;
+      : linkedLeadId
+        ? { lead_id: linkedLeadId }
+        : linkedClientId
+          ? { linked_client_id: linkedClientId }
+          : null;
 
     if (!query) {
       setAppointments([]);
@@ -56,7 +59,7 @@ export default function AppointmentsPanel({
     loadData();
     const unsubscribe = base44.entities.CalendarEvent.subscribe(() => loadData());
     return () => unsubscribe();
-  }, [linkedClientId, linkedProjectId]);
+  }, [linkedClientId, linkedProjectId, linkedLeadId]);
 
   const projectMap = useMemo(() => Object.fromEntries(projects.map((project) => [project.id, project])), [projects]);
   const clientMap = useMemo(() => Object.fromEntries(clients.map((client) => [client.id, client])), [clients]);
@@ -67,6 +70,7 @@ export default function AppointmentsPanel({
     setDefaultValues({
       linked_client_id: linkedClientId || "",
       linked_project_id: linkedProjectId || "",
+      lead_id: linkedLeadId || undefined,
       location: defaultLocation || "",
       title: linkedClient?.name ? `${linkedClient.name} - Appointment` : "",
       event_type: "meeting",

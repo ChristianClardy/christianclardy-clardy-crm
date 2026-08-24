@@ -9,6 +9,7 @@ import LeadFormDialog from "@/components/crm/LeadFormDialog";
 import LeadFollowUpPanel from "@/components/crm/LeadFollowUpPanel";
 import ContactHistoryPanel from "@/components/crm/ContactHistoryPanel";
 import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
+import AppointmentsPanel from "@/components/scheduling/AppointmentsPanel";
 import { promoteLeadToProspect, setLeadStatus } from "@/lib/leadConversion";
 import { LEAD_STAGES } from "@/lib/leadStages";
 
@@ -183,6 +184,13 @@ export default function LeadDetail() {
           </div>
         </div>
       )}
+
+      <AppointmentsPanel
+        title="Appointments"
+        linkedLeadId={lead.id}
+        linkedClientId={lead.linked_contact_id || ""}
+        defaultLocation={lead.property_address || ""}
+      />
 
       <LeadFollowUpPanel lead={lead} followUps={followUps} onRefresh={loadData} />
       <NextStepsPanel title="Lead Tasks / Next Steps" linkedClientId={lead.linked_contact_id || lead.id} />
