@@ -481,6 +481,15 @@ export default function LeadList({ archived = false }) {
   const [stageDetailKey, setStageDetailKey] = useState(null); // column key | null
   const dragLeadRef = useRef(null);
 
+  // Deep-link support: the Dashboard's "Pipeline by Stage" rows link to
+  // /CRM?tab=...&stage=<status>, so open that stage's detail dialog on load.
+  useEffect(() => {
+    const stageParam = new URLSearchParams(window.location.search).get("stage");
+    if (!stageParam) return;
+    const column = COLUMNS.find((c) => c.defaultStatus === stageParam);
+    if (column) setStageDetailKey(column.key);
+  }, []);
+
   const loadLeads = async () => {
     try {
       const data = await base44.entities.Lead.list("-created_date", 500);

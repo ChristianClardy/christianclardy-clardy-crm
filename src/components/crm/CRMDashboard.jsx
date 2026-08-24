@@ -85,7 +85,12 @@ function PipelineChart({ leads }) {
   return (
     <div className="space-y-3">
       {stages.map(({ stage, count, value }) => (
-        <div key={stage}>
+        <Link
+          key={stage}
+          to={`/CRM?tab=${stage === LOST_STATUS ? "archived" : "leads"}&stage=${encodeURIComponent(stage)}`}
+          className="block rounded-lg -mx-1.5 px-1.5 py-0.5 transition-colors hover:bg-slate-50"
+          title={`View all ${stage} leads`}
+        >
           <div className="mb-1 flex items-center justify-between text-xs">
             <span className="font-medium text-slate-700">{stage}</span>
             <span className="text-slate-400">{count} lead{count !== 1 ? "s" : ""} · {fmt(value)}</span>
@@ -96,7 +101,7 @@ function PipelineChart({ leads }) {
               style={{ width: `${count > 0 ? Math.max((count / maxCount) * 100, 4) : 0}%` }}
             />
           </div>
-        </div>
+        </Link>
       ))}
     </div>
   );
