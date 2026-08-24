@@ -66,8 +66,7 @@ export async function setLeadStatus(lead, newStatus) {
   if (is_prospect && !lead.linked_contact_id) {
     await ensureContactForLead(lead);
   }
-  await base44.entities.Lead.update(lead.id, { status: newStatus, is_prospect });
-  return { ...lead, status: newStatus, is_prospect };
+  return await base44.entities.Lead.update(lead.id, { status: newStatus, is_prospect });
 }
 
 /**
@@ -79,8 +78,7 @@ export async function setLeadStatus(lead, newStatus) {
 export async function markLeadLost(lead, { reason = "", notes = "" } = {}) {
   await setLeadStatus(lead, "Lost/No Decision");
   const payload = { lost_reason: reason || null, lost_reason_notes: notes || null };
-  await base44.entities.Lead.update(lead.id, payload);
-  return { ...lead, status: "Lost/No Decision", is_prospect: true, ...payload };
+  return await base44.entities.Lead.update(lead.id, payload);
 }
 
 /**

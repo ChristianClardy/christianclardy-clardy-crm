@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { Link } from "react-router-dom";
-import { formatDistanceToNowStrict } from "date-fns";
+import { formatDistanceToNowStrict, differenceInCalendarDays } from "date-fns";
 import {
   Plus, Search, Phone, Mail, CalendarDays, UserRound,
   LayoutList, Columns3, Tag, Printer, MapPin, Clock,
@@ -173,6 +173,21 @@ function timeInStage(lead) {
   return formatDistanceToNowStrict(new Date(since));
 }
 
+// Number of full days in the current stage, used to color the badge by urgency.
+function daysInStageCount(lead) {
+  const since = lead.status_changed_at || lead.updated_date || lead.created_date;
+  if (!since) return null;
+  return differenceInCalendarDays(new Date(), new Date(since));
+}
+
+// Fresh leads get a neutral pill; leads sitting a while get progressively louder.
+function stageAgeStyles(days) {
+  if (days === null) return "";
+  if (days >= 14) return "bg-rose-100 text-rose-700 ring-1 ring-rose-200";
+  if (days >= 7) return "bg-amber-100 text-amber-700 ring-1 ring-amber-200";
+  return "bg-indigo-100 text-indigo-700 ring-1 ring-indigo-200";
+}
+
 // Builds a print-ready HTML document for one or more stage groupings. Used
 // both for printing a single stage (from the stage detail dialog) and the
 // whole pipeline at once (from the toolbar "Print" button).
@@ -274,7 +289,12 @@ function LeadCard({ lead, draggable, onDragStart }) {
       </div>
 
       {timeInStage(lead) && (
-        <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-slate-400">
+        <div
+          className={cn(
+            "mt-1.5 inline-flex w-fit items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-bold",
+            stageAgeStyles(daysInStageCount(lead))
+          )}
+        >
           <Clock className="h-3 w-3" />
           {timeInStage(lead)} in stage
         </div>
@@ -658,7 +678,13 @@ export default function LeadList({ archived = false }) {
     );
 
     try {
-      await setLeadStatus(lead, column.defaultStatus);
+      const updated = await setLeadStatus(lead, column.defaultStatus);
+      // Pick up status_changed_at (and anything else the DB trigger touched)
+      // so "days in stage" reflects the move immediately instead of only
+      // after the next full reload.
+      setLeads((prev) =>
+        prev.map((l) => l.id === lead.id ? { ...l, ...updated } : l)
+      );
     } catch {
       // Revert on failure
       setLeads((prev) =>
@@ -761,7 +787,10 @@ export default function LeadList({ archived = false }) {
       prev.map((l) => l.id === lead.id ? { ...l, status: "Lost/No Decision", lost_reason: reason, lost_reason_notes: notes } : l)
     );
     try {
-      await markLeadLost(lead, { reason, notes });
+      const updated = await markLeadLost(lead, { reason, notes });
+      setLeads((prev) =>
+        prev.map((l) => l.id === lead.id ? { ...l, ...updated } : l)
+      );
     } catch (err) {
       console.error("Failed to mark lead lost:", err?.message);
       setLeads((prev) =>
