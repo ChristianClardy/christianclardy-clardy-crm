@@ -11,6 +11,8 @@ function blankMergeField() {
   return { id: Math.random().toString(36).slice(2, 10), anchor: "", source: MERGE_SOURCES[0].value };
 }
 
+const MERGE_GROUPS = [...new Set(MERGE_SOURCES.map((s) => s.group || "Other"))];
+
 const EMPTY_TEMPLATE = {
   name: "",
   company_id: "",
@@ -126,7 +128,7 @@ export default function ContractTemplatesTab() {
           <p className="text-xs text-slate-500 mt-0.5">
             Upload a contract file (Word/PDF) with tokens like {"{{client_name}}"} typed where they should appear,
             then map each token to a merge source below. DocuSign fills them in as locked text when a deal's Contracts
-            tab sends the package.
+            tab sends the package. See the <span className="font-medium text-slate-600">Merge Fields</span> tab for the full list of what each source pulls in.
           </p>
         </div>
         <Button onClick={openNew} size="sm" className="bg-gradient-to-r from-amber-500 to-orange-500 text-white gap-1">
@@ -230,7 +232,13 @@ export default function ContractTemplatesTab() {
                       onChange={(e) => updateMergeField(m.id, { source: e.target.value })}
                       className="h-8 text-xs border border-slate-200 rounded-md px-1.5 outline-none focus:ring-1 focus:ring-amber-400 bg-white flex-1 min-w-0"
                     >
-                      {MERGE_SOURCES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                      {MERGE_GROUPS.map((group) => (
+                        <optgroup key={group} label={group}>
+                          {MERGE_SOURCES.filter((s) => (s.group || "Other") === group).map((s) => (
+                            <option key={s.value} value={s.value}>{s.label}</option>
+                          ))}
+                        </optgroup>
+                      ))}
                     </select>
                     <button type="button" onClick={() => removeMergeField(m.id)} className="p-1 text-slate-300 hover:text-rose-500 flex-shrink-0">
                       <Trash2 className="w-3.5 h-3.5" />

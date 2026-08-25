@@ -305,6 +305,8 @@ function DealFormDialog({ open, onClose, onSaved, initialData, leads }) {
 // selected Estimates into one DocuSign envelope. Customer info is resolved
 // via deal.lead_id -> leads.linked_contact_id -> clients — a Deal created
 // manually with no lead_id simply has nothing to merge from client.* sources.
+// project.* and estimate.* sources merge from the client's most recent
+// project/estimate (estimate.* prefers whichever estimate is checked below).
 
 function DealContractsTab({ deal, leads }) {
   const { user } = useAuth();
@@ -313,9 +315,11 @@ function DealContractsTab({ deal, leads }) {
   const [loading, setLoading] = useState(true);
   const [client, setClient] = useState(null);
   const [company, setCompany] = useState(null);
+  const [project, setProject] = useState(null);
   const [contractTemplates, setContractTemplates] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [estimates, setEstimates] = useState([]);
+  const [estimateVersion, setEstimateVersion] = useState(null);
 
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [selectedDocIds, setSelectedDocIds] = useState([]);
@@ -340,13 +344,18 @@ function DealContractsTab({ deal, leads }) {
         resolvedClient = matches[0] || null;
       }
       let ests = [];
+      let resolvedProject = null;
       if (resolvedClient?.id) {
-        ests = await base44.entities.Estimate.filter({ client_id: resolvedClient.id }, "-created_date").catch(() => []);
+        [ests, resolvedProject] = await Promise.all([
+          base44.entities.Estimate.filter({ client_id: resolvedClient.id }, "-created_date").catch(() => []),
+          base44.entities.Project.filter({ client_id: resolvedClient.id }, "-created_date").then((rows) => rows?.[0] || null).catch(() => null),
+        ]);
       }
       if (cancelled) return;
       const resolvedCompany = (lead?.company_id && comps.find((c) => c.id === lead.company_id)) || comps[0] || null;
       setClient(resolvedClient);
       setCompany(resolvedCompany);
+      setProject(resolvedProject);
       setContractTemplates((templates || []).filter((t) => t.is_active !== false));
       setDocuments(docs || []);
       setEstimates(ests || []);
@@ -356,8 +365,24 @@ function DealContractsTab({ deal, leads }) {
     return () => { cancelled = true; };
   }, [deal.id, lead?.id]);
 
+  // Merge fields for estimate.* sources use whichever estimate is checked in
+  // the picker below, falling back to the client's most recent estimate.
+  const mergeEstimate = estimates.find((e) => selectedEstimateIds.includes(e.id)) || estimates[0] || null;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!mergeEstimate?.id) { setEstimateVersion(null); return; }
+    (async () => {
+      const versions = await base44.entities.EstimateVersion
+        .filter({ linked_estimate_id: mergeEstimate.id, active_version: true }, "-created_date")
+        .catch(() => []);
+      if (!cancelled) setEstimateVersion(versions?.[0] || null);
+    })();
+    return () => { cancelled = true; };
+  }, [mergeEstimate?.id]);
+
   const selectedTemplate = contractTemplates.find((t) => t.id === selectedTemplateId) || null;
-  const mergeCtx = { deal, client, company };
+  const mergeCtx = { deal, client, company, project, estimate: mergeEstimate, estimateVersion };
   const resolvedMergeFields = (selectedTemplate?.merge_fields || []).map((mf) => ({
     ...mf,
     value: resolveContractMergeValue(mf.source, mergeCtx),
