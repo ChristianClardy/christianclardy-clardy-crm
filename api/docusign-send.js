@@ -1,5 +1,12 @@
 // Creates and sends a DocuSign envelope.
 // Handles token refresh, org-scoped profile loading, and saves envelope to DB.
+//
+// Accepts either the original single-document shape ({ file_url, file_name })
+// or a multi-document "documents" array — used by the Deal Contracts tab to
+// bundle a contract template + attached documents + an estimate PDF into one
+// envelope. Each entry in `documents` may carry its own `merge_fields`
+// ([{ anchor, value }]) — rendered as locked DocuSign anchor-string text tabs
+// so customer/deal info is merged into the document text at send time.
 
 const SUPABASE_URL           = 'https://fneasddxtejasvsojgcu.supabase.co';
 const SERVICE_KEY            = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -67,10 +74,22 @@ module.exports = async function handler(req, res) {
   if (!SERVICE_KEY) return res.status(500).json({ error: 'Server misconfiguration: missing service key.' });
 
   const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-  const { file_url, file_name, signers, organization_id, entity_type, entity_id, sent_by } = body || {};
+  const {
+    file_url, file_name,            // legacy single-document shape (still supported)
+    documents: documentsInput,      // new: [{ file_url, file_name, merge_fields? }]
+    subject,
+    signers, organization_id, entity_type, entity_id, sent_by,
+  } = body || {};
 
-  if (!file_url) return res.status(400).json({ error: 'file_url is required.' });
-  if (!file_name) return res.status(400).json({ error: 'file_name is required.' });
+  const documents = Array.isArray(documentsInput) && documentsInput.length > 0
+    ? documentsInput
+    : (file_url && file_name ? [{ file_url, file_name }] : []);
+
+  if (documents.length === 0) return res.status(400).json({ error: 'file_url/file_name or a non-empty documents array is required.' });
+  for (const d of documents) {
+    if (!d.file_url) return res.status(400).json({ error: 'Each document requires a file_url.' });
+    if (!d.file_name) return res.status(400).json({ error: 'Each document requires a file_name.' });
+  }
   if (!Array.isArray(signers) || signers.length === 0)
     return res.status(400).json({ error: 'At least one signer is required.' });
 
@@ -84,16 +103,51 @@ module.exports = async function handler(req, res) {
 
     let docusign = await refreshTokenIfNeeded(profile.settings.docusign, profile.id);
 
-    // Download document
-    const docRes = await fetch(file_url);
-    if (!docRes.ok) return res.status(400).json({ error: 'Could not download the document from storage.' });
-    const docBase64 = Buffer.from(await docRes.arrayBuffer()).toString('base64');
-    const ext = file_name.split('.').pop()?.toLowerCase() || 'pdf';
+    // Download + base64-encode every document, each becoming its own entry
+    // in the envelope so DocuSign presents them as one signing session.
+    const envelopeDocuments = [];
+    for (let i = 0; i < documents.length; i++) {
+      const d = documents[i];
+      const docRes = await fetch(d.file_url);
+      if (!docRes.ok) return res.status(400).json({ error: `Could not download "${d.file_name}" from storage.` });
+      const docBase64 = Buffer.from(await docRes.arrayBuffer()).toString('base64');
+      const ext = d.file_name.split('.').pop()?.toLowerCase() || 'pdf';
+      envelopeDocuments.push({
+        documentBase64: docBase64,
+        name: d.file_name,
+        fileExtension: ext,
+        documentId: String(i + 1),
+      });
+    }
+
+    // Merge fields render as locked (non-editable) anchor-string text tabs —
+    // DocuSign finds the literal token text (e.g. "{{client_name}}") in the
+    // document and stamps the resolved value there. Attached to the first
+    // signer since every envelope has at least one; the signer never edits
+    // them because `locked: true`.
+    const textTabs = [];
+    documents.forEach((d, i) => {
+      for (const mf of d.merge_fields || []) {
+        if (!mf.anchor) continue;
+        textTabs.push({
+          documentId: String(i + 1),
+          anchorString: mf.anchor,
+          anchorIgnoreIfNotPresent: 'true',
+          anchorXOffset: '0', anchorYOffset: '0', anchorUnits: 'pixels',
+          tabLabel: mf.anchor,
+          value: mf.value ?? '',
+          locked: 'true',
+          font: 'helvetica', fontSize: 'size9',
+        });
+      }
+    });
+
+    const emailSubject = subject || `Please sign: ${documents[0].file_name}`;
 
     // Build envelope
     const envelopeBody = {
-      emailSubject: `Please sign: ${file_name}`,
-      documents: [{ documentBase64: docBase64, name: file_name, fileExtension: ext, documentId: '1' }],
+      emailSubject,
+      documents: envelopeDocuments,
       recipients: {
         signers: signers.map((signer, i) => ({
           email: signer.email,
@@ -106,6 +160,7 @@ module.exports = async function handler(req, res) {
               anchorIgnoreIfNotPresent: 'true',
               anchorXOffset: '0', anchorYOffset: '0', anchorUnits: 'pixels',
             }],
+            ...(i === 0 && textTabs.length > 0 ? { textTabs } : {}),
           },
         })),
       },
@@ -126,10 +181,13 @@ module.exports = async function handler(req, res) {
     }
 
     // Save envelope record
+    const documentLabel = documents.length === 1
+      ? documents[0].file_name
+      : `${documents[0].file_name} + ${documents.length - 1} more`;
     const envelopeRecord = {
       envelope_id:   envelopeData.envelopeId,
-      subject:       `Please sign: ${file_name}`,
-      document_name: file_name,
+      subject:       emailSubject,
+      document_name: documentLabel,
       status:        envelopeData.status || 'sent',
       signers:       signers,
       sent_at:       new Date().toISOString(),

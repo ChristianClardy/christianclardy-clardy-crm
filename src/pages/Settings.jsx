@@ -5,7 +5,7 @@ import {
   Users, ShieldCheck, Plus, Edit2, Trash2, Search,
   Save, Check, X, CalendarDays, Copy, CheckCheck,
   Building2, UserPlus, Mail, Phone, Loader2, Palette, Moon, Sun,
-  FileSignature, Link as LinkIcon, Tag,
+  FileSignature, Link as LinkIcon, Tag, FileText,
 } from "lucide-react";
 import { useTheme } from "@/lib/ThemeContext";
 import { COLOR_SCHEMES } from "@/lib/colorSchemes";
@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 import CompanyManager from "@/components/company/CompanyManager";
 import OrganizationTab from "@/components/settings/OrganizationTab";
+import TemplatesTab from "@/components/settings/TemplatesTab";
 import { useAuth } from "@/lib/AuthContext";
 import { DEFAULT_LEAD_SOURCE_OPTIONS, fetchCustomLeadSources, addCustomLeadSource, removeCustomLeadSource } from "@/lib/leadSources";
 
@@ -868,6 +869,7 @@ const ALL_TABS = [
   { key: "invite",       label: "Invite & Logins",     icon: UserPlus,       adminOnly: false },
   { key: "calendar",     label: "Calendar Feed",       icon: CalendarDays,   adminOnly: false },
   { key: "appearance",   label: "Appearance",          icon: Palette,        adminOnly: false },
+  { key: "templates",    label: "Templates",           icon: FileText,       adminOnly: false },
   { key: "docusign",     label: "DocuSign",            icon: FileSignature,  adminOnly: true  },
 ];
 
@@ -913,6 +915,7 @@ export default function Settings() {
       {activeTab === "invite"      && <InviteTab />}
       {activeTab === "calendar"    && <CalendarFeedTab />}
       {activeTab === "appearance"  && <AppearanceTab />}
+      {activeTab === "templates"   && <TemplatesTab />}
       {activeTab === "docusign"    && <DocuSignTab />}
     </div>
   );

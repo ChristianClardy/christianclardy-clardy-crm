@@ -20,6 +20,8 @@ import { supabase } from "@/lib/supabase";
 import { getSelectedCompanyScope } from "@/lib/companyScope";
 import { useAuth } from "@/lib/AuthContext";
 import DocuSignEnvelopes from "@/components/docusign/DocuSignEnvelopes";
+import { PROJECT_TYPES } from "@/components/settings/ScopeTemplatesTab";
+import { renderScopeTemplate } from "@/lib/scopeTemplateEngine";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -85,6 +87,8 @@ function blankItem(sectionName, description = "", unit = "SF", qty = 1, sectionT
     material_cost_per_unit: "",
     labor_cost_per_unit: "",
     subcontract_cost_per_unit: "",
+    length_ft: "",
+    width_ft: "",
   };
 }
 
@@ -389,6 +393,7 @@ function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, cost
   const hasCost = Number(item.cost_per_unit) > 0;
   const calcSell = sellFromCost(Number(item.cost_per_unit) || 0, marginPct);
   const hasBreakdown = splitSum(item) != null;
+  const hasExtras = hasBreakdown || Boolean(item.length_ft || item.width_ft);
 
   const isMaterialItem = item.sectionType === "material";
   return (
@@ -504,7 +509,7 @@ function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, cost
             <PopoverTrigger asChild>
               <button
                 title="Cost breakdown & cost code"
-                className={cn("p-1 rounded hover:bg-slate-100 transition-colors", hasBreakdown ? "text-amber-500" : "text-slate-300 hover:text-amber-500")}
+                className={cn("p-1 rounded hover:bg-slate-100 transition-colors", hasExtras ? "text-amber-500" : "text-slate-300 hover:text-amber-500")}
               >
                 <Package className="w-3.5 h-3.5" />
               </button>
@@ -525,6 +530,39 @@ function LineItemRow({ item, onChange, onDelete, materials, onAddToLibrary, cost
                     <option value="">— No cost code —</option>
                     {costCodes.map(cc => <option key={cc.id} value={cc.id}>{cc.code} · {cc.name}</option>)}
                   </select>
+                </div>
+                <div>
+                  <Label className="text-xs">Dimensions (optional)</Label>
+                  <p className="text-[10px] text-slate-400 mb-1">Feeds Settings → Templates scope merge fields, e.g. {"{{pool_size}}"} → 10' x 32'.</p>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        value={item.length_ft ?? ""}
+                        disabled={locked}
+                        onChange={e => onChange({ ...item, length_ft: e.target.value })}
+                        placeholder="Length"
+                        className="w-full pr-6 h-8 text-xs text-right border border-slate-200 rounded-md outline-none focus:ring-1 focus:ring-amber-400 disabled:opacity-60"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">ft</span>
+                    </div>
+                    <span className="text-xs text-slate-400">x</span>
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        value={item.width_ft ?? ""}
+                        disabled={locked}
+                        onChange={e => onChange({ ...item, width_ft: e.target.value })}
+                        placeholder="Width"
+                        className="w-full pr-6 h-8 text-xs text-right border border-slate-200 rounded-md outline-none focus:ring-1 focus:ring-amber-400 disabled:opacity-60"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">ft</span>
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Cost Breakdown (per unit)</p>
@@ -1628,6 +1666,8 @@ export default function EstimateDetail() {
   const [materials, setMaterials]       = useState([]);
   const [costCodes, setCostCodes]       = useState([]);
   const [assemblies, setAssemblies]     = useState([]);
+  const [scopeTemplates, setScopeTemplates] = useState([]);
+  const [selectedScopeTemplateId, setSelectedScopeTemplateId] = useState("");
   const [company, setCompany]           = useState(null);
   const [allCompanyProfiles, setAllCompanyProfiles] = useState([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState(null);
@@ -1675,6 +1715,7 @@ export default function EstimateDetail() {
     base44.entities.Material.list("name").then(setMaterials);
     base44.entities.CostCode.list("sort_order").then(setCostCodes).catch(() => setCostCodes([]));
     base44.entities.Assembly.list("sort_order").then(setAssemblies).catch(() => setAssemblies([]));
+    base44.entities.ScopeTemplate.list("sort_order").then(setScopeTemplates).catch(() => setScopeTemplates([]));
     base44.entities.CompanyProfile.list().then(rows => {
       setAllCompanyProfiles(rows || []);
       if (rows.length) {
@@ -2025,6 +2066,7 @@ export default function EstimateDetail() {
       client_id:        estimate.client_id  || null,
       project_id:       estimate.project_id || null,
       company_id:       selectedCompanyId   || null,
+      project_type:     estimate.project_type || null,
       status:           "draft",
       issue_date:       new Date().toISOString().slice(0, 10),
       line_items:       items,
@@ -2110,6 +2152,21 @@ export default function EstimateDetail() {
   const effectiveMarginPct = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
   const { totalCost, totalSell } = summaryTotals(items, effectiveMarginPct, sectionMargins);
   const effectiveTotal = estimate.total_override != null ? Number(estimate.total_override) : totalSell;
+
+  const matchingScopeTemplates = scopeTemplates.filter(t =>
+    t.is_active !== false &&
+    t.project_type === estimate.project_type &&
+    (!t.company_id || t.company_id === selectedCompanyId)
+  );
+
+  const handleGenerateScope = () => {
+    const template = scopeTemplates.find(t => t.id === selectedScopeTemplateId);
+    if (!template) return;
+    if (estimate.notes?.trim() && !confirm("This replaces the current Notes/Scope text with the generated scope. Continue?")) return;
+    const rendered = renderScopeTemplate(template, items, costCodes);
+    setEstimate(est => ({ ...est, notes: rendered }));
+    setSaved(false);
+  };
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -2359,6 +2416,17 @@ export default function EstimateDetail() {
           )}
 
           <select
+            value={estimate.project_type || ""}
+            disabled={isLocked}
+            onChange={e => { setEstimate(est => ({ ...est, project_type: e.target.value })); setSaved(false); }}
+            title="Project Type — filters which Scope Templates are offered below"
+            className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-amber-300 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <option value="">— Project type —</option>
+            {PROJECT_TYPES.map(pt => <option key={pt} value={pt}>{pt}</option>)}
+          </select>
+
+          <select
             value={estimate.status}
             disabled={isLocked}
             onChange={e => { setEstimate(est => ({ ...est, status: e.target.value })); setSaved(false); }}
@@ -2575,7 +2643,35 @@ export default function EstimateDetail() {
 
           {/* Notes */}
           <div className="bg-white rounded-xl border border-slate-200 p-4 mt-4">
-            <Label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Notes / Scope Summary</Label>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <Label className="text-xs font-semibold uppercase tracking-wider text-slate-500">Notes / Scope Summary</Label>
+              {!isLocked && (
+                <div className="flex items-center gap-2">
+                  <select
+                    value={selectedScopeTemplateId}
+                    onChange={e => setSelectedScopeTemplateId(e.target.value)}
+                    disabled={!estimate.project_type}
+                    title={!estimate.project_type ? "Set a Project Type above first" : undefined}
+                    className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-amber-300 disabled:opacity-50 bg-white max-w-[220px]"
+                  >
+                    <option value="">
+                      {estimate.project_type ? "— Scope template —" : "Set project type first"}
+                    </option>
+                    {matchingScopeTemplates.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleGenerateScope}
+                    disabled={!selectedScopeTemplateId}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-amber-300 text-xs text-amber-700 hover:bg-amber-50 transition-all disabled:opacity-40 disabled:hover:bg-transparent"
+                  >
+                    <FileText className="w-3.5 h-3.5" /> Generate Scope
+                  </button>
+                </div>
+              )}
+            </div>
             <textarea
               value={estimate.notes}
               onChange={e => { setEstimate(est => ({ ...est, notes: e.target.value })); setSaved(false); }}
