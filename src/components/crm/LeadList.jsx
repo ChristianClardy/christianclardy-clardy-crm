@@ -188,21 +188,34 @@ function stageAgeStyles(days) {
   return "bg-indigo-100 text-indigo-700 ring-1 ring-indigo-200";
 }
 
+// Sum of estimated_budget across a set of leads — used for the per-section
+// and grand totals in the print view.
+function sumBudget(leads) {
+  return leads.reduce((sum, lead) => sum + (Number(lead.estimated_budget) || 0), 0);
+}
+
 // Builds a print-ready HTML document for one or more stage groupings. Used
 // both for printing a single stage (from the stage detail dialog) and the
-// whole pipeline at once (from the toolbar "Print" button).
+// whole pipeline at once (from the toolbar "Print" button). Styled to echo
+// the app's own look (slate/amber palette, rounded badges) rather than a
+// bare browser table, and totals each section's estimated_budget plus a
+// grand total across every section shown.
 function buildPipelinePrintHtml(groups, subtitle) {
+  const grandTotal = sumBudget(groups.flatMap((g) => g.leads));
+  const totalLeadCount = groups.reduce((sum, g) => sum + g.leads.length, 0);
+
   const sections = groups.map(({ label, leads }) => {
+    const sectionTotal = sumBudget(leads);
     const rows = leads.map((lead) => `
       <tr>
         <td>${escapeHtml(lead.full_name)}</td>
-        <td>${escapeHtml(lead.status)}</td>
+        <td><span class="status-pill">${escapeHtml(lead.status)}</span></td>
         <td>${escapeHtml(lead.phone)}</td>
         <td>${escapeHtml(lead.email)}</td>
         <td>${escapeHtml(lead.address)}</td>
         <td>${escapeHtml(lead.assigned_sales_rep)}</td>
         <td>${escapeHtml(lead.project_type)}</td>
-        <td>${formatMoney(lead.estimated_budget)}</td>
+        <td class="money">${formatMoney(lead.estimated_budget)}</td>
         <td>${escapeHtml(lead.follow_up_date)}</td>
         <td>${escapeHtml(lead.lead_source)}</td>
         <td>${escapeHtml(lead.next_action)}</td>
@@ -211,33 +224,65 @@ function buildPipelinePrintHtml(groups, subtitle) {
       </tr>`).join("");
 
     return `
-      <h2>${escapeHtml(label)} <span class="count">(${leads.length})</span></h2>
-      ${leads.length
-        ? `<table><thead><tr>
-            <th>Name</th><th>Status</th><th>Phone</th><th>Email</th><th>Address</th>
-            <th>Rep</th><th>Project Type</th><th>Budget</th><th>Follow-up</th>
-            <th>Source</th><th>Next Action</th><th>Description</th><th>Notes</th>
-          </tr></thead><tbody>${rows}</tbody></table>`
-        : `<p class="empty">No leads in this stage.</p>`}
+      <div class="section">
+        <h2>
+          <span>${escapeHtml(label)} <span class="count">(${leads.length})</span></span>
+          <span class="section-total">${formatMoney(sectionTotal)}</span>
+        </h2>
+        ${leads.length
+          ? `<table><thead><tr>
+              <th>Name</th><th>Status</th><th>Phone</th><th>Email</th><th>Address</th>
+              <th>Rep</th><th>Project Type</th><th>Budget</th><th>Follow-up</th>
+              <th>Source</th><th>Next Action</th><th>Description</th><th>Notes</th>
+            </tr></thead><tbody>${rows}</tbody>
+            <tfoot><tr>
+              <td colspan="7">Section Total</td>
+              <td class="money">${formatMoney(sectionTotal)}</td>
+              <td colspan="5"></td>
+            </tr></tfoot></table>`
+          : `<p class="empty">No leads in this stage.</p>`}
+      </div>
     `;
   }).join("");
 
   return `<html><head><title>Pipeline${subtitle ? ` - ${escapeHtml(subtitle)}` : ""}</title>
     <style>
-      body { font-family: Arial, sans-serif; font-size: 11px; color: #222; margin: 24px; }
-      h1 { font-size: 18px; margin-bottom: 4px; color: #1e293b; }
-      .meta { font-size: 11px; color: #64748b; margin-bottom: 20px; }
-      h2 { font-size: 13px; margin: 20px 0 8px; color: #1e293b; border-bottom: 2px solid #1e293b; padding-bottom: 4px; }
+      * { box-sizing: border-box; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; font-size: 11px; color: #1e293b; margin: 24px; }
+      .masthead { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; border: 1px solid #e2e8f0; border-radius: 16px; padding: 16px 20px; margin-bottom: 16px; }
+      .eyebrow { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.18em; color: #b45309; margin: 0 0 2px; }
+      h1 { font-size: 20px; margin: 0; color: #0f172a; font-weight: 700; }
+      .meta { font-size: 11px; color: #64748b; margin-top: 4px; }
+      .grand-total-box { text-align: right; border-radius: 12px; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 10px 16px; min-width: 180px; }
+      .grand-total-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: #047857; margin: 0 0 4px; }
+      .grand-total-value { font-size: 22px; font-weight: 700; color: #065f46; margin: 0; }
+      .grand-total-sub { font-size: 10px; color: #059669; margin: 2px 0 0; }
+      .section { margin-bottom: 18px; }
+      h2 { font-size: 13px; margin: 0 0 8px; color: #0f172a; border-bottom: 2px solid #0f172a; padding-bottom: 5px; display: flex; align-items: baseline; justify-content: space-between; }
       .count { font-weight: normal; color: #64748b; font-size: 11px; }
-      table { border-collapse: collapse; width: 100%; margin-bottom: 8px; }
-      th { background: #1e293b; color: #fff; padding: 5px 8px; text-align: left; font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; }
+      .section-total { font-weight: 700; color: #047857; font-size: 12px; }
+      table { border-collapse: collapse; width: 100%; margin-bottom: 4px; }
+      th { background: #0f172a; color: #fff; padding: 5px 8px; text-align: left; font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; }
       td { padding: 5px 8px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+      td.money { font-weight: 600; color: #047857; white-space: nowrap; }
+      .status-pill { display: inline-block; padding: 1px 7px; border-radius: 999px; background: #f1f5f9; color: #334155; font-size: 9px; font-weight: 600; white-space: nowrap; }
+      tfoot td { border-top: 2px solid #0f172a; border-bottom: none; font-weight: 700; color: #0f172a; background: #f8fafc; }
       .empty { color: #94a3b8; font-style: italic; margin-bottom: 8px; }
-      @media print { @page { size: landscape; margin: 1cm; } h2 { page-break-after: avoid; } tr { page-break-inside: avoid; } }
+      @media print { @page { size: landscape; margin: 1cm; } .section { page-break-inside: avoid; } h2 { page-break-after: avoid; } tr { page-break-inside: avoid; } }
     </style></head>
     <body>
-      <h1>Sales Pipeline</h1>
-      <div class="meta">Printed ${escapeHtml(new Date().toLocaleString())}${subtitle ? ` · ${escapeHtml(subtitle)}` : ""}</div>
+      <div class="masthead">
+        <div>
+          <p class="eyebrow">CRM</p>
+          <h1>Sales Pipeline</h1>
+          <div class="meta">Printed ${escapeHtml(new Date().toLocaleString())}${subtitle ? ` · ${escapeHtml(subtitle)}` : ""}</div>
+        </div>
+        <div class="grand-total-box">
+          <p class="grand-total-label">Total Value</p>
+          <p class="grand-total-value">${formatMoney(grandTotal)}</p>
+          <p class="grand-total-sub">across ${totalLeadCount} lead${totalLeadCount === 1 ? "" : "s"}</p>
+        </div>
+      </div>
       ${sections}
     </body></html>`;
 }
