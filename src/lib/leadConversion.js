@@ -140,6 +140,16 @@ export async function assignDesignerAndSetInDesign(lead, designer) {
 }
 
 /**
+ * Assigns or changes a Lead's designer without touching its pipeline stage —
+ * for a lead that's already In Design or further along, where forcing the
+ * stage back to "In Design" (like assignDesignerAndSetInDesign does) would
+ * wrongly regress it.
+ */
+export async function updateLeadDesigner(lead, designer) {
+  return await base44.entities.Lead.update(lead.id, { assigned_designer: designer || null });
+}
+
+/**
  * Manually promotes a Lead to Prospect (e.g. before it reaches the normal
  * threshold stage). Ensures its contact-book record exists so billing/project
  * flows have a Client to attach to, then flags the Lead itself as a prospect.

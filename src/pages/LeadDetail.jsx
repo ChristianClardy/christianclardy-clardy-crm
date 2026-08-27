@@ -12,8 +12,8 @@ import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
 import AppointmentsPanel from "@/components/scheduling/AppointmentsPanel";
 import LostReasonDialog from "@/components/crm/LostReasonDialog";
 import DesignerAssignmentDialog from "@/components/crm/DesignerAssignmentDialog";
-import { promoteLeadToProspect, setLeadStatus, markLeadLost, assignDesignerAndSetInDesign } from "@/lib/leadConversion";
-import { LEAD_STAGES } from "@/lib/leadStages";
+import { promoteLeadToProspect, setLeadStatus, markLeadLost, assignDesignerAndSetInDesign, updateLeadDesigner } from "@/lib/leadConversion";
+import { LEAD_STAGES, PROSPECT_THRESHOLD_STAGE } from "@/lib/leadStages";
 
 const funnelSteps = LEAD_STAGES;
 
@@ -30,6 +30,8 @@ export default function LeadDetail() {
   const [savingLostReason, setSavingLostReason] = useState(false);
   const [designerPromptOpen, setDesignerPromptOpen] = useState(false);
   const [savingDesigner, setSavingDesigner] = useState(false);
+  const [designerEditOpen, setDesignerEditOpen] = useState(false);
+  const [savingDesignerEdit, setSavingDesignerEdit] = useState(false);
 
   const loadData = async () => {
     if (!leadId) return;
@@ -78,6 +80,11 @@ export default function LeadDetail() {
   }, [leadId]);
 
   const activeStepIndex = useMemo(() => Math.max(funnelSteps.indexOf(lead?.status || "New Lead"), 0), [lead]);
+
+  // Once a lead has reached In Design (or moved further along), the designer
+  // can be assigned or changed directly — not just at the moment it first
+  // enters the stage.
+  const canAssignDesigner = LEAD_STAGES.indexOf(lead?.status) >= LEAD_STAGES.indexOf(PROSPECT_THRESHOLD_STAGE);
 
   const updateStatus = async (value) => {
     await setLeadStatus(lead, value).catch(err => {
@@ -136,6 +143,22 @@ export default function LeadDetail() {
     }
   };
 
+  // Reassigning the designer on a lead that's already In Design (or further
+  // along) doesn't touch its pipeline stage — see updateLeadDesigner.
+  const handleSaveDesignerEdit = async (designer) => {
+    setSavingDesignerEdit(true);
+    try {
+      await updateLeadDesigner(lead, designer);
+      await loadData();
+      setDesignerEditOpen(false);
+    } catch (err) {
+      console.error("Failed to update designer:", err?.message);
+      alert("Could not update the designer. Please try again.");
+    } finally {
+      setSavingDesignerEdit(false);
+    }
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center py-20"><div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-slate-800" /></div>;
   }
@@ -164,7 +187,18 @@ export default function LeadDetail() {
               {lead.phone && <span className="flex items-center gap-2"><Phone className="h-4 w-4" />{lead.phone}</span>}
               {lead.email && <span className="flex items-center gap-2"><Mail className="h-4 w-4" />{lead.email}</span>}
               {lead.assigned_sales_rep && <span className="flex items-center gap-2"><UserRound className="h-4 w-4" />{lead.assigned_sales_rep}</span>}
-              {lead.assigned_designer && <span className="flex items-center gap-2"><UserRound className="h-4 w-4" />Designer: {lead.assigned_designer}</span>}
+              {canAssignDesigner ? (
+                <button
+                  type="button"
+                  onClick={() => setDesignerEditOpen(true)}
+                  className="flex items-center gap-2 rounded-full border border-dashed border-slate-300 px-2.5 py-1 text-slate-500 hover:border-slate-400 hover:text-slate-700"
+                >
+                  <UserRound className="h-4 w-4" />
+                  {lead.assigned_designer ? `Designer: ${lead.assigned_designer}` : "Assign a designer"}
+                </button>
+              ) : (
+                lead.assigned_designer && <span className="flex items-center gap-2"><UserRound className="h-4 w-4" />Designer: {lead.assigned_designer}</span>
+              )}
               {lead.follow_up_date && <span className="flex items-center gap-2"><CalendarDays className="h-4 w-4" />{lead.follow_up_date}</span>}
             </div>
           </div>
@@ -293,6 +327,15 @@ export default function LeadDetail() {
           saving={savingDesigner}
           onSkip={handleSkipDesigner}
           onSave={handleSaveDesigner}
+        />
+      )}
+
+      {designerEditOpen && (
+        <DesignerAssignmentDialog
+          lead={lead}
+          saving={savingDesignerEdit}
+          onSkip={() => setDesignerEditOpen(false)}
+          onSave={handleSaveDesignerEdit}
         />
       )}
     </div>

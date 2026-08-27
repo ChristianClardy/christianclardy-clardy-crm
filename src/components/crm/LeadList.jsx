@@ -17,8 +17,8 @@ import LostReasonDialog from "@/components/crm/LostReasonDialog";
 import DesignerAssignmentDialog from "@/components/crm/DesignerAssignmentDialog";
 import { cn } from "@/lib/utils";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
-import { setLeadStatus, markLeadLost, ensureContactForLead, assignDesignerAndSetInDesign } from "@/lib/leadConversion";
-import { DEAD_LEAD_STATUSES, WON_STATUS } from "@/lib/leadStages";
+import { setLeadStatus, markLeadLost, ensureContactForLead, assignDesignerAndSetInDesign, updateLeadDesigner } from "@/lib/leadConversion";
+import { DEAD_LEAD_STATUSES, WON_STATUS, LEAD_STAGES, PROSPECT_THRESHOLD_STAGE } from "@/lib/leadStages";
 
 // ─── Column definitions ───────────────────────────────────────────────────────
 
@@ -299,7 +299,8 @@ function openPrintWindow(html) {
 
 // ─── Lead card (shared by both views) ────────────────────────────────────────
 
-function LeadCard({ lead, draggable, onDragStart }) {
+function LeadCard({ lead, draggable, onDragStart, onAssignDesigner }) {
+  const canAssignDesigner = LEAD_STAGES.indexOf(lead.status) >= LEAD_STAGES.indexOf(PROSPECT_THRESHOLD_STAGE);
   return (
     <Link
       to={`/LeadDetail?id=${lead.id}`}
@@ -373,7 +374,18 @@ function LeadCard({ lead, draggable, onDragStart }) {
         {lead.phone && <div className="flex items-center gap-1.5"><Phone className="h-3 w-3" />{lead.phone}</div>}
         {lead.email && <div className="flex items-center gap-1.5 truncate"><Mail className="h-3 w-3 shrink-0" /><span className="truncate">{lead.email}</span></div>}
         {lead.assigned_sales_rep && <div className="flex items-center gap-1.5"><UserRound className="h-3 w-3" />{lead.assigned_sales_rep}</div>}
-        {lead.assigned_designer && <div className="flex items-center gap-1.5"><UserRound className="h-3 w-3" />Designer: {lead.assigned_designer}</div>}
+        {canAssignDesigner ? (
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onAssignDesigner(lead); }}
+            className="flex items-center gap-1.5 rounded hover:text-slate-600"
+          >
+            <UserRound className="h-3 w-3" />
+            {lead.assigned_designer ? `Designer: ${lead.assigned_designer}` : "Assign a designer"}
+          </button>
+        ) : (
+          lead.assigned_designer && <div className="flex items-center gap-1.5"><UserRound className="h-3 w-3" />Designer: {lead.assigned_designer}</div>
+        )}
         {lead.follow_up_date && <div className="flex items-center gap-1.5"><CalendarDays className="h-3 w-3" />{lead.follow_up_date}</div>}
       </div>
 
@@ -386,7 +398,7 @@ function LeadCard({ lead, draggable, onDragStart }) {
 
 // ─── Kanban column ────────────────────────────────────────────────────────────
 
-function KanbanColumn({ column, leads, onDrop, onDragStart, onDragOver, draggingOver, onHeaderClick }) {
+function KanbanColumn({ column, leads, onDrop, onDragStart, onDragOver, draggingOver, onHeaderClick, onAssignDesigner }) {
   const isOver = draggingOver === column.key;
 
   return (
@@ -429,6 +441,7 @@ function KanbanColumn({ column, leads, onDrop, onDragStart, onDragOver, dragging
             lead={lead}
             draggable
             onDragStart={onDragStart}
+            onAssignDesigner={onAssignDesigner}
           />
         ))}
         {leads.length === 0 && !isOver && (
@@ -570,6 +583,8 @@ export default function LeadList({ archived = false }) {
   const [savingLostReason, setSavingLostReason] = useState(false);
   const [designerPrompt, setDesignerPrompt] = useState(null); // { lead, column } | null
   const [savingDesigner, setSavingDesigner] = useState(false);
+  const [designerEditPrompt, setDesignerEditPrompt] = useState(null); // lead | null
+  const [savingDesignerEdit, setSavingDesignerEdit] = useState(false);
   const [reasonFilter, setReasonFilter] = useState("all");
   const [stageDetailKey, setStageDetailKey] = useState(null); // column key | null
   const dragLeadRef = useRef(null);
@@ -895,6 +910,31 @@ export default function LeadList({ archived = false }) {
     setDesignerPrompt(null);
   };
 
+  // Reassigning the designer on a lead already In Design (or further along)
+  // doesn't touch its pipeline stage — see updateLeadDesigner.
+  const handleSaveDesignerEdit = async (designer) => {
+    const lead = designerEditPrompt;
+    if (!lead) return;
+    setSavingDesignerEdit(true);
+    setLeads((prev) =>
+      prev.map((l) => l.id === lead.id ? { ...l, assigned_designer: designer } : l)
+    );
+    try {
+      const updated = await updateLeadDesigner(lead, designer);
+      setLeads((prev) =>
+        prev.map((l) => l.id === lead.id ? { ...l, ...updated } : l)
+      );
+    } catch (err) {
+      console.error("Failed to update designer:", err?.message);
+      setLeads((prev) =>
+        prev.map((l) => l.id === lead.id ? { ...l, assigned_designer: lead.assigned_designer } : l)
+      );
+    } finally {
+      setSavingDesignerEdit(false);
+    }
+    setDesignerEditPrompt(null);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -1029,6 +1069,7 @@ export default function LeadList({ archived = false }) {
                 onDragOver={(e) => handleDragOver(e, col.key)}
                 onDrop={handleDrop}
                 onHeaderClick={(c) => setStageDetailKey(c.key)}
+                onAssignDesigner={(lead) => setDesignerEditPrompt(lead)}
               />
             ))}
           </div>
@@ -1040,7 +1081,7 @@ export default function LeadList({ archived = false }) {
         <>
           <div className="grid gap-4 lg:grid-cols-2">
             {filteredLeads.map((lead) => (
-              <LeadCard key={lead.id} lead={lead} draggable={false} />
+              <LeadCard key={lead.id} lead={lead} draggable={false} onAssignDesigner={(l) => setDesignerEditPrompt(l)} />
             ))}
           </div>
 
@@ -1078,6 +1119,15 @@ export default function LeadList({ archived = false }) {
           saving={savingDesigner}
           onSkip={handleSkipDesigner}
           onSave={handleSaveDesigner}
+        />
+      )}
+
+      {designerEditPrompt && (
+        <DesignerAssignmentDialog
+          lead={designerEditPrompt}
+          saving={savingDesignerEdit}
+          onSkip={() => setDesignerEditPrompt(null)}
+          onSave={handleSaveDesignerEdit}
         />
       )}
 
