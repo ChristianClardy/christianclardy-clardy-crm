@@ -5,7 +5,7 @@ import {
   Users, ShieldCheck, Plus, Edit2, Trash2, Search,
   Save, Check, X, CalendarDays, Copy, CheckCheck,
   Building2, UserPlus, Mail, Phone, Loader2, Palette, Moon, Sun,
-  FileSignature, Link as LinkIcon, Tag, FileText, PenTool,
+  FileSignature, Link as LinkIcon, Tag, FileText,
 } from "lucide-react";
 import { useTheme } from "@/lib/ThemeContext";
 import { COLOR_SCHEMES } from "@/lib/colorSchemes";
@@ -23,6 +23,7 @@ import TemplatesTab from "@/components/settings/TemplatesTab";
 import { useAuth } from "@/lib/AuthContext";
 import { DEFAULT_LEAD_SOURCE_OPTIONS, fetchCustomLeadSources, addCustomLeadSource, removeCustomLeadSource } from "@/lib/leadSources";
 import { fetchDesigners, addDesigner, removeDesigner } from "@/lib/designers";
+import SubcontractorsTab from "@/components/settings/SubcontractorsTab";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -861,16 +862,12 @@ function LeadSourcesTab() {
 
 // ─── Designers tab ──────────────────────────────────────────────────────────
 // The "Assign a designer" prompt (CRM → In Design) offers three separate
-// groups: this custom list, Team Members, and Subcontractors. Employees and
-// Subcontractors are managed on their own pages (Team Members tab / the
-// Subcontractors page) — they're only listed here read-only for reference,
-// so it's obvious at a glance who's already assignable without duplicating
-// their records into this list too.
+// groups: this custom list, Team Members, and Subcontractors — the latter two
+// are full sibling categories in the same Team & Subcontractors tab (see
+// TeamSubsTab below), so this one only needs to manage its own list.
 
 function DesignersTab() {
   const [customDesigners, setCustomDesigners] = useState([]);
-  const [employees, setEmployees]   = useState([]);
-  const [subcontractors, setSubs]   = useState([]);
   const [loading, setLoading]       = useState(true);
   const [newDesigner, setNewDesigner] = useState("");
   const [adding, setAdding]         = useState(false);
@@ -881,14 +878,7 @@ function DesignersTab() {
 
   const load = async () => {
     setLoading(true);
-    const [designers, employeeRows, subRows] = await Promise.all([
-      fetchDesigners(),
-      base44.entities.Employee.list("full_name"),
-      base44.entities.Subcontractor.list("name"),
-    ]);
-    setCustomDesigners(designers);
-    setEmployees((employeeRows || []).filter((e) => e.status !== "inactive"));
-    setSubs((subRows || []).filter((s) => s.status !== "inactive"));
+    setCustomDesigners(await fetchDesigners());
     setLoading(false);
   };
 
@@ -964,38 +954,46 @@ function DesignersTab() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
 
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-        <h2 className="text-base font-semibold text-slate-900 mb-1">Team Members</h2>
-        <p className="text-sm text-slate-500 mb-4">Managed on the Team Members tab — listed here for reference since they're also assignable as a designer.</p>
-        {employees.length === 0 ? (
-          <p className="text-sm text-slate-400">No active team members.</p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {employees.map((employee) => (
-              <span key={employee.id} className="text-xs font-medium px-3 py-1.5 rounded-full bg-slate-100 text-slate-600">
-                {employee.full_name}
-              </span>
-            ))}
-          </div>
-        )}
+// ─── Team & Subcontractors tab ─────────────────────────────────────────────
+// Houses everyone who can be assigned work — Team Members (Employees),
+// Subcontractors, and Designers — as three categories under one roof instead
+// of three separate destinations.
+
+const PEOPLE_CATEGORIES = [
+  { key: "employees",      label: "Employees" },
+  { key: "subcontractors", label: "Subcontractors" },
+  { key: "designers",      label: "Designers" },
+];
+
+function TeamSubsTab() {
+  const [category, setCategory] = useState("employees");
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        {PEOPLE_CATEGORIES.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setCategory(key)}
+            className={cn(
+              "rounded-lg px-3.5 py-2 text-sm font-medium transition-all",
+              category === key
+                ? "bg-slate-900 text-white shadow-sm"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            )}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-        <h2 className="text-base font-semibold text-slate-900 mb-1">Subcontractors</h2>
-        <p className="text-sm text-slate-500 mb-4">Managed on the Subcontractors page — listed here for reference since they're also assignable as a designer.</p>
-        {subcontractors.length === 0 ? (
-          <p className="text-sm text-slate-400">No active subcontractors.</p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {subcontractors.map((sub) => (
-              <span key={sub.id} className="text-xs font-medium px-3 py-1.5 rounded-full bg-slate-100 text-slate-600">
-                {sub.name}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+      {category === "employees"      && <TeamTab />}
+      {category === "subcontractors" && <SubcontractorsTab />}
+      {category === "designers"      && <DesignersTab />}
     </div>
   );
 }
@@ -1004,11 +1002,10 @@ function DesignersTab() {
 
 const ALL_TABS = [
   { key: "organization", label: "Organization",        icon: Building2,      adminOnly: false },
-  { key: "team",         label: "Team Members",        icon: Users,          adminOnly: false },
+  { key: "teamSubs",     label: "Team & Subcontractors", icon: Users,        adminOnly: false },
   { key: "permissions",  label: "Roles & Permissions", icon: ShieldCheck,    adminOnly: false },
   { key: "companies",    label: "Companies",           icon: Building2,      adminOnly: false },
   { key: "leadSources",  label: "Lead Sources",        icon: Tag,            adminOnly: false },
-  { key: "designers",    label: "Designers",           icon: PenTool,        adminOnly: false },
   { key: "invite",       label: "Invite & Logins",     icon: UserPlus,       adminOnly: false },
   { key: "calendar",     label: "Calendar Feed",       icon: CalendarDays,   adminOnly: false },
   { key: "appearance",   label: "Appearance",          icon: Palette,        adminOnly: false },
@@ -1019,7 +1016,7 @@ const ALL_TABS = [
 export default function Settings() {
   const { user }        = useAuth();
   const isAdmin         = user?.role === "admin";
-  const [activeTab, setActiveTab] = useState("team");
+  const [activeTab, setActiveTab] = useState("teamSubs");
 
   const visibleTabs = ALL_TABS.filter((t) => !t.adminOnly || isAdmin);
 
@@ -1051,11 +1048,10 @@ export default function Settings() {
       </div>
 
       {activeTab === "organization" && <OrganizationTab />}
-      {activeTab === "team"        && <TeamTab />}
+      {activeTab === "teamSubs"    && <TeamSubsTab />}
       {activeTab === "permissions" && <PermissionsTab />}
       {activeTab === "companies"   && <CompanyManager />}
       {activeTab === "leadSources" && <LeadSourcesTab />}
-      {activeTab === "designers"   && <DesignersTab />}
       {activeTab === "invite"      && <InviteTab />}
       {activeTab === "calendar"    && <CalendarFeedTab />}
       {activeTab === "appearance"  && <AppearanceTab />}

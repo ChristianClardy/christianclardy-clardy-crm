@@ -66,7 +66,6 @@ import Projects from './pages/Projects';
 import Prospects from './pages/Prospects';
 import Reports from './pages/Reports';
 import SalesDashboard from './pages/SalesDashboard';
-import Subcontractors from './pages/Subcontractors';
 import TeamChat from './pages/TeamChat';
 import WIPReport from './pages/WIPReport';
 import WorkplaceItems from './pages/WorkplaceItems';
@@ -93,7 +92,6 @@ export const PAGES = {
     "Prospects": Prospects,
     "Reports": Reports,
     "SalesDashboard": SalesDashboard,
-    "Subcontractors": Subcontractors,
     "TeamChat": TeamChat,
     "WIPReport": WIPReport,
     "WorkplaceItems": WorkplaceItems,

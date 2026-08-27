@@ -59,7 +59,6 @@ export default function Layout({ children, currentPageName }) {
       ],
     },
     { name: "Calendar", href: createPageUrl("Calendar"), icon: CalendarDays },
-    { name: "Subcontractors", href: createPageUrl("Subcontractors"), icon: Wrench },
     { name: "Municipalities", href: createPageUrl("Municipalities"), icon: Building2 },
     { name: "Estimates", href: createPageUrl("Estimates"), icon: Receipt },
     { name: "Payments", href: createPageUrl("Payments"), icon: DollarSign },

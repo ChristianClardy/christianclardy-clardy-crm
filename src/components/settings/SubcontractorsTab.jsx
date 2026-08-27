@@ -1,7 +1,5 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Link } from "react-router-dom";
-import { createPageUrl } from "@/utils";
 import {
   Plus,
   Search,
@@ -10,7 +8,6 @@ import {
   MapPin,
   MoreHorizontal,
   Wrench,
-  ChevronRight,
   ShieldCheck,
   AlertTriangle
 } from "lucide-react";
@@ -103,7 +100,7 @@ const EMPTY_FORM = {
   notes: "",
 };
 
-export default function Subcontractors() {
+export default function SubcontractorsTab() {
   const [subs, setSubs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -223,21 +220,19 @@ export default function Subcontractors() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center py-20">
         <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-slate-900 tracking-tight">
-            Subcontractors
-          </h1>
-          <p className="text-slate-500 mt-1">Manage your subcontractor network by trade</p>
+          <h2 className="text-lg font-semibold text-slate-900">Subcontractors</h2>
+          <p className="text-sm text-slate-500 mt-1">Manage your subcontractor network by trade</p>
         </div>
         <Button
           onClick={openNewDialog}
