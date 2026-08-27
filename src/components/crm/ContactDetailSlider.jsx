@@ -517,6 +517,13 @@ export default function ContactDetailSlider({ lead, onClose, onUpdate }) {
                   onSave={(v) => handleFieldSave("assigned_sales_rep", v)}
                 />
                 <EditableField
+                  label="Assigned Designer"
+                  value={lead.assigned_designer}
+                  icon={UserRound}
+                  placeholder="Assign a designer..."
+                  onSave={(v) => handleFieldSave("assigned_designer", v)}
+                />
+                <EditableField
                   label="Project Type"
                   value={lead.project_type}
                   icon={Briefcase}

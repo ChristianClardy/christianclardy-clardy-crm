@@ -129,6 +129,17 @@ export async function markLeadLost(lead, { reason = "", notes = "" } = {}) {
 }
 
 /**
+ * Moves a Lead into the "In Design" stage along with the designer assigned
+ * to own the work. Also used to reassign the designer on a lead that's
+ * already In Design — setLeadStatus is a no-op status-wise then, but
+ * harmless to re-run.
+ */
+export async function assignDesignerAndSetInDesign(lead, designer) {
+  await setLeadStatus(lead, "In Design");
+  return await base44.entities.Lead.update(lead.id, { assigned_designer: designer || null });
+}
+
+/**
  * Manually promotes a Lead to Prospect (e.g. before it reaches the normal
  * threshold stage). Ensures its contact-book record exists so billing/project
  * flows have a Client to attach to, then flags the Lead itself as a prospect.

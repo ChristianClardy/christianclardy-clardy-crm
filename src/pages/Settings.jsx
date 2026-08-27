@@ -5,7 +5,7 @@ import {
   Users, ShieldCheck, Plus, Edit2, Trash2, Search,
   Save, Check, X, CalendarDays, Copy, CheckCheck,
   Building2, UserPlus, Mail, Phone, Loader2, Palette, Moon, Sun,
-  FileSignature, Link as LinkIcon, Tag, FileText,
+  FileSignature, Link as LinkIcon, Tag, FileText, PenTool,
 } from "lucide-react";
 import { useTheme } from "@/lib/ThemeContext";
 import { COLOR_SCHEMES } from "@/lib/colorSchemes";
@@ -22,6 +22,7 @@ import OrganizationTab from "@/components/settings/OrganizationTab";
 import TemplatesTab from "@/components/settings/TemplatesTab";
 import { useAuth } from "@/lib/AuthContext";
 import { DEFAULT_LEAD_SOURCE_OPTIONS, fetchCustomLeadSources, addCustomLeadSource, removeCustomLeadSource } from "@/lib/leadSources";
+import { fetchDesigners, addDesigner, removeDesigner } from "@/lib/designers";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -858,6 +859,147 @@ function LeadSourcesTab() {
   );
 }
 
+// ─── Designers tab ──────────────────────────────────────────────────────────
+// The "Assign a designer" prompt (CRM → In Design) offers three separate
+// groups: this custom list, Team Members, and Subcontractors. Employees and
+// Subcontractors are managed on their own pages (Team Members tab / the
+// Subcontractors page) — they're only listed here read-only for reference,
+// so it's obvious at a glance who's already assignable without duplicating
+// their records into this list too.
+
+function DesignersTab() {
+  const [customDesigners, setCustomDesigners] = useState([]);
+  const [employees, setEmployees]   = useState([]);
+  const [subcontractors, setSubs]   = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [newDesigner, setNewDesigner] = useState("");
+  const [adding, setAdding]         = useState(false);
+  const [removing, setRemoving]     = useState(null);
+  const [error, setError]           = useState("");
+
+  useEffect(() => { load(); }, []);
+
+  const load = async () => {
+    setLoading(true);
+    const [designers, employeeRows, subRows] = await Promise.all([
+      fetchDesigners(),
+      base44.entities.Employee.list("full_name"),
+      base44.entities.Subcontractor.list("name"),
+    ]);
+    setCustomDesigners(designers);
+    setEmployees((employeeRows || []).filter((e) => e.status !== "inactive"));
+    setSubs((subRows || []).filter((s) => s.status !== "inactive"));
+    setLoading(false);
+  };
+
+  const handleAdd = async (e) => {
+    e.preventDefault();
+    setError("");
+    setAdding(true);
+    try {
+      await addDesigner(newDesigner);
+      setNewDesigner("");
+      await load();
+    } catch (err) {
+      setError(err.message || "Could not add designer.");
+    }
+    setAdding(false);
+  };
+
+  const handleRemove = async (name) => {
+    if (!confirm(`Remove designer "${name}"? Leads already assigned to them will keep it, but they won't be offered for new assignments.`)) return;
+    setRemoving(name);
+    try {
+      await removeDesigner(name);
+      await load();
+    } catch (err) {
+      alert(err.message || "Could not remove designer.");
+    }
+    setRemoving(null);
+  };
+
+  return (
+    <div className="space-y-4 max-w-2xl">
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <h2 className="text-base font-semibold text-slate-900 mb-1">Add a Designer</h2>
+        <p className="text-sm text-slate-500 mb-4">Create designers to show up in the "Assign a designer" dropdown when a lead moves into In Design. Use this for designers who aren't Team Members or Subcontractors.</p>
+        <form onSubmit={handleAdd} className="flex items-start gap-3">
+          <div className="flex-1">
+            <Input
+              value={newDesigner}
+              onChange={(e) => { setNewDesigner(e.target.value); setError(""); }}
+              placeholder="e.g. Jane Smith"
+            />
+            {error && <p className="text-xs text-rose-600 mt-1">{error}</p>}
+          </div>
+          <Button type="submit" disabled={adding || !newDesigner.trim()} className="bg-gradient-to-r from-amber-500 to-orange-500">
+            {adding ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Plus className="w-4 h-4 mr-1" />}
+            Add
+          </Button>
+        </form>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <h2 className="text-base font-semibold text-slate-900 mb-4">Designers</h2>
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <div className="w-6 h-6 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : customDesigners.length === 0 ? (
+          <p className="text-sm text-slate-400">No designers yet. Add one above.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {customDesigners.map((name) => (
+              <span key={name} className="flex items-center gap-1.5 text-xs font-medium pl-3 pr-1.5 py-1.5 rounded-full bg-amber-100 text-amber-700">
+                {name}
+                <button
+                  onClick={() => handleRemove(name)}
+                  disabled={removing === name}
+                  className="rounded-full p-0.5 hover:bg-amber-200 text-amber-700"
+                >
+                  {removing === name ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <h2 className="text-base font-semibold text-slate-900 mb-1">Team Members</h2>
+        <p className="text-sm text-slate-500 mb-4">Managed on the Team Members tab — listed here for reference since they're also assignable as a designer.</p>
+        {employees.length === 0 ? (
+          <p className="text-sm text-slate-400">No active team members.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {employees.map((employee) => (
+              <span key={employee.id} className="text-xs font-medium px-3 py-1.5 rounded-full bg-slate-100 text-slate-600">
+                {employee.full_name}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <h2 className="text-base font-semibold text-slate-900 mb-1">Subcontractors</h2>
+        <p className="text-sm text-slate-500 mb-4">Managed on the Subcontractors page — listed here for reference since they're also assignable as a designer.</p>
+        {subcontractors.length === 0 ? (
+          <p className="text-sm text-slate-400">No active subcontractors.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {subcontractors.map((sub) => (
+              <span key={sub.id} className="text-xs font-medium px-3 py-1.5 rounded-full bg-slate-100 text-slate-600">
+                {sub.name}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 const ALL_TABS = [
@@ -866,6 +1008,7 @@ const ALL_TABS = [
   { key: "permissions",  label: "Roles & Permissions", icon: ShieldCheck,    adminOnly: false },
   { key: "companies",    label: "Companies",           icon: Building2,      adminOnly: false },
   { key: "leadSources",  label: "Lead Sources",        icon: Tag,            adminOnly: false },
+  { key: "designers",    label: "Designers",           icon: PenTool,        adminOnly: false },
   { key: "invite",       label: "Invite & Logins",     icon: UserPlus,       adminOnly: false },
   { key: "calendar",     label: "Calendar Feed",       icon: CalendarDays,   adminOnly: false },
   { key: "appearance",   label: "Appearance",          icon: Palette,        adminOnly: false },
@@ -912,6 +1055,7 @@ export default function Settings() {
       {activeTab === "permissions" && <PermissionsTab />}
       {activeTab === "companies"   && <CompanyManager />}
       {activeTab === "leadSources" && <LeadSourcesTab />}
+      {activeTab === "designers"   && <DesignersTab />}
       {activeTab === "invite"      && <InviteTab />}
       {activeTab === "calendar"    && <CalendarFeedTab />}
       {activeTab === "appearance"  && <AppearanceTab />}

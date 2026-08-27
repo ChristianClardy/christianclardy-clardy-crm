@@ -11,7 +11,8 @@ import ContactHistoryPanel from "@/components/crm/ContactHistoryPanel";
 import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
 import AppointmentsPanel from "@/components/scheduling/AppointmentsPanel";
 import LostReasonDialog from "@/components/crm/LostReasonDialog";
-import { promoteLeadToProspect, setLeadStatus, markLeadLost } from "@/lib/leadConversion";
+import DesignerAssignmentDialog from "@/components/crm/DesignerAssignmentDialog";
+import { promoteLeadToProspect, setLeadStatus, markLeadLost, assignDesignerAndSetInDesign } from "@/lib/leadConversion";
 import { LEAD_STAGES } from "@/lib/leadStages";
 
 const funnelSteps = LEAD_STAGES;
@@ -27,6 +28,8 @@ export default function LeadDetail() {
   const [converting, setConverting] = useState(false);
   const [lostReasonOpen, setLostReasonOpen] = useState(false);
   const [savingLostReason, setSavingLostReason] = useState(false);
+  const [designerPromptOpen, setDesignerPromptOpen] = useState(false);
+  const [savingDesigner, setSavingDesigner] = useState(false);
 
   const loadData = async () => {
     if (!leadId) return;
@@ -91,6 +94,12 @@ export default function LeadDetail() {
       setLostReasonOpen(true);
       return;
     }
+    // In Design is when design work actually starts, so pause here and ask
+    // who's designing it before committing the status change.
+    if (value === "In Design") {
+      setDesignerPromptOpen(true);
+      return;
+    }
     updateStatus(value);
   };
 
@@ -105,6 +114,25 @@ export default function LeadDetail() {
       alert("Could not save the lost reason. Please try again.");
     } finally {
       setSavingLostReason(false);
+    }
+  };
+
+  const handleSkipDesigner = () => {
+    setDesignerPromptOpen(false);
+    updateStatus("In Design");
+  };
+
+  const handleSaveDesigner = async (designer) => {
+    setSavingDesigner(true);
+    try {
+      await assignDesignerAndSetInDesign(lead, designer);
+      await loadData();
+      setDesignerPromptOpen(false);
+    } catch (err) {
+      console.error("Failed to assign designer:", err?.message);
+      alert("Could not assign the designer. Please try again.");
+    } finally {
+      setSavingDesigner(false);
     }
   };
 
@@ -136,6 +164,7 @@ export default function LeadDetail() {
               {lead.phone && <span className="flex items-center gap-2"><Phone className="h-4 w-4" />{lead.phone}</span>}
               {lead.email && <span className="flex items-center gap-2"><Mail className="h-4 w-4" />{lead.email}</span>}
               {lead.assigned_sales_rep && <span className="flex items-center gap-2"><UserRound className="h-4 w-4" />{lead.assigned_sales_rep}</span>}
+              {lead.assigned_designer && <span className="flex items-center gap-2"><UserRound className="h-4 w-4" />Designer: {lead.assigned_designer}</span>}
               {lead.follow_up_date && <span className="flex items-center gap-2"><CalendarDays className="h-4 w-4" />{lead.follow_up_date}</span>}
             </div>
           </div>
@@ -255,6 +284,15 @@ export default function LeadDetail() {
           saving={savingLostReason}
           onCancel={() => setLostReasonOpen(false)}
           onSave={handleSaveLostReason}
+        />
+      )}
+
+      {designerPromptOpen && (
+        <DesignerAssignmentDialog
+          lead={lead}
+          saving={savingDesigner}
+          onSkip={handleSkipDesigner}
+          onSave={handleSaveDesigner}
         />
       )}
     </div>

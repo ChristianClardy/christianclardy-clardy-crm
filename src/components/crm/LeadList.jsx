@@ -14,9 +14,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import LeadFormDialog from "@/components/crm/LeadFormDialog";
 import LostReasonDialog from "@/components/crm/LostReasonDialog";
+import DesignerAssignmentDialog from "@/components/crm/DesignerAssignmentDialog";
 import { cn } from "@/lib/utils";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
-import { setLeadStatus, markLeadLost, ensureContactForLead } from "@/lib/leadConversion";
+import { setLeadStatus, markLeadLost, ensureContactForLead, assignDesignerAndSetInDesign } from "@/lib/leadConversion";
 import { DEAD_LEAD_STATUSES, WON_STATUS } from "@/lib/leadStages";
 
 // ─── Column definitions ───────────────────────────────────────────────────────
@@ -372,6 +373,7 @@ function LeadCard({ lead, draggable, onDragStart }) {
         {lead.phone && <div className="flex items-center gap-1.5"><Phone className="h-3 w-3" />{lead.phone}</div>}
         {lead.email && <div className="flex items-center gap-1.5 truncate"><Mail className="h-3 w-3 shrink-0" /><span className="truncate">{lead.email}</span></div>}
         {lead.assigned_sales_rep && <div className="flex items-center gap-1.5"><UserRound className="h-3 w-3" />{lead.assigned_sales_rep}</div>}
+        {lead.assigned_designer && <div className="flex items-center gap-1.5"><UserRound className="h-3 w-3" />Designer: {lead.assigned_designer}</div>}
         {lead.follow_up_date && <div className="flex items-center gap-1.5"><CalendarDays className="h-3 w-3" />{lead.follow_up_date}</div>}
       </div>
 
@@ -566,6 +568,8 @@ export default function LeadList({ archived = false }) {
   const [schedulingAppointment, setSchedulingAppointment] = useState(false);
   const [lostReasonPrompt, setLostReasonPrompt] = useState(null); // lead | null
   const [savingLostReason, setSavingLostReason] = useState(false);
+  const [designerPrompt, setDesignerPrompt] = useState(null); // { lead, column } | null
+  const [savingDesigner, setSavingDesigner] = useState(false);
   const [reasonFilter, setReasonFilter] = useState("all");
   const [stageDetailKey, setStageDetailKey] = useState(null); // column key | null
   const dragLeadRef = useRef(null);
@@ -770,6 +774,13 @@ export default function LeadList({ archived = false }) {
       return;
     }
 
+    // Moving into "In Design" is when design work actually starts, so pause
+    // here and ask who's designing it before committing the status change.
+    if (column.key === "design") {
+      setDesignerPrompt({ lead, column });
+      return;
+    }
+
     await moveLeadToColumn(lead, column);
   };
 
@@ -852,6 +863,36 @@ export default function LeadList({ archived = false }) {
       setSavingLostReason(false);
     }
     setLostReasonPrompt(null);
+  };
+
+  const handleSkipDesigner = () => {
+    if (!designerPrompt) return;
+    const { lead, column } = designerPrompt;
+    setDesignerPrompt(null);
+    moveLeadToColumn(lead, column);
+  };
+
+  const handleSaveDesigner = async (designer) => {
+    if (!designerPrompt) return;
+    const { lead, column } = designerPrompt;
+    setSavingDesigner(true);
+    setLeads((prev) =>
+      prev.map((l) => l.id === lead.id ? { ...l, status: column.defaultStatus, assigned_designer: designer } : l)
+    );
+    try {
+      const updated = await assignDesignerAndSetInDesign(lead, designer);
+      setLeads((prev) =>
+        prev.map((l) => l.id === lead.id ? { ...l, ...updated } : l)
+      );
+    } catch (err) {
+      console.error("Failed to assign designer:", err?.message);
+      setLeads((prev) =>
+        prev.map((l) => l.id === lead.id ? { ...l, status: lead.status, assigned_designer: lead.assigned_designer } : l)
+      );
+    } finally {
+      setSavingDesigner(false);
+    }
+    setDesignerPrompt(null);
   };
 
   if (loading) {
@@ -1028,6 +1069,15 @@ export default function LeadList({ archived = false }) {
           saving={savingLostReason}
           onCancel={handleCancelLostReason}
           onSave={handleSaveLostReason}
+        />
+      )}
+
+      {designerPrompt && (
+        <DesignerAssignmentDialog
+          lead={designerPrompt.lead}
+          saving={savingDesigner}
+          onSkip={handleSkipDesigner}
+          onSave={handleSaveDesigner}
         />
       )}
 
