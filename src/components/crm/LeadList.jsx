@@ -181,12 +181,12 @@ function daysInStageCount(lead) {
   return differenceInCalendarDays(new Date(), new Date(since));
 }
 
-// Fresh leads get a neutral pill; leads sitting a while get progressively louder.
+// Fresh leads start green, get yellow at 2 days, red at 5 days.
 function stageAgeStyles(days) {
   if (days === null) return "";
-  if (days >= 14) return "bg-rose-100 text-rose-700 ring-1 ring-rose-200";
-  if (days >= 7) return "bg-amber-100 text-amber-700 ring-1 ring-amber-200";
-  return "bg-indigo-100 text-indigo-700 ring-1 ring-indigo-200";
+  if (days >= 5) return "bg-red-100 text-red-700 ring-1 ring-red-200";
+  if (days >= 2) return "bg-yellow-100 text-yellow-700 ring-1 ring-yellow-200";
+  return "bg-green-100 text-green-700 ring-1 ring-green-200";
 }
 
 // Sum of estimated_budget across a set of leads — used for the per-section
