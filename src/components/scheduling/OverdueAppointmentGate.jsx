@@ -20,8 +20,11 @@ export default function OverdueAppointmentGate() {
     }
 
     try {
+      // Ascending (oldest first) so that if the fetch limit is ever hit, it's
+      // the newest events that get left out — not old, still-unresolved
+      // appointments from months ago, which is exactly what must not happen.
       const [events, employees] = await Promise.all([
-        base44.entities.CalendarEvent.list("-start_datetime", 300),
+        base44.entities.CalendarEvent.list("start_datetime", 500),
         base44.entities.Employee.list("full_name", 500),
       ]);
       const currentUserName = employees.find((e) => e.email === me.email)?.full_name || me.full_name || "";
