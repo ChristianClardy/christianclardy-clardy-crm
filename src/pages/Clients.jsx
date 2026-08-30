@@ -75,18 +75,6 @@ export default function Clients() {
         base44.entities.CompanyProfile.list("name"),
       ]);
 
-      // One-time backfill: tag any client without a company as Edwards Design and Construction
-      const TARGET_COMPANY = "Edwards Design and Construction";
-      const untagged = clientsData.filter(c => !c.company);
-      if (untagged.length) {
-        await Promise.all(
-          untagged.map(c => {
-            c.company = TARGET_COMPANY;
-            return base44.entities.Client.update(c.id, { company: TARGET_COMPANY }).catch(() => {});
-          })
-        );
-      }
-
       // One-time backfill: assign customer_number to any client that doesn't have one
       const withoutNumber = clientsData.filter(c => !c.customer_number);
       if (withoutNumber.length) {
