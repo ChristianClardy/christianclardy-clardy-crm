@@ -10,11 +10,7 @@ import DesignerAssignmentDialog from "@/components/crm/DesignerAssignmentDialog"
 import { setLeadStatus, markLeadLost, assignDesignerAndSetInDesign } from "@/lib/leadConversion";
 import { LEAD_STAGES } from "@/lib/leadStages";
 
-// Blocks Escape / overlay-click / outside-pointer dismissal — this modal can
-// only be dismissed by actually resolving the appointment.
-const blockDismiss = (e) => e.preventDefault();
-
-export default function OverdueAppointmentDialog({ event, onResolved }) {
+export default function OverdueAppointmentDialog({ event, onResolved, onDismiss }) {
   const [mode, setMode] = useState("outcome"); // "outcome" | "reschedule"
   const [saving, setSaving] = useState(false);
   const [rescheduleStart, setRescheduleStart] = useState("");
@@ -169,14 +165,8 @@ export default function OverdueAppointmentDialog({ event, onResolved }) {
   if (stageStep && lead) {
     return (
       <>
-        <Dialog open onOpenChange={() => {}}>
-          <DialogContent
-            className="max-w-sm"
-            hideCloseButton
-            onEscapeKeyDown={blockDismiss}
-            onPointerDownOutside={blockDismiss}
-            onInteractOutside={blockDismiss}
-          >
+        <Dialog open onOpenChange={(open) => { if (!open) onDismiss(); }}>
+          <DialogContent className="max-w-sm">
             <DialogHeader>
               <DialogTitle>Update {lead.full_name}'s stage</DialogTitle>
             </DialogHeader>
@@ -206,14 +196,8 @@ export default function OverdueAppointmentDialog({ event, onResolved }) {
   }
 
   return (
-    <Dialog open onOpenChange={() => {}}>
-      <DialogContent
-        className="max-w-md"
-        hideCloseButton
-        onEscapeKeyDown={blockDismiss}
-        onPointerDownOutside={blockDismiss}
-        onInteractOutside={blockDismiss}
-      >
+    <Dialog open onOpenChange={(open) => { if (!open) onDismiss(); }}>
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Appointment needs an update</DialogTitle>
         </DialogHeader>
@@ -230,6 +214,9 @@ export default function OverdueAppointmentDialog({ event, onResolved }) {
             <Button variant="outline" onClick={() => setMode("reschedule")} disabled={saving}>Reschedule</Button>
             <Button variant="outline" className="text-rose-600" onClick={handleCancelAppointment} disabled={saving}>
               Cancel Appointment
+            </Button>
+            <Button variant="ghost" className="text-slate-400" onClick={onDismiss} disabled={saving}>
+              Remind me later
             </Button>
           </div>
         ) : (

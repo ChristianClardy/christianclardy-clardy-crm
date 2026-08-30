@@ -4,12 +4,32 @@ import OverdueAppointmentDialog from "./OverdueAppointmentDialog";
 
 const POLL_INTERVAL_MS = 60000;
 const RESOLVED_STATUSES = ["completed", "cancelled"];
+const DISMISSED_KEY = "overdueAppointmentGate.dismissedIds";
+
+// sessionStorage, not localStorage — dismissals should only last the current
+// browser session, not follow the user across logins/days.
+function loadDismissedIds() {
+  try {
+    return new Set(JSON.parse(sessionStorage.getItem(DISMISSED_KEY) || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveDismissedIds(ids) {
+  try {
+    sessionStorage.setItem(DISMISSED_KEY, JSON.stringify([...ids]));
+  } catch {
+    // sessionStorage unavailable — dismissals just won't persist across nav
+  }
+}
 
 export default function OverdueAppointmentGate() {
   const [activeEvent, setActiveEvent] = useState(null);
   // Mirrors activeEvent but readable synchronously inside refresh() — avoids
   // a background poll swapping out the appointment the user is mid-flow on.
   const activeEventRef = useRef(null);
+  const dismissedIdsRef = useRef(loadDismissedIds());
 
   const refresh = async () => {
     let me;
@@ -35,11 +55,12 @@ export default function OverdueAppointmentGate() {
         .filter((event) =>
           (event.assigned_users || []).includes(currentUserName) &&
           !RESOLVED_STATUSES.includes(event.status) &&
+          !dismissedIdsRef.current.has(event.id) &&
           new Date(event.end_datetime || event.start_datetime) < now
         )
         .sort((a, b) => new Date(a.start_datetime) - new Date(b.start_datetime));
 
-      // Only claim a new active event if nothing is currently being resolved —
+      // Only claim a new active event if nothing is currently being shown —
       // this is what keeps the modal from being yanked away by the next poll
       // mid-flow (e.g. while the user is on the lead-stage step).
       if (!activeEventRef.current) {
@@ -58,13 +79,28 @@ export default function OverdueAppointmentGate() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleResolved = () => {
+  const advance = () => {
     activeEventRef.current = null;
     setActiveEvent(null);
     refresh();
   };
 
+  // Resolved (Completed/Cancelled/Rescheduled) never needs to come back, so
+  // it doesn't need to go in the dismissed set — the overdue query itself
+  // won't match it again.
+  const handleResolved = () => advance();
+
+  // Dismissed just means "not this session" — it's still genuinely overdue,
+  // so it has to be excluded explicitly or the next poll would reclaim it.
+  const handleDismiss = () => {
+    if (activeEventRef.current) {
+      dismissedIdsRef.current.add(activeEventRef.current.id);
+      saveDismissedIds(dismissedIdsRef.current);
+    }
+    advance();
+  };
+
   if (!activeEvent) return null;
 
-  return <OverdueAppointmentDialog event={activeEvent} onResolved={handleResolved} />;
+  return <OverdueAppointmentDialog event={activeEvent} onResolved={handleResolved} onDismiss={handleDismiss} />;
 }
