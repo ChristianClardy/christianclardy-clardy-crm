@@ -5,6 +5,11 @@ import OverdueAppointmentDialog from "./OverdueAppointmentDialog";
 const POLL_INTERVAL_MS = 60000;
 const RESOLVED_STATUSES = ["completed", "cancelled"];
 const DISMISSED_KEY = "overdueAppointmentGate.dismissedIds";
+// Only nag about the initial appointment while the lead is still sitting in
+// this stage — once it's moved on (In Design, Estimate In Progress, etc.)
+// the original appointment reminder is no longer the relevant thing to
+// chase, and an appointment with no linked lead at all doesn't apply either.
+const TARGET_LEAD_STAGE = "Appointment Scheduled";
 
 // sessionStorage, not localStorage — dismissals should only last the current
 // browser session, not follow the user across logins/days.
@@ -43,12 +48,15 @@ export default function OverdueAppointmentGate() {
       // Ascending (oldest first) so that if the fetch limit is ever hit, it's
       // the newest events that get left out — not old, still-unresolved
       // appointments from months ago, which is exactly what must not happen.
-      const [events, employees] = await Promise.all([
+      const [events, employees, leads] = await Promise.all([
         base44.entities.CalendarEvent.list("start_datetime", 500),
         base44.entities.Employee.list("full_name", 500),
+        base44.entities.Lead.list("full_name", 2000),
       ]);
       const currentUserName = employees.find((e) => e.email === me.email)?.full_name || me.full_name || "";
       if (!currentUserName) return;
+
+      const leadStageById = new Map((leads || []).map((lead) => [lead.id, lead.status]));
 
       const now = new Date();
       const overdue = (events || [])
@@ -56,6 +64,7 @@ export default function OverdueAppointmentGate() {
           (event.assigned_users || []).includes(currentUserName) &&
           !RESOLVED_STATUSES.includes(event.status) &&
           !dismissedIdsRef.current.has(event.id) &&
+          leadStageById.get(event.lead_id) === TARGET_LEAD_STAGE &&
           new Date(event.end_datetime || event.start_datetime) < now
         )
         .sort((a, b) => new Date(a.start_datetime) - new Date(b.start_datetime));
