@@ -24,6 +24,7 @@ const statusColors = {
   in_progress: "bg-amber-500 hover:bg-amber-600",
   completed: "bg-emerald-500 hover:bg-emerald-600",
   delayed: "bg-rose-500 hover:bg-rose-600",
+  cancelled: "bg-slate-400 hover:bg-slate-500",
 };
 
 function normalizeOperationStatus(value) {
@@ -303,6 +304,7 @@ export default function Calendar() {
               <SelectItem value="in_progress">In Progress</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
               <SelectItem value="delayed">Delayed</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
             </SelectContent>
           </Select>
         </div>

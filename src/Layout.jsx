@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import NotificationBell from "@/components/notifications/NotificationBell";
+import OverdueAppointmentGate from "@/components/scheduling/OverdueAppointmentGate";
 import CompanyScopeSwitcher from "@/components/company/CompanyScopeSwitcher";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/ThemeContext";
@@ -206,6 +207,11 @@ export default function Layout({ children, currentPageName }) {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "var(--brand-bg)", fontFamily: "'Georgia', serif" }}>
+      {/* Rendered once per Layout mount (not inside SidebarContent, which
+          renders twice for the mobile/desktop asides) so it never shows the
+          blocking modal more than once. */}
+      <OverdueAppointmentGate />
+
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
