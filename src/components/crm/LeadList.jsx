@@ -601,6 +601,9 @@ export default function LeadList({ archived = false }) {
   const [reasonFilter, setReasonFilter] = useState("all");
   const [stageDetailKey, setStageDetailKey] = useState(null); // column key | null
   const dragLeadRef = useRef(null);
+  const boardScrollRef = useRef(null);
+  const edgeScrollSpeedRef = useRef(0);
+  const edgeScrollFrameRef = useRef(null);
 
   // Deep-link support: the Dashboard's "Pipeline by Stage" rows link to
   // /CRM?tab=...&stage=<status>, so open that stage's detail dialog on load.
@@ -769,6 +772,48 @@ export default function LeadList({ archived = false }) {
     setDraggingOver(colKey);
   };
 
+  // Auto-scrolls the board horizontally while dragging a card near its left
+  // or right edge, so you can drop straight into an off-screen column
+  // instead of dropping short and moving the card again.
+  const EDGE_SCROLL_ZONE = 80; // px from the viewport edge that triggers scrolling
+  const EDGE_SCROLL_MAX_SPEED = 22; // px per frame at the very edge
+
+  const runEdgeScroll = () => {
+    const el = boardScrollRef.current;
+    if (!el || edgeScrollSpeedRef.current === 0) {
+      edgeScrollFrameRef.current = null;
+      return;
+    }
+    el.scrollLeft += edgeScrollSpeedRef.current;
+    edgeScrollFrameRef.current = requestAnimationFrame(runEdgeScroll);
+  };
+
+  const handleBoardDragOver = (e) => {
+    const el = boardScrollRef.current;
+    if (!el) return;
+    const { left, right } = el.getBoundingClientRect();
+    let speed = 0;
+    if (e.clientX < left + EDGE_SCROLL_ZONE) {
+      speed = -EDGE_SCROLL_MAX_SPEED * (1 - Math.max(0, e.clientX - left) / EDGE_SCROLL_ZONE);
+    } else if (e.clientX > right - EDGE_SCROLL_ZONE) {
+      speed = EDGE_SCROLL_MAX_SPEED * (1 - Math.max(0, right - e.clientX) / EDGE_SCROLL_ZONE);
+    }
+    edgeScrollSpeedRef.current = speed;
+    if (speed !== 0 && edgeScrollFrameRef.current == null) {
+      edgeScrollFrameRef.current = requestAnimationFrame(runEdgeScroll);
+    }
+  };
+
+  const stopEdgeScroll = () => {
+    edgeScrollSpeedRef.current = 0;
+    if (edgeScrollFrameRef.current != null) {
+      cancelAnimationFrame(edgeScrollFrameRef.current);
+      edgeScrollFrameRef.current = null;
+    }
+  };
+
+  useEffect(() => stopEdgeScroll, []);
+
   const moveLeadToColumn = async (lead, column) => {
     // Dragging a lead out of Lost/No Decision into any other column is a
     // reactivation — clear the stale lost reason along with the status move,
@@ -805,6 +850,7 @@ export default function LeadList({ archived = false }) {
   const handleDrop = async (e, column) => {
     e.preventDefault();
     setDraggingOver(null);
+    stopEdgeScroll();
     const lead = dragLeadRef.current;
     dragLeadRef.current = null;
     if (!lead) return;
@@ -840,6 +886,7 @@ export default function LeadList({ archived = false }) {
   const handleDragEnd = () => {
     setDraggingOver(null);
     dragLeadRef.current = null;
+    stopEdgeScroll();
   };
 
   const handleSkipAppointment = () => {
@@ -1109,7 +1156,7 @@ export default function LeadList({ archived = false }) {
 
       {/* ── Kanban board ── */}
       {view === "kanban" && !archived && (
-        <div className="overflow-x-auto pb-4">
+        <div ref={boardScrollRef} className="overflow-x-auto pb-4" onDragOver={handleBoardDragOver}>
           <div
             className="flex gap-3 min-w-max"
             onDragLeave={() => setDraggingOver(null)}
