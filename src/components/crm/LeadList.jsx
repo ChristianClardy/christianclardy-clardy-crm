@@ -410,7 +410,7 @@ function LeadCard({ lead, draggable, onDragStart, onAssignDesigner, onReactivate
 
 // ─── Kanban column ────────────────────────────────────────────────────────────
 
-function KanbanColumn({ column, leads, onDrop, onDragStart, onDragOver, draggingOver, onHeaderClick, onAssignDesigner }) {
+function KanbanColumn({ column, leads, onDrop, onDragStart, onDragOver, draggingOver, onHeaderClick, onAssignDesigner, onReactivate }) {
   const isOver = draggingOver === column.key;
 
   return (
@@ -454,6 +454,7 @@ function KanbanColumn({ column, leads, onDrop, onDragStart, onDragOver, dragging
             draggable
             onDragStart={onDragStart}
             onAssignDesigner={onAssignDesigner}
+            onReactivate={onReactivate}
           />
         ))}
         {leads.length === 0 && !isOver && (
@@ -731,14 +732,28 @@ export default function LeadList({ archived = false }) {
     [visibleLeads]
   );
 
+  // Search-filtered leads for the kanban board specifically — unlike
+  // filteredLeads/visibleLeads (which drop Lost/No Decision leads off the
+  // active board entirely, since they otherwise only belong on the Archived
+  // tab), this keeps Lost leads in so the board's Lost/No Decision column
+  // isn't always empty and cards can be dragged back out of it.
+  const kanbanLeads = useMemo(() => scopedLeads.filter((lead) => {
+    const value = search.toLowerCase();
+    return !value ||
+      (lead.full_name || "").toLowerCase().includes(value) ||
+      (lead.email || "").toLowerCase().includes(value) ||
+      (lead.phone || "").toLowerCase().includes(value) ||
+      (lead.project_description || "").toLowerCase().includes(value);
+  }), [scopedLeads, search]);
+
   // Group leads into kanban columns
   const columnLeads = useMemo(() =>
     Object.fromEntries(
       COLUMNS.map((col) => [
         col.key,
-        filteredLeads.filter((l) => col.match.includes(l.status || "New Lead")),
+        kanbanLeads.filter((l) => col.match.includes(l.status || "New Lead")),
       ])
-    ), [filteredLeads]);
+    ), [kanbanLeads]);
 
   // ── Drag handlers ────────────────────────────────────────────────────────
 
@@ -755,13 +770,22 @@ export default function LeadList({ archived = false }) {
   };
 
   const moveLeadToColumn = async (lead, column) => {
+    // Dragging a lead out of Lost/No Decision into any other column is a
+    // reactivation — clear the stale lost reason along with the status move,
+    // same as the explicit Reactivate button.
+    const leavingLost = lead.status === "Lost/No Decision" && column.key !== "lost";
+
     // Optimistic update
     setLeads((prev) =>
-      prev.map((l) => l.id === lead.id ? { ...l, status: column.defaultStatus } : l)
+      prev.map((l) => l.id === lead.id
+        ? { ...l, status: column.defaultStatus, ...(leavingLost ? { lost_reason: null, lost_reason_notes: null } : {}) }
+        : l)
     );
 
     try {
-      const updated = await setLeadStatus(lead, column.defaultStatus);
+      const updated = leavingLost
+        ? await reactivateLead(lead, column.defaultStatus)
+        : await setLeadStatus(lead, column.defaultStatus);
       // Pick up status_changed_at (and anything else the DB trigger touched)
       // so "days in stage" reflects the move immediately instead of only
       // after the next full reload.
@@ -771,7 +795,9 @@ export default function LeadList({ archived = false }) {
     } catch {
       // Revert on failure
       setLeads((prev) =>
-        prev.map((l) => l.id === lead.id ? { ...l, status: lead.status } : l)
+        prev.map((l) => l.id === lead.id
+          ? { ...l, status: lead.status, lost_reason: lead.lost_reason, lost_reason_notes: lead.lost_reason_notes }
+          : l)
       );
     }
   };
@@ -1100,6 +1126,7 @@ export default function LeadList({ archived = false }) {
                 onDrop={handleDrop}
                 onHeaderClick={(c) => setStageDetailKey(c.key)}
                 onAssignDesigner={(lead) => setDesignerEditPrompt(lead)}
+                onReactivate={handleReactivate}
               />
             ))}
           </div>
