@@ -129,6 +129,16 @@ export async function markLeadLost(lead, { reason = "", notes = "" } = {}) {
 }
 
 /**
+ * Pulls a Lead back out of Lost/No Decision when it comes back to life —
+ * moves it to newStatus (defaults to "Contacted") and clears the stale lost
+ * reason/notes so the reactivated lead doesn't still show why it was lost.
+ */
+export async function reactivateLead(lead, newStatus = "Contacted") {
+  await setLeadStatus(lead, newStatus);
+  return await base44.entities.Lead.update(lead.id, { lost_reason: null, lost_reason_notes: null });
+}
+
+/**
  * Moves a Lead into the "In Design" stage along with the designer assigned
  * to own the work. Also used to reassign the designer on a lead that's
  * already In Design — setLeadStatus is a no-op status-wise then, but

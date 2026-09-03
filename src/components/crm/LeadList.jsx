@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { formatDistanceToNowStrict, differenceInCalendarDays } from "date-fns";
 import {
   Plus, Search, Phone, Mail, CalendarDays, UserRound,
-  LayoutList, Columns3, Tag, Printer, MapPin, Clock,
+  LayoutList, Columns3, Tag, Printer, MapPin, Clock, RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,7 @@ import LostReasonDialog from "@/components/crm/LostReasonDialog";
 import DesignerAssignmentDialog from "@/components/crm/DesignerAssignmentDialog";
 import { cn } from "@/lib/utils";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
-import { setLeadStatus, markLeadLost, ensureContactForLead, assignDesignerAndSetInDesign, updateLeadDesigner } from "@/lib/leadConversion";
+import { setLeadStatus, markLeadLost, reactivateLead, ensureContactForLead, assignDesignerAndSetInDesign, updateLeadDesigner } from "@/lib/leadConversion";
 import { DEAD_LEAD_STATUSES, WON_STATUS, LEAD_STAGES, PROSPECT_THRESHOLD_STAGE } from "@/lib/leadStages";
 
 // ─── Column definitions ───────────────────────────────────────────────────────
@@ -299,7 +299,7 @@ function openPrintWindow(html) {
 
 // ─── Lead card (shared by both views) ────────────────────────────────────────
 
-function LeadCard({ lead, draggable, onDragStart, onAssignDesigner }) {
+function LeadCard({ lead, draggable, onDragStart, onAssignDesigner, onReactivate }) {
   const canAssignDesigner = LEAD_STAGES.indexOf(lead.status) >= LEAD_STAGES.indexOf(PROSPECT_THRESHOLD_STAGE);
   return (
     <Link
@@ -364,9 +364,21 @@ function LeadCard({ lead, draggable, onDragStart, onAssignDesigner }) {
       )}
 
       {lead.status === "Lost/No Decision" && (
-        <div className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-rose-700">
-          <Tag className="h-3 w-3" />
-          {lead.lost_reason || "No reason set"}
+        <div className="mt-1.5 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-rose-700">
+            <Tag className="h-3 w-3" />
+            {lead.lost_reason || "No reason set"}
+          </div>
+          {onReactivate && (
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onReactivate(lead); }}
+              title="Move this lead back into the active pipeline"
+              className="flex shrink-0 items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100"
+            >
+              <RotateCcw className="h-3 w-3" /> Reactivate
+            </button>
+          )}
         </div>
       )}
 
@@ -855,6 +867,24 @@ export default function LeadList({ archived = false }) {
     }
   };
 
+  const handleReactivate = async (lead) => {
+    // Optimistic update — drops the lead off the archived tab immediately
+    setLeads((prev) =>
+      prev.map((l) => l.id === lead.id ? { ...l, status: "Contacted", lost_reason: null, lost_reason_notes: null } : l)
+    );
+    try {
+      const updated = await reactivateLead(lead);
+      setLeads((prev) =>
+        prev.map((l) => l.id === lead.id ? { ...l, ...updated } : l)
+      );
+    } catch (err) {
+      console.error("Failed to reactivate lead:", err?.message);
+      setLeads((prev) =>
+        prev.map((l) => l.id === lead.id ? { ...l, status: lead.status, lost_reason: lead.lost_reason, lost_reason_notes: lead.lost_reason_notes } : l)
+      );
+    }
+  };
+
   const handleCancelLostReason = () => setLostReasonPrompt(null);
 
   const handleSaveLostReason = async ({ reason, notes }) => {
@@ -1081,7 +1111,13 @@ export default function LeadList({ archived = false }) {
         <>
           <div className="grid gap-4 lg:grid-cols-2">
             {filteredLeads.map((lead) => (
-              <LeadCard key={lead.id} lead={lead} draggable={false} onAssignDesigner={(l) => setDesignerEditPrompt(l)} />
+              <LeadCard
+                key={lead.id}
+                lead={lead}
+                draggable={false}
+                onAssignDesigner={(l) => setDesignerEditPrompt(l)}
+                onReactivate={archived ? handleReactivate : undefined}
+              />
             ))}
           </div>
 

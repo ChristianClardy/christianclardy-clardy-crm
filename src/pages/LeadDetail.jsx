@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowLeft, CalendarDays, Mail, Pencil, Phone, TrendingUp, UserRound } from "lucide-react";
+import { ArrowLeft, CalendarDays, Mail, Pencil, Phone, RotateCcw, TrendingUp, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,7 +12,7 @@ import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
 import AppointmentsPanel from "@/components/scheduling/AppointmentsPanel";
 import LostReasonDialog from "@/components/crm/LostReasonDialog";
 import DesignerAssignmentDialog from "@/components/crm/DesignerAssignmentDialog";
-import { promoteLeadToProspect, setLeadStatus, markLeadLost, assignDesignerAndSetInDesign, updateLeadDesigner } from "@/lib/leadConversion";
+import { promoteLeadToProspect, setLeadStatus, markLeadLost, reactivateLead, assignDesignerAndSetInDesign, updateLeadDesigner } from "@/lib/leadConversion";
 import { LEAD_STAGES, PROSPECT_THRESHOLD_STAGE } from "@/lib/leadStages";
 
 const funnelSteps = LEAD_STAGES;
@@ -32,6 +32,7 @@ export default function LeadDetail() {
   const [savingDesigner, setSavingDesigner] = useState(false);
   const [designerEditOpen, setDesignerEditOpen] = useState(false);
   const [savingDesignerEdit, setSavingDesignerEdit] = useState(false);
+  const [reactivating, setReactivating] = useState(false);
 
   const loadData = async () => {
     if (!leadId) return;
@@ -121,6 +122,19 @@ export default function LeadDetail() {
       alert("Could not save the lost reason. Please try again.");
     } finally {
       setSavingLostReason(false);
+    }
+  };
+
+  const handleReactivate = async () => {
+    setReactivating(true);
+    try {
+      await reactivateLead(lead);
+      await loadData();
+    } catch (err) {
+      console.error("Failed to reactivate lead:", err?.message);
+      alert("Could not reactivate this lead. Please try again.");
+    } finally {
+      setReactivating(false);
     }
   };
 
@@ -248,9 +262,14 @@ export default function LeadDetail() {
                 <p className="mt-1 whitespace-pre-wrap text-sm text-rose-700/80">{lead.lost_reason_notes}</p>
               )}
             </div>
-            <Button variant="outline" onClick={() => setLostReasonOpen(true)}>
-              <Pencil className="mr-2 h-4 w-4" /> {lead.lost_reason ? "Edit reason" : "Set reason"}
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setLostReasonOpen(true)}>
+                <Pencil className="mr-2 h-4 w-4" /> {lead.lost_reason ? "Edit reason" : "Set reason"}
+              </Button>
+              <Button onClick={handleReactivate} disabled={reactivating}>
+                <RotateCcw className="mr-2 h-4 w-4" /> {reactivating ? "Reactivating..." : "Reactivate"}
+              </Button>
+            </div>
           </div>
         </div>
       )}
