@@ -65,33 +65,38 @@ Provide a structured response with:
 
 Be direct, specific to the actual data provided, and use construction industry language.`;
 
-    const result = await base44.integrations.Core.InvokeLLM({
-      prompt,
-      response_json_schema: {
-        type: "object",
-        properties: {
-          summary: { type: "string" },
-          risks: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                level: { type: "string", enum: ["high", "medium", "low"] },
-                title: { type: "string" },
-                detail: { type: "string" },
+    try {
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            summary: { type: "string" },
+            risks: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  level: { type: "string", enum: ["high", "medium", "low"] },
+                  title: { type: "string" },
+                  detail: { type: "string" },
+                },
               },
             },
-          },
-          next_steps: {
-            type: "array",
-            items: { type: "string" },
+            next_steps: {
+              type: "array",
+              items: { type: "string" },
+            },
           },
         },
-      },
-    });
-
-    setSummary(result);
-    setLoading(false);
+      });
+      setSummary(result);
+    } catch (err) {
+      console.error("Failed to generate AI project summary:", err?.message);
+      alert("Could not generate the AI summary. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const riskColors = {

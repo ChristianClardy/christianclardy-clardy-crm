@@ -642,27 +642,32 @@ export default function ProjectSheetView({ projectId, focusTaskId, externalGantt
     if (!aiStartDate) return;
     setAiScheduleLoading(true);
     const taskList = rows.filter(r => !r.is_section_header).map((r, i) => ({ index: i, task: r.task, section: rows.find(s => s.is_section_header && rows.indexOf(s) < rows.indexOf(r))?.section || "" }));
-    const result = await base44.integrations.Core.InvokeLLM({
-      model: "gpt_5_mini",
-      prompt: `You are a construction project scheduling expert. Given a list of construction tasks and a project start date of ${aiStartDate}, assign realistic start_date and end_date (YYYY-MM-DD) and duration (e.g. "3d", "1w") for each task. Tasks in the same section should be sequential. Consider typical construction sequencing (e.g. foundation before framing, framing before MEP, etc.). Tasks: ${JSON.stringify(taskList)}`,
-      response_json_schema: { type: "object", properties: { schedule: { type: "array", items: { type: "object", properties: { index: { type: "number" }, start_date: { type: "string" }, end_date: { type: "string" }, duration: { type: "string" } } } } } }
-    });
-    if (result?.schedule) {
-      const taskRowsOnly = rows.filter(r => !r.is_section_header);
-      setRows(prev => {
-        const updated = [...prev];
-        result.schedule.forEach(({ index, start_date, end_date, duration }) => {
-          const targetId = taskRowsOnly[index]?.id;
-          if (!targetId) return;
-          const i = updated.findIndex(r => r.id === targetId);
-          if (i !== -1) updated[i] = { ...updated[i], start_date, end_date, duration };
-        });
-        return projectSheetOrdering.sortSheetRowsByDates(updated);
+    try {
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `You are a construction project scheduling expert. Given a list of construction tasks and a project start date of ${aiStartDate}, assign realistic start_date and end_date (YYYY-MM-DD) and duration (e.g. "3d", "1w") for each task. Tasks in the same section should be sequential. Consider typical construction sequencing (e.g. foundation before framing, framing before MEP, etc.). Tasks: ${JSON.stringify(taskList)}`,
+        response_json_schema: { type: "object", properties: { schedule: { type: "array", items: { type: "object", properties: { index: { type: "number" }, start_date: { type: "string" }, end_date: { type: "string" }, duration: { type: "string" } } } } } }
       });
-      setDirty(true);
+      if (result?.schedule) {
+        const taskRowsOnly = rows.filter(r => !r.is_section_header);
+        setRows(prev => {
+          const updated = [...prev];
+          result.schedule.forEach(({ index, start_date, end_date, duration }) => {
+            const targetId = taskRowsOnly[index]?.id;
+            if (!targetId) return;
+            const i = updated.findIndex(r => r.id === targetId);
+            if (i !== -1) updated[i] = { ...updated[i], start_date, end_date, duration };
+          });
+          return projectSheetOrdering.sortSheetRowsByDates(updated);
+        });
+        setDirty(true);
+      }
+      setAiScheduleDialog(false);
+    } catch (err) {
+      console.error("Failed to AI-autofill schedule:", err?.message);
+      alert("Could not generate the schedule. Please try again.");
+    } finally {
+      setAiScheduleLoading(false);
     }
-    setAiScheduleLoading(false);
-    setAiScheduleDialog(false);
   };
   const toggleSection = (id) => setCollapsedSections((prev) => ({ ...prev, [id]: !prev[id] }));
   const toggleParent = (id) => setCollapsedParents((prev) => ({ ...prev, [id]: !prev[id] }));

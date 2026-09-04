@@ -93,6 +93,7 @@ Organize into logical phases/sections. Include 5-10 tasks per section. Be specif
       }
     } catch (e) {
       console.error(e);
+      alert("Could not generate a schedule. Please try again.");
     } finally {
       setAiLoading(null);
     }
@@ -153,6 +154,7 @@ Organize into logical phases. Include 5-10 tasks per phase. Be specific and prac
       }
     } catch (e) {
       console.error(e);
+      alert("Could not generate a schedule. Please try again.");
     } finally {
       setAiLoading(null);
     }

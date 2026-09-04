@@ -140,16 +140,22 @@ End with a brief executive summary paragraph (2-3 sentences).
 Keep it concise, professional, and actionable. Use bullet points where appropriate.
 `;
 
-    const result = await base44.integrations.Core.InvokeLLM({ prompt });
-    setReport(result);
-    setReportMeta({
-      date: reportDate,
-      frequency,
-      projectLabel: selectedProject === "all" ? "All Projects" : targetProjects[0]?.name,
-      sections: activeSections,
-    });
-    setExpanded(true);
-    setGenerating(false);
+    try {
+      const result = await base44.integrations.Core.InvokeLLM({ prompt });
+      setReport(result);
+      setReportMeta({
+        date: reportDate,
+        frequency,
+        projectLabel: selectedProject === "all" ? "All Projects" : targetProjects[0]?.name,
+        sections: activeSections,
+      });
+      setExpanded(true);
+    } catch (err) {
+      console.error("Failed to generate report:", err?.message);
+      alert("Could not generate the report. Please try again.");
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const handleDownload = () => {

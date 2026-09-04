@@ -4,7 +4,7 @@
  *
  * Exports:
  *   - Named entity shortcuts: Project, Client, Lead, etc.
- *   - base44 object: base44.entities.*, base44.auth.*, base44.functions.invoke(), base44.integrations.Core.UploadFile()
+ *   - base44 object: base44.entities.*, base44.auth.*, base44.functions.invoke(), base44.integrations.Core.UploadFile()/InvokeLLM()
  */
 
 import { supabase } from '@/lib/supabase';
@@ -368,6 +368,29 @@ const integrations = {
       }
 
       return { file_url: publicUrl };
+    },
+
+    // Proxies to api/invoke-llm.js (Claude). Returns the parsed object when
+    // response_json_schema is given (the schema is sent as an instruction,
+    // not enforced server-side, so a malformed completion throws here rather
+    // than silently returning something callers don't expect); otherwise
+    // returns the raw completion text.
+    async InvokeLLM({ prompt, response_json_schema }) {
+      const res = await fetch('/api/invoke-llm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, response_json_schema }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'AI request failed.');
+      if (!response_json_schema) return data.text;
+
+      const cleaned = data.text.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+      try {
+        return JSON.parse(cleaned);
+      } catch {
+        throw new Error('AI response was not valid JSON.');
+      }
     },
   },
 };

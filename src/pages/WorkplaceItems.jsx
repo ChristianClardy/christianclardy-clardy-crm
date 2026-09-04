@@ -194,6 +194,7 @@ Organize into logical phases/sections. Include 5-10 tasks per section. Be specif
       }
     } catch (e) {
       console.error(e);
+      alert("Could not generate a template. Please try again.");
     } finally {
       setAiGenerating(false);
     }
