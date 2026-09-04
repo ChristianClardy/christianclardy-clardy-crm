@@ -129,15 +129,21 @@ module.exports = async function handler(req, res) {
     documents.forEach((d, i) => {
       for (const mf of d.merge_fields || []) {
         if (!mf.anchor) continue;
+        const value = mf.value ?? '';
+        // Multi-row summaries (e.g. an equipment or payment schedule) come
+        // through as newline-joined text — a plain anchor text tab only
+        // renders one line, so give those a box to wrap/scroll in instead.
+        const isMultiLine = value.includes('\n');
         textTabs.push({
           documentId: String(i + 1),
           anchorString: mf.anchor,
           anchorIgnoreIfNotPresent: 'true',
           anchorXOffset: '0', anchorYOffset: '0', anchorUnits: 'pixels',
           tabLabel: mf.anchor,
-          value: mf.value ?? '',
+          value,
           locked: 'true',
           font: 'helvetica', fontSize: 'size9',
+          ...(isMultiLine ? { multiLine: 'true', width: '300', height: '90' } : {}),
         });
       }
     });

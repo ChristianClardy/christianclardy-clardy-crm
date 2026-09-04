@@ -307,6 +307,8 @@ function DealFormDialog({ open, onClose, onSaved, initialData, leads }) {
 // manually with no lead_id simply has nothing to merge from client.* sources.
 // project.* and estimate.* sources merge from the client's most recent
 // project/estimate (estimate.* prefers whichever estimate is checked below).
+// selections.* sources merge from that same project's Pool Selections record
+// (src/components/projects/PoolSelectionsPanel.jsx), if one exists.
 
 function DealContractsTab({ deal, leads }) {
   const { user } = useAuth();
@@ -316,6 +318,7 @@ function DealContractsTab({ deal, leads }) {
   const [client, setClient] = useState(null);
   const [company, setCompany] = useState(null);
   const [project, setProject] = useState(null);
+  const [selections, setSelections] = useState(null);
   const [contractTemplates, setContractTemplates] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [estimates, setEstimates] = useState([]);
@@ -351,11 +354,15 @@ function DealContractsTab({ deal, leads }) {
           base44.entities.Project.filter({ client_id: resolvedClient.id }, "-created_date").then((rows) => rows?.[0] || null).catch(() => null),
         ]);
       }
+      const resolvedSelections = resolvedProject?.id
+        ? await base44.entities.PoolSelection.filter({ project_id: resolvedProject.id }).then((rows) => rows?.[0] || null).catch(() => null)
+        : null;
       if (cancelled) return;
       const resolvedCompany = (lead?.company_id && comps.find((c) => c.id === lead.company_id)) || comps[0] || null;
       setClient(resolvedClient);
       setCompany(resolvedCompany);
       setProject(resolvedProject);
+      setSelections(resolvedSelections);
       setContractTemplates((templates || []).filter((t) => t.is_active !== false));
       setDocuments(docs || []);
       setEstimates(ests || []);
@@ -382,7 +389,7 @@ function DealContractsTab({ deal, leads }) {
   }, [mergeEstimate?.id]);
 
   const selectedTemplate = contractTemplates.find((t) => t.id === selectedTemplateId) || null;
-  const mergeCtx = { deal, client, company, project, estimate: mergeEstimate, estimateVersion };
+  const mergeCtx = { deal, client, company, project, estimate: mergeEstimate, estimateVersion, selections };
   const resolvedMergeFields = (selectedTemplate?.merge_fields || []).map((mf) => ({
     ...mf,
     value: resolveContractMergeValue(mf.source, mergeCtx),

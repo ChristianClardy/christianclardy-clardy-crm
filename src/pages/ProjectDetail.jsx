@@ -20,6 +20,7 @@ import {
   BarChart3,
   Paperclip,
   FileText,
+  Droplets,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +55,7 @@ import CashFlowTracker from "@/components/cashflow/CashFlowTracker";
 import ProjectFinancials from "@/components/financials/ProjectFinancials";
 import ProjectAccounting from "@/components/accounting/ProjectAccounting";
 import PermitTracker from "@/components/projects/PermitTracker";
+import PoolSelectionsPanel from "@/components/projects/PoolSelectionsPanel";
 import AITaskManager from "@/components/projects/AITaskManager";
 import AppointmentsPanel from "@/components/scheduling/AppointmentsPanel";
 import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
@@ -251,6 +253,18 @@ export default function ProjectDetail() {
           Permits
         </button>
         <button
+          onClick={() => setActiveTab("selections")}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+            activeTab === "selections"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-500 hover:text-slate-700"
+          )}
+        >
+          <Droplets className="w-4 h-4" />
+          Pool Selections
+        </button>
+        <button
           onClick={() => setActiveTab("sheet")}
           className={cn(
             "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
@@ -421,6 +435,11 @@ export default function ProjectDetail() {
        {/* Permit tab */}
        {activeTab === "permits" && (
          <PermitTracker project={project} onProjectUpdated={loadData} />
+       )}
+
+       {/* Pool Selections tab */}
+       {activeTab === "selections" && (
+         <PoolSelectionsPanel project={project} />
        )}
 
        {/* Photos tab */}
