@@ -149,7 +149,7 @@ export default function Projects() {
       let rows = [];
       if (selectedTemplate.type === "saved") {
         rows = selectedTemplate.template.rows || [];
-      } else if (selectedTemplate.type === "ai") {
+      } else if (selectedTemplate.type === "stock") {
         rows = selectedTemplate.template.rows || [];
       }
       if (rows.length) {
@@ -500,8 +500,8 @@ export default function Projects() {
                 selectedLabel={
                   selectedTemplate?.type === "saved"
                     ? selectedTemplate.template.name
-                    : selectedTemplate?.type === "ai"
-                    ? `AI: ${selectedTemplate.template.label}`
+                    : selectedTemplate?.type === "stock"
+                    ? selectedTemplate.template.label
                     : null
                 }
                 onClear={() => setSelectedTemplate(null)}

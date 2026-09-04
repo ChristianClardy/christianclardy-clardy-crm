@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, startTransition } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, GripVertical, ChevronDown, ChevronRight, Save, PlusCircle, ArrowUpDown, ArrowUp, ArrowDown, SlidersHorizontal, X, LayoutList, GanttChart, Bell, BellPlus, Sparkles, CalendarDays, IndentIncrease, IndentDecrease, Printer, Share2 } from "lucide-react";
+import { Plus, Trash2, GripVertical, ChevronDown, ChevronRight, Save, PlusCircle, ArrowUpDown, ArrowUp, ArrowDown, SlidersHorizontal, X, LayoutList, GanttChart, Bell, BellPlus, CalendarDays, IndentIncrease, IndentDecrease, Printer, Share2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import GanttView from "./GanttView";
 import TemplatePicker from "@/components/projects/TemplatePicker";
@@ -21,6 +21,7 @@ function daysBetween(a, b) {
   if (!a || !b) return 0;
   return Math.round((new Date(b) - new Date(a)) / 86400000);
 }
+const DEFAULT_TASK_DURATION_DAYS = 3;
 function parseDurationDays(str) {
   if (!str) return null;
   const s = str.toLowerCase().trim();
@@ -155,7 +156,6 @@ export default function ProjectSheetView({ projectId, focusTaskId, externalGantt
   const [reminderSaving, setReminderSaving] = useState(false);
   const [aiScheduleDialog, setAiScheduleDialog] = useState(false);
   const [aiStartDate, setAiStartDate] = useState("");
-  const [aiScheduleLoading, setAiScheduleLoading] = useState(false);
   const [savedTemplates, setSavedTemplates] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [sheetStyle, setSheetStyle] = useState(() => {
@@ -638,36 +638,35 @@ export default function ProjectSheetView({ projectId, focusTaskId, externalGantt
     setReminderSaving(false);
     setReminderDialog(null);
   };
-  const runAiSchedule = async () => {
+  // Assigns sequential start/end dates task-by-task from the chosen start
+  // date, back to back with no gaps or overlap — a simple, deterministic
+  // stand-in for what used to be an AI-reasoned schedule. Reuses the
+  // existing parseDurationDays/formatDuration helpers (above) that the
+  // manual date-entry path already relies on.
+  const autofillSchedule = () => {
     if (!aiStartDate) return;
-    setAiScheduleLoading(true);
-    const taskList = rows.filter(r => !r.is_section_header).map((r, i) => ({ index: i, task: r.task, section: rows.find(s => s.is_section_header && rows.indexOf(s) < rows.indexOf(r))?.section || "" }));
-    try {
-      const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `You are a construction project scheduling expert. Given a list of construction tasks and a project start date of ${aiStartDate}, assign realistic start_date and end_date (YYYY-MM-DD) and duration (e.g. "3d", "1w") for each task. Tasks in the same section should be sequential. Consider typical construction sequencing (e.g. foundation before framing, framing before MEP, etc.). Tasks: ${JSON.stringify(taskList)}`,
-        response_json_schema: { type: "object", properties: { schedule: { type: "array", items: { type: "object", properties: { index: { type: "number" }, start_date: { type: "string" }, end_date: { type: "string" }, duration: { type: "string" } } } } } }
+    const taskRowsOnly = rows.filter(r => !r.is_section_header);
+    let cursor = new Date(`${aiStartDate}T00:00:00`);
+    const fmt = (d) => d.toISOString().slice(0, 10);
+    const updates = taskRowsOnly.map((r) => {
+      const days = parseDurationDays(r.duration) || DEFAULT_TASK_DURATION_DAYS;
+      const start = new Date(cursor);
+      const end = new Date(cursor);
+      end.setDate(end.getDate() + days - 1);
+      cursor = new Date(end);
+      cursor.setDate(cursor.getDate() + 1);
+      return { id: r.id, start_date: fmt(start), end_date: fmt(end), duration: formatDuration(days) };
+    });
+    setRows(prev => {
+      const updated = [...prev];
+      updates.forEach(({ id, start_date, end_date, duration }) => {
+        const i = updated.findIndex(r => r.id === id);
+        if (i !== -1) updated[i] = { ...updated[i], start_date, end_date, duration };
       });
-      if (result?.schedule) {
-        const taskRowsOnly = rows.filter(r => !r.is_section_header);
-        setRows(prev => {
-          const updated = [...prev];
-          result.schedule.forEach(({ index, start_date, end_date, duration }) => {
-            const targetId = taskRowsOnly[index]?.id;
-            if (!targetId) return;
-            const i = updated.findIndex(r => r.id === targetId);
-            if (i !== -1) updated[i] = { ...updated[i], start_date, end_date, duration };
-          });
-          return projectSheetOrdering.sortSheetRowsByDates(updated);
-        });
-        setDirty(true);
-      }
-      setAiScheduleDialog(false);
-    } catch (err) {
-      console.error("Failed to AI-autofill schedule:", err?.message);
-      alert("Could not generate the schedule. Please try again.");
-    } finally {
-      setAiScheduleLoading(false);
-    }
+      return projectSheetOrdering.sortSheetRowsByDates(updated);
+    });
+    setDirty(true);
+    setAiScheduleDialog(false);
   };
   const toggleSection = (id) => setCollapsedSections((prev) => ({ ...prev, [id]: !prev[id] }));
   const toggleParent = (id) => setCollapsedParents((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -781,7 +780,7 @@ export default function ProjectSheetView({ projectId, focusTaskId, externalGantt
         <div className="w-full space-y-4">
           <div>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">AI or Saved Template</p>
-            <TemplatePicker savedTemplates={savedTemplates} onSelect={applyTemplate} selectedLabel={selectedTemplate?.type === "saved" ? selectedTemplate.template.name : selectedTemplate?.type === "ai" ? `AI: ${selectedTemplate.template.label}` : null} onClear={() => setSelectedTemplate(null)} />
+            <TemplatePicker savedTemplates={savedTemplates} onSelect={applyTemplate} selectedLabel={selectedTemplate?.type === "saved" ? selectedTemplate.template.name : selectedTemplate?.type === "stock" ? selectedTemplate.template.label : null} onClear={() => setSelectedTemplate(null)} />
           </div>
           <div className="flex items-center gap-3"><div className="flex-1 h-px bg-slate-200" /><span className="text-xs text-slate-400">or</span><div className="flex-1 h-px bg-slate-200" /></div>
           <div className="flex gap-3">
@@ -831,7 +830,7 @@ export default function ProjectSheetView({ projectId, focusTaskId, externalGantt
             setTimeout(() => win.print(), 400);
           }}><Printer className="w-4 h-4 mr-1" />Print</Button>
           <Button variant="outline" size="sm" onClick={async () => { try { await navigator.clipboard.writeText(window.location.href); alert("Link copied to clipboard!"); } catch { prompt("Copy this link to share:", window.location.href); } }}><Share2 className="w-4 h-4 mr-1" />Share</Button>
-          <Button variant="outline" size="sm" onClick={() => setAiScheduleDialog(true)} className="text-purple-600 border-purple-200 hover:bg-purple-50"><Sparkles className="w-4 h-4 mr-1" />AI Schedule</Button>
+          <Button variant="outline" size="sm" onClick={() => setAiScheduleDialog(true)} className="text-indigo-600 border-indigo-200 hover:bg-indigo-50"><CalendarDays className="w-4 h-4 mr-1" />Autofill Schedule</Button>
           <Button variant="outline" size="sm" onClick={addSection}><PlusCircle className="w-4 h-4 mr-1" />Add Section</Button>
           {!confirmClear && <Button variant="outline" size="sm" onClick={() => setConfirmClear(true)} className="text-rose-500 border-rose-200 hover:bg-rose-50"><Trash2 className="w-4 h-4 mr-1" />Delete Sheet</Button>}
           {confirmClear && <div className="flex items-center gap-2 bg-rose-50 border border-rose-200 rounded-lg px-3 py-1.5"><span className="text-xs text-rose-700 font-medium">Delete this sheet?</span><button className="text-xs text-white bg-rose-500 hover:bg-rose-600 px-2 py-0.5 rounded" onClick={clearSheet}>Yes, delete</button><button className="text-xs text-slate-500 hover:text-slate-700" onClick={() => setConfirmClear(false)}>Cancel</button></div>}
@@ -841,7 +840,7 @@ export default function ProjectSheetView({ projectId, focusTaskId, externalGantt
       {viewMode === "sheet" && <div className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 shadow-sm space-y-2"><SheetStyleToolbar style={sheetStyle} onChange={updateSheetStyle} /><SheetFormattingBar selectedRowIds={selectedRowIds} selectedColKeys={selectedColKeys} rows={rows} onApplyRowFormat={applyRowFormat} onClearSelection={() => { setSelectedRowIds(new Set()); setSelectedColKeys(new Set()); }} /></div>}
       {viewMode === "gantt" && <GanttView rows={rows} externalDayPx={externalGanttZoom} onExternalDayPxChange={onGanttZoomChange} />}
       {reminderDialog && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setReminderDialog(null)}><div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}><div className="flex items-center gap-2 mb-4"><Bell className="w-5 h-5 text-amber-500" /><h3 className="text-base font-semibold text-slate-800">Set Reminder</h3></div><div className="space-y-3"><div><label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Title</label><input className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400" value={reminderForm.title} onChange={e => setReminderForm(f => ({ ...f, title: e.target.value }))} /></div><div><label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Remind On</label><input type="date" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400" value={reminderForm.remind_date} onChange={e => setReminderForm(f => ({ ...f, remind_date: e.target.value }))} /></div><div><label className="text-xs font-medium text-slate-500 uppercase tracking-wider">Notes (optional)</label><textarea className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-400 resize-none" rows={2} value={reminderForm.notes} onChange={e => setReminderForm(f => ({ ...f, notes: e.target.value }))} /></div></div><div className="flex justify-end gap-2 mt-4"><button className="px-3 py-1.5 text-sm text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg" onClick={() => setReminderDialog(null)}>Cancel</button><button className="px-4 py-1.5 text-sm font-medium bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-lg hover:from-amber-600 hover:to-orange-600 disabled:opacity-50" disabled={!reminderForm.title || !reminderForm.remind_date || reminderSaving} onClick={saveReminder}>{reminderSaving ? "Saving…" : "Save Reminder"}</button></div></div></div>}
-      {aiScheduleDialog && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => !aiScheduleLoading && setAiScheduleDialog(false)}><div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}><div className="flex items-center gap-2 mb-4"><Sparkles className="w-5 h-5 text-purple-500" /><h3 className="text-base font-semibold text-slate-800">AI Autofill Schedule</h3></div><p className="text-sm text-slate-500 mb-4">Enter a project start date and AI will assign realistic start/end dates and durations to all tasks based on typical construction sequencing.</p><div><label className="text-xs font-medium text-slate-500 uppercase tracking-wider flex items-center gap-1.5"><CalendarDays className="w-3.5 h-3.5" /> Project Start Date</label><input type="date" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-400" value={aiStartDate} onChange={e => setAiStartDate(e.target.value)} /></div><div className="flex justify-end gap-2 mt-5"><button className="px-3 py-1.5 text-sm text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg" onClick={() => setAiScheduleDialog(false)} disabled={aiScheduleLoading}>Cancel</button><button className="px-4 py-1.5 text-sm font-medium bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-lg hover:from-purple-600 hover:to-indigo-600 disabled:opacity-50 flex items-center gap-2" disabled={!aiStartDate || aiScheduleLoading} onClick={runAiSchedule}>{aiScheduleLoading ? <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />Generating…</> : <><Sparkles className="w-3.5 h-3.5" />Generate Schedule</>}</button></div></div></div>}
+      {aiScheduleDialog && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setAiScheduleDialog(false)}><div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}><div className="flex items-center gap-2 mb-4"><CalendarDays className="w-5 h-5 text-indigo-500" /><h3 className="text-base font-semibold text-slate-800">Autofill Schedule</h3></div><p className="text-sm text-slate-500 mb-4">Enter a project start date — each task will be scheduled back to back using its duration (or {DEFAULT_TASK_DURATION_DAYS} days by default).</p><div><label className="text-xs font-medium text-slate-500 uppercase tracking-wider flex items-center gap-1.5"><CalendarDays className="w-3.5 h-3.5" /> Project Start Date</label><input type="date" className="mt-1 w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400" value={aiStartDate} onChange={e => setAiStartDate(e.target.value)} /></div><div className="flex justify-end gap-2 mt-5"><button className="px-3 py-1.5 text-sm text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg" onClick={() => setAiScheduleDialog(false)}>Cancel</button><button className="px-4 py-1.5 text-sm font-medium bg-gradient-to-r from-indigo-500 to-blue-500 text-white rounded-lg hover:from-indigo-600 hover:to-blue-600 disabled:opacity-50 flex items-center gap-2" disabled={!aiStartDate} onClick={autofillSchedule}><CalendarDays className="w-3.5 h-3.5" />Autofill Schedule</button></div></div></div>}
       {viewMode === "sheet" && <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm relative" onWheel={(e) => { if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey) { e.preventDefault(); e.currentTarget.querySelector(".overflow-x-auto").scrollLeft += e.deltaX || e.deltaY; } }}>
         {copyFlash && <div className="absolute top-2 right-4 z-50 bg-emerald-500 text-white text-xs font-medium px-3 py-1.5 rounded-lg shadow-lg pointer-events-none animate-pulse">Copied to clipboard</div>}
         {selection && <div className="absolute top-2 left-4 z-50 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-medium px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-2"><span>{Math.abs(selection.focus.rowIdx - selection.anchor.rowIdx) + 1} × {Math.abs(selection.focus.colIdx - selection.anchor.colIdx) + 1} selected</span><span className="text-blue-400">· Cmd/Ctrl+C copy · Cmd/Ctrl+V paste · Esc clear</span><button onClick={() => setSelection(null)} className="text-blue-400 hover:text-blue-600"><X className="w-3 h-3" /></button></div>}

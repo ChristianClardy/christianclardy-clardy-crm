@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { base44 } from "@/api/base44Client";
-import { Plus, Edit2, Trash2, Copy, ChevronDown, ChevronUp, Wand2, X, Check, Sparkles, Loader2 } from "lucide-react";
+import { Plus, Edit2, Trash2, Copy, ChevronDown, ChevronUp, Wand2, X, Check, LayoutTemplate } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import TemplateRowEditor from "@/components/templates/TemplateRowEditor";
 import EstimateTemplates from "@/components/workspace/EstimateTemplates";
+import { STOCK_SCHEDULE_TEMPLATES } from "@/lib/stockScheduleTemplates";
 
 const BASIC_CONSTRUCTION_TEMPLATE = [
   { id: "s1", section: "Site Preparation", task: "Site Preparation", is_section_header: true },
@@ -113,8 +114,7 @@ export default function WorkplaceItems() {
   const [pickerSection, setPickerSection] = useState(Object.keys(PRESET_ITEMS_BY_SECTION)[0]);
   const [customItemText, setCustomItemText] = useState("");
   const [isSection, setIsSection] = useState(false);
-  const [showAIPicker, setShowAIPicker] = useState(false);
-  const [aiGenerating, setAiGenerating] = useState(false);
+  const [showStockPicker, setShowStockPicker] = useState(false);
 
   // Undo / Redo history for rows
   const [rowHistory, setRowHistory] = useState({ past: [], future: [] });
@@ -142,62 +142,10 @@ export default function WorkplaceItems() {
     });
   }, [formData.rows]);
 
-  const AI_TEMPLATE_CATEGORIES = [
-    { label: "New Home Build", emoji: "🏠", prompt: "full new home construction from site prep to certificate of occupancy" },
-    { label: "Pool Installation", emoji: "🏊", prompt: "residential swimming pool installation including excavation, shell, plumbing, electrical, decking and landscaping" },
-    { label: "Outdoor Structure", emoji: "🏗️", prompt: "outdoor structure such as a pergola, gazebo, or covered patio including foundation, framing, roofing and finishing" },
-    { label: "Kitchen Remodel", emoji: "🍳", prompt: "full kitchen remodel including demo, rough-in, cabinets, countertops, appliances and finish work" },
-    { label: "Bathroom Remodel", emoji: "🛁", prompt: "full bathroom remodel including demo, plumbing, tile, fixtures and finish work" },
-    { label: "Roof Replacement", emoji: "🏚️", prompt: "full roof replacement including tear-off, decking inspection, underlayment, shingles and gutters" },
-    { label: "Deck / Patio", emoji: "🌿", prompt: "deck or patio construction including design, footings, framing, decking material and railings" },
-    { label: "Garage Addition", emoji: "🚗", prompt: "attached or detached garage addition including foundation, framing, electrical, doors and finishing" },
-    { label: "Room Addition", emoji: "🏡", prompt: "home room addition including foundation, framing, MEP rough-in, insulation, drywall and finishes" },
-    { label: "Commercial Build-Out", emoji: "🏢", prompt: "commercial interior build-out including framing, MEP, drywall, flooring, ceilings and finishes" },
-    { label: "Landscape & Hardscape", emoji: "🌳", prompt: "landscaping and hardscaping project including grading, irrigation, hardscape installation and planting" },
-    { label: "HVAC Replacement", emoji: "❄️", prompt: "full HVAC system replacement including equipment removal, new unit installation, ductwork and testing" },
-  ];
-
-  const generateAITemplate = async (category) => {
-    setAiGenerating(true);
-    setShowAIPicker(false);
-    try {
-      const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `Generate a detailed construction project schedule template for: ${category.prompt}.
-Return a JSON array of rows. Each row must have these exact fields:
-- id: unique string like "s1" for section headers or "r1" for tasks
-- section: the section name this row belongs to
-- task: the display text for the row
-- is_section_header: true for section headers, false for task rows
-
-Organize into logical phases/sections. Include 5-10 tasks per section. Be specific and practical for a professional construction company.`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            rows: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  id: { type: "string" },
-                  section: { type: "string" },
-                  task: { type: "string" },
-                  is_section_header: { type: "boolean" }
-                }
-              }
-            }
-          }
-        }
-      });
-      if (result?.rows?.length) {
-        setRows(result.rows);
-        setFormData(prev => ({ ...prev, name: prev.name || category.label }));
-      }
-    } catch (e) {
-      console.error(e);
-      alert("Could not generate a template. Please try again.");
-    } finally {
-      setAiGenerating(false);
-    }
+  const applyStockTemplate = (stock) => {
+    setShowStockPicker(false);
+    setRows(stock.rows);
+    setFormData(prev => ({ ...prev, name: prev.name || stock.label }));
   };
 
   const openDialog = (template = null) => {
@@ -454,42 +402,34 @@ Organize into logical phases/sections. Include 5-10 tasks per section. Be specif
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => setShowAIPicker(v => !v)}
-                    className="text-purple-700 border-purple-300 hover:bg-purple-50 gap-1.5"
-                    disabled={aiGenerating}
+                    onClick={() => setShowStockPicker(v => !v)}
+                    className="text-indigo-700 border-indigo-300 hover:bg-indigo-50 gap-1.5"
                   >
-                    {aiGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                    {aiGenerating ? "Generating…" : "AI Templates"}
+                    <LayoutTemplate className="w-3.5 h-3.5" />
+                    Stock Templates
                   </Button>
                 </div>
               </div>
 
-              {/* AI Template Picker */}
-              {showAIPicker && !aiGenerating && (
-                <div className="mb-3 border border-purple-200 rounded-xl bg-purple-50 p-3">
-                  <p className="text-xs font-semibold text-purple-700 mb-2 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5" /> Choose a project type — AI will generate a full schedule
+              {/* Stock Template Picker */}
+              {showStockPicker && (
+                <div className="mb-3 border border-indigo-200 rounded-xl bg-indigo-50 p-3">
+                  <p className="text-xs font-semibold text-indigo-700 mb-2 flex items-center gap-1.5">
+                    <LayoutTemplate className="w-3.5 h-3.5" /> Choose a project type to start from a built-in schedule
                   </p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {AI_TEMPLATE_CATEGORIES.map(cat => (
+                    {STOCK_SCHEDULE_TEMPLATES.map(stock => (
                       <button
-                        key={cat.label}
+                        key={stock.key}
                         type="button"
-                        onClick={() => generateAITemplate(cat)}
-                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-purple-200 text-sm text-slate-700 hover:border-purple-400 hover:bg-purple-50 transition-all text-left"
+                        onClick={() => applyStockTemplate(stock)}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-indigo-200 text-sm text-slate-700 hover:border-indigo-400 hover:bg-indigo-50 transition-all text-left"
                       >
-                        <span className="text-base">{cat.emoji}</span>
-                        <span className="text-xs font-medium leading-tight">{cat.label}</span>
+                        <span className="text-base">{stock.emoji}</span>
+                        <span className="text-xs font-medium leading-tight">{stock.label}</span>
                       </button>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {aiGenerating && (
-                <div className="mb-3 flex items-center gap-3 px-4 py-3 rounded-xl border border-purple-200 bg-purple-50 text-sm text-purple-700">
-                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                  AI is generating your template schedule…
                 </div>
               )}
 

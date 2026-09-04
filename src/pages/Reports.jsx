@@ -15,6 +15,82 @@ import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 
+function fmtMoney(n) {
+  return `$${Number(n || 0).toLocaleString()}`;
+}
+
+// Assembles the same sections an AI report used to write prose for, straight
+// from projectDetails — deterministic and free, since every number in here
+// was already computed without AI; only the write-up used to be AI-generated.
+function buildReportText(projectDetails, { frequency, reportDate, periodLabel, activeSections, scopeLabel }) {
+  const lines = [];
+  lines.push(`# ${frequency === "weekly" ? "Weekly" : "Monthly"} Construction Status Report`);
+  lines.push(`**${scopeLabel}** — ${reportDate}`);
+  lines.push("");
+
+  for (const proj of projectDetails) {
+    lines.push("---");
+    lines.push(`## ${proj.name}`);
+    lines.push(`*Client: ${proj.client} · Status: ${proj.status || "—"} · Project Manager: ${proj.projectManager || "Not assigned"}*`);
+    lines.push("");
+
+    if (activeSections.includes("progress")) {
+      lines.push("### Progress & Completion");
+      lines.push(`- **${proj.percentComplete}%** complete`);
+      lines.push(`- Timeline: ${proj.startDate ? moment(proj.startDate).format("MMM D, YYYY") : "TBD"} → ${proj.endDate ? moment(proj.endDate).format("MMM D, YYYY") : "TBD"}`);
+      lines.push("");
+    }
+
+    if (activeSections.includes("financials")) {
+      lines.push("### Financial Summary");
+      lines.push(`- Contract Value: ${fmtMoney(proj.contractValue)}`);
+      lines.push(`- Costs to Date: ${fmtMoney(proj.costsToDate)}`);
+      lines.push(`- Billed to Date: ${fmtMoney(proj.billedToDate)}`);
+      lines.push(`- Gross Margin: ${fmtMoney(proj.grossMargin)}`);
+      lines.push("");
+    }
+
+    if (activeSections.includes("risks")) {
+      lines.push("### Risks & Issues");
+      if (proj.overdueTasks.length) {
+        proj.overdueTasks.forEach(t => lines.push(`- **${t.name}** — due ${t.due ? moment(t.due).format("MMM D") : "—"}, ${t.daysOverdue} day${t.daysOverdue === 1 ? "" : "s"} overdue`));
+      } else {
+        lines.push("- No overdue items.");
+      }
+      lines.push("");
+    }
+
+    if (activeSections.includes("milestones")) {
+      lines.push("### Upcoming Milestones");
+      if (proj.upcomingMilestones.length) {
+        proj.upcomingMilestones.forEach(t => lines.push(`- ${t.name} — due ${t.due ? moment(t.due).format("MMM D") : "—"} (${t.daysLeft} day${t.daysLeft === 1 ? "" : "s"})`));
+      } else {
+        lines.push(`- Nothing due ${periodLabel}.`);
+      }
+      lines.push("");
+    }
+
+    if (activeSections.includes("tasks")) {
+      lines.push("### Task Status");
+      lines.push(`- Total: ${proj.tasks.total} · Completed: ${proj.tasks.completed} · In Progress: ${proj.tasks.inProgress} · Blocked: ${proj.tasks.blocked}`);
+      lines.push("");
+    }
+  }
+
+  lines.push("---");
+  lines.push("## Summary");
+  const withOverdue = projectDetails.filter(p => p.overdueTasks.length > 0).length;
+  const avgComplete = projectDetails.length
+    ? Math.round(projectDetails.reduce((sum, p) => sum + (p.percentComplete || 0), 0) / projectDetails.length)
+    : 0;
+  lines.push(`- ${projectDetails.length} project${projectDetails.length === 1 ? "" : "s"} in this report, averaging ${avgComplete}% complete.`);
+  lines.push(withOverdue
+    ? `- ${withOverdue} project${withOverdue === 1 ? " has" : "s have"} overdue items needing attention.`
+    : "- No projects have overdue items.");
+
+  return lines.join("\n");
+}
+
 const SECTIONS = [
   { key: "progress", label: "Progress & Completion", icon: BarChart3 },
   { key: "financials", label: "Financial Summary", icon: TrendingUp },
@@ -38,8 +114,6 @@ export default function Reports() {
   const [enabledSections, setEnabledSections] = useState({
     progress: true, financials: true, risks: true, milestones: true, tasks: true,
   });
-  const [tone, setTone] = useState("professional");
-
   // Report output
   const [report, setReport] = useState(null);
   const [reportMeta, setReportMeta] = useState(null);
@@ -114,39 +188,15 @@ export default function Reports() {
     const activeSections = Object.keys(enabledSections).filter(k => enabledSections[k]);
     const periodLabel = frequency === "weekly" ? "this week" : "this month";
     const reportDate = moment().format("MMMM D, YYYY");
-
-    const prompt = `
-You are a professional construction project manager generating a ${frequency} status report dated ${reportDate}.
-
-Report scope: ${selectedProject === "all" ? "All active projects" : targetProjects[0]?.name}
-Tone: ${tone}
-Sections to include: ${activeSections.join(", ")}
-
-PROJECT DATA:
-${JSON.stringify(projectDetails, null, 2)}
-
-Generate a well-structured ${frequency} construction project status report. Use clear headings with markdown (## for sections, ### for subsections).
-
-Include only these sections (in order): ${activeSections.map(s => SECTIONS.find(sec => sec.key === s)?.label).join(", ")}.
-
-For each section:
-${activeSections.includes("progress") ? "- Progress: Summarize overall completion %, timeline status (on track / behind / ahead), and key accomplishments." : ""}
-${activeSections.includes("financials") ? "- Financials: Contract value, costs to date, billed to date, gross margin. Flag any budget concerns." : ""}
-${activeSections.includes("risks") ? "- Risks: List overdue tasks, blocked items, budget overruns, or timeline concerns with severity (High/Medium/Low)." : ""}
-${activeSections.includes("milestones") ? "- Milestones: List tasks due in the next 14 days with their due dates and assigned team members." : ""}
-${activeSections.includes("tasks") ? "- Tasks: Breakdown of task statuses and any notable blockers." : ""}
-
-End with a brief executive summary paragraph (2-3 sentences).
-Keep it concise, professional, and actionable. Use bullet points where appropriate.
-`;
+    const scopeLabel = selectedProject === "all" ? "All Active Projects" : targetProjects[0]?.name;
 
     try {
-      const result = await base44.integrations.Core.InvokeLLM({ prompt });
+      const result = buildReportText(projectDetails, { frequency, reportDate, periodLabel, activeSections, scopeLabel });
       setReport(result);
       setReportMeta({
         date: reportDate,
         frequency,
-        projectLabel: selectedProject === "all" ? "All Projects" : targetProjects[0]?.name,
+        projectLabel: scopeLabel,
         sections: activeSections,
       });
       setExpanded(true);
@@ -180,11 +230,10 @@ Keep it concise, professional, and actionable. Use bullet points where appropria
     <div className="p-6 lg:p-10 max-w-5xl mx-auto space-y-8" style={{ backgroundColor: "#f5f0eb", minHeight: "100vh" }}>
       {/* Header */}
       <div>
-        <p className="text-xs tracking-widest uppercase mb-1" style={{ color: "#b5965a", letterSpacing: "0.18em" }}>AI-Powered</p>
         <h1 className="text-3xl font-bold tracking-tight" style={{ color: "#3d3530", fontFamily: "'Georgia', serif" }}>Project Reports</h1>
         <div className="flex items-center gap-2 mt-2">
           <div className="h-px w-8" style={{ backgroundColor: "#b5965a" }} />
-          <p className="text-sm" style={{ color: "#7a6e66" }}>Generate automated status reports using AI based on live project data.</p>
+          <p className="text-sm" style={{ color: "#7a6e66" }}>Generate status reports straight from live project data.</p>
         </div>
       </div>
 
@@ -194,7 +243,7 @@ Keep it concise, professional, and actionable. Use bullet points where appropria
       <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6">
         <h2 className="text-base font-semibold" style={{ color: "#3d3530" }}>Report Configuration</h2>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* Project */}
           <div>
             <Label className="text-xs uppercase tracking-wide text-slate-500 mb-1.5 block">Project</Label>
@@ -221,22 +270,6 @@ Keep it concise, professional, and actionable. Use bullet points where appropria
               <SelectContent>
                 <SelectItem value="weekly">Weekly Report</SelectItem>
                 <SelectItem value="monthly">Monthly Report</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Tone */}
-          <div>
-            <Label className="text-xs uppercase tracking-wide text-slate-500 mb-1.5 block">Tone</Label>
-            <Select value={tone} onValueChange={setTone}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="professional">Professional</SelectItem>
-                <SelectItem value="concise">Concise & Brief</SelectItem>
-                <SelectItem value="detailed">Detailed & Thorough</SelectItem>
-                <SelectItem value="executive">Executive Summary</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -280,7 +313,7 @@ Keep it concise, professional, and actionable. Use bullet points where appropria
             {generating ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <Sparkles className="w-4 h-4" />
+              <FileText className="w-4 h-4" />
             )}
             {generating ? "Generating Report..." : "Generate Report"}
           </button>

@@ -45,7 +45,6 @@ import { cn } from "@/lib/utils";
 import ProjectSheetKeyboardView from "@/components/sheet/ProjectSheetKeyboardView";
 import PhotoGallery from "@/components/projects/PhotoGallery";
 import ClientWorkflowControl from "@/components/clients/ClientWorkflowControl";
-import ProjectAISummary from "@/components/projects/ProjectAISummary";
 import ProjectTimeline from "@/components/projects/ProjectTimeline";
 
 import CommentSection from "@/components/collaboration/CommentSection";
@@ -56,7 +55,6 @@ import ProjectFinancials from "@/components/financials/ProjectFinancials";
 import ProjectAccounting from "@/components/accounting/ProjectAccounting";
 import PermitTracker from "@/components/projects/PermitTracker";
 import PoolSelectionsPanel from "@/components/projects/PoolSelectionsPanel";
-import AITaskManager from "@/components/projects/AITaskManager";
 import AppointmentsPanel from "@/components/scheduling/AppointmentsPanel";
 import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
 
@@ -87,7 +85,6 @@ export default function ProjectDetail() {
   const [companies, setCompanies] = useState([]);
   const [activeTab, setActiveTab] = useState(["overview", "timeline", "appointments", "permits", "sheet", "photos", "files", "collaboration", "cashflow", "financials", "accounting"].includes(requestedTab) ? requestedTab : "overview");
   const [sheetRows, setSheetRows] = useState([]);
-  const [aiSheetRows, setAiSheetRows] = useState(null); // rows pushed by AI to the sheet
   const [loading, setLoading] = useState(true);
   const [ganttZoom, setGanttZoom] = useState(DEFAULT_DAY_PX);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -395,25 +392,15 @@ export default function ProjectDetail() {
          />
        )}
 
-       {/* Project Sheet tab — always mounted so AI updates apply even when on other tabs */}
+       {/* Project Sheet tab — always mounted so edits made from other tabs stick */}
        <div className={activeTab !== "sheet" ? "hidden" : ""}>
-         <div className="relative">
-           <ProjectSheetKeyboardView
-             projectId={projectId}
-             focusTaskId={taskId}
-             externalGanttZoom={ganttZoom}
-             onGanttZoomChange={setGanttZoom}
-             onRowsChange={setSheetRows}
-             externalRows={aiSheetRows}
-           />
-           <AITaskManager
-             project={project}
-             tasks={[]}
-             sheetRows={sheetRows}
-             onRefresh={loadData}
-             onUpdateSheetRows={setAiSheetRows}
-           />
-         </div>
+         <ProjectSheetKeyboardView
+           projectId={projectId}
+           focusTaskId={taskId}
+           externalGanttZoom={ganttZoom}
+           onGanttZoomChange={setGanttZoom}
+           onRowsChange={setSheetRows}
+         />
        </div>
 
        {activeTab === "appointments" && (
@@ -506,9 +493,6 @@ export default function ProjectDetail() {
 
         {/* Sidebar */}
         <div className="space-y-6">
-          {/* AI Summary */}
-          <ProjectAISummary project={project} tasks={sheetRows} client={client} />
-
           {/* Details Card */}
           <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
             <h2 className="text-lg font-semibold text-slate-900">Details</h2>
