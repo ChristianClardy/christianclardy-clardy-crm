@@ -207,7 +207,16 @@ function buildPipelinePrintHtml(groups, subtitle) {
 
   const sections = groups.map(({ label, leads }) => {
     const sectionTotal = sumBudget(leads);
-    const rows = leads.map((lead) => `
+    const rows = leads.map((lead) => {
+      // Lost/No Decision leads capture their reason + notes in separate
+      // lost_reason / lost_reason_notes fields (set via LostReasonDialog),
+      // not the general lead.notes field — fold them into the Notes column
+      // here so they actually show up in the printed pipeline.
+      const lostDetail = lead.status === "Lost/No Decision"
+        ? [lead.lost_reason, lead.lost_reason_notes].filter(Boolean).join(" — ")
+        : "";
+      const notesText = [lead.notes, lostDetail].filter(Boolean).join(lead.notes && lostDetail ? " | " : "");
+      return `
       <tr>
         <td>${escapeHtml(lead.full_name)}</td>
         <td><span class="status-pill">${escapeHtml(lead.status)}</span></td>
@@ -221,8 +230,9 @@ function buildPipelinePrintHtml(groups, subtitle) {
         <td>${escapeHtml(lead.lead_source)}</td>
         <td>${escapeHtml(lead.next_action)}</td>
         <td>${escapeHtml(lead.project_description)}</td>
-        <td>${escapeHtml(lead.notes)}</td>
-      </tr>`).join("");
+        <td>${escapeHtml(notesText)}</td>
+      </tr>`;
+    }).join("");
 
     return `
       <div class="section">
