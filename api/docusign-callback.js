@@ -1,11 +1,19 @@
 // Exchanges a DocuSign authorization code for tokens.
-// The client_secret is kept server-side and never exposed to the browser.
+// The client_secret is loaded server-side from docusign_credentials (never
+// exposed to the browser) rather than from a Vercel env var — it's entered
+// once in Settings > DocuSign and stored there.
 
-const DOCUSIGN_CLIENT_ID     = process.env.DOCUSIGN_CLIENT_ID;
-const DOCUSIGN_CLIENT_SECRET = process.env.DOCUSIGN_CLIENT_SECRET;
-const DOCUSIGN_BASE_URL      = process.env.DOCUSIGN_ENV === 'production'
-  ? 'https://account.docusign.com'
-  : 'https://account-d.docusign.com';
+const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
+const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+async function loadCredentials() {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/docusign_credentials?select=*&limit=1`,
+    { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
+  );
+  const rows = await res.json();
+  return rows[0] || null;
+}
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -13,8 +21,8 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  if (!DOCUSIGN_CLIENT_ID || !DOCUSIGN_CLIENT_SECRET) {
-    res.status(500).json({ error: 'Server misconfiguration: DocuSign credentials not set.' });
+  if (!SERVICE_KEY) {
+    res.status(500).json({ error: 'Server misconfiguration: missing service key.' });
     return;
   }
 
@@ -22,7 +30,16 @@ module.exports = async function handler(req, res) {
   if (!code)         return res.status(400).json({ error: 'Authorization code is required.' });
   if (!redirect_uri) return res.status(400).json({ error: 'redirect_uri is required.' });
 
-  const credentials = Buffer.from(`${DOCUSIGN_CLIENT_ID}:${DOCUSIGN_CLIENT_SECRET}`).toString('base64');
+  const creds = await loadCredentials();
+  if (!creds?.client_id || !creds?.client_secret) {
+    return res.status(400).json({ error: 'DocuSign app credentials are not configured. Add them in Settings > DocuSign.' });
+  }
+
+  const DOCUSIGN_BASE_URL = creds.environment === 'production'
+    ? 'https://account.docusign.com'
+    : 'https://account-d.docusign.com';
+
+  const credentials = Buffer.from(`${creds.client_id}:${creds.client_secret}`).toString('base64');
 
   try {
     // Exchange code for access + refresh tokens

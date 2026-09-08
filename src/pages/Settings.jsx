@@ -611,12 +611,21 @@ function DocuSignTab() {
   const [loading, setLoading]           = useState(true);
   const [disconnecting, setDisconnecting] = useState(false);
 
-  const CLIENT_ID = import.meta.env.VITE_DOCUSIGN_CLIENT_ID;
-  const DS_BASE   = import.meta.env.VITE_DOCUSIGN_ENV === "production"
+  // DocuSign OAuth app credentials (Integration Key + Client Secret), entered
+  // below and stored server-side in docusign_credentials — never in a Vercel
+  // env var. GET /api/docusign-config only ever returns client_id/environment;
+  // the secret never comes back to the browser once saved.
+  const [appConfig, setAppConfig]   = useState(null); // { configured, client_id, environment }
+  const [editingApp, setEditingApp] = useState(false);
+  const [savingApp, setSavingApp]   = useState(false);
+  const [appError, setAppError]     = useState("");
+  const [form, setForm] = useState({ client_id: "", client_secret: "", environment: "sandbox" });
+
+  const DS_BASE = appConfig?.environment === "production"
     ? "https://account.docusign.com"
     : "https://account-d.docusign.com";
 
-  useEffect(() => { loadStatus(); }, []);
+  useEffect(() => { loadStatus(); loadAppConfig(); }, []);
 
   const loadStatus = async () => {
     const { data } = await supabase
@@ -628,10 +637,44 @@ function DocuSignTab() {
     setLoading(false);
   };
 
+  const loadAppConfig = async () => {
+    try {
+      const res = await fetch("/api/docusign-config");
+      const data = await res.json();
+      setAppConfig(data);
+      if (data?.configured) setForm((f) => ({ ...f, client_id: data.client_id, environment: data.environment }));
+    } catch {
+      setAppConfig({ configured: false });
+    }
+  };
+
+  const handleSaveApp = async () => {
+    setAppError("");
+    if (!form.client_id.trim())     return setAppError("Integration Key is required.");
+    if (!form.client_secret.trim()) return setAppError("Client Secret is required.");
+    setSavingApp(true);
+    try {
+      const res = await fetch("/api/docusign-config", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save DocuSign app credentials.");
+      setAppConfig({ configured: true, client_id: data.client_id, environment: data.environment });
+      setForm((f) => ({ ...f, client_secret: "" }));
+      setEditingApp(false);
+    } catch (err) {
+      setAppError(err.message);
+    } finally {
+      setSavingApp(false);
+    }
+  };
+
   const handleConnect = () => {
     const redirectUri = encodeURIComponent(`${window.location.origin}/DocuSignCallback`);
     const scope       = encodeURIComponent("signature");
-    window.location.href = `${DS_BASE}/oauth/auth?response_type=code&scope=${scope}&client_id=${CLIENT_ID}&redirect_uri=${redirectUri}`;
+    window.location.href = `${DS_BASE}/oauth/auth?response_type=code&scope=${scope}&client_id=${appConfig.client_id}&redirect_uri=${redirectUri}`;
   };
 
   const handleDisconnect = async () => {
@@ -656,6 +699,8 @@ function DocuSignTab() {
     </div>
   );
 
+  const showAppForm = !appConfig?.configured || editingApp;
+
   return (
     <div className="space-y-6 max-w-lg">
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
@@ -664,7 +709,87 @@ function DocuSignTab() {
             <FileSignature className="w-4 h-4 text-white" />
           </div>
           <div>
-            <p className="font-semibold text-slate-900">DocuSign Integration</p>
+            <p className="font-semibold text-slate-900">DocuSign App</p>
+            <p className="text-xs text-slate-500">Your DocuSign developer app credentials, used to connect an account below</p>
+          </div>
+          {appConfig?.configured && !editingApp && (
+            <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+              Configured
+            </span>
+          )}
+        </div>
+
+        {showAppForm ? (
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="ds-client-id">Integration Key (Client ID)</Label>
+              <Input
+                id="ds-client-id"
+                value={form.client_id}
+                onChange={(e) => setForm((f) => ({ ...f, client_id: e.target.value }))}
+                placeholder="e.g. 8a3f2b1c-..."
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ds-client-secret">Client Secret</Label>
+              <Input
+                id="ds-client-secret"
+                type="password"
+                value={form.client_secret}
+                onChange={(e) => setForm((f) => ({ ...f, client_secret: e.target.value }))}
+                placeholder={appConfig?.configured ? "Enter a new secret to replace the saved one" : "Secret Key"}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ds-env">Environment</Label>
+              <select
+                id="ds-env"
+                value={form.environment}
+                onChange={(e) => setForm((f) => ({ ...f, environment: e.target.value }))}
+                className="w-full h-9 rounded-md border border-slate-200 bg-white px-3 text-sm"
+              >
+                <option value="sandbox">Sandbox (developer/demo)</option>
+                <option value="production">Production</option>
+              </select>
+            </div>
+            {appError && <p className="text-xs text-rose-600">{appError}</p>}
+            <div className="flex gap-2">
+              <Button
+                onClick={handleSaveApp}
+                disabled={savingApp}
+                className="bg-[#1A2B3C] hover:bg-[#243647] text-white"
+              >
+                {savingApp ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                Save App Credentials
+              </Button>
+              {appConfig?.configured && (
+                <Button variant="outline" onClick={() => { setEditingApp(false); setAppError(""); }}>
+                  Cancel
+                </Button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between text-sm">
+            <div>
+              <p className="text-slate-500">Integration Key</p>
+              <p className="font-mono text-slate-900">{appConfig.client_id}</p>
+              <p className="text-xs text-slate-500 mt-1 capitalize">{appConfig.environment}</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setEditingApp(true)}>
+              Edit
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-[#1A2B3C]">
+            <LinkIcon className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <p className="font-semibold text-slate-900">DocuSign Account</p>
             <p className="text-xs text-slate-500">Link your DocuSign account to send documents for signature</p>
           </div>
           {docusign && (
@@ -713,18 +838,15 @@ function DocuSignTab() {
             <p className="text-sm text-slate-500">
               Connect your DocuSign account to send documents for signature directly from the Documents portal.
             </p>
-            {!CLIENT_ID && (
+            {!appConfig?.configured && (
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
-                <p className="font-semibold mb-1">Environment Variable Missing</p>
-                <p>
-                  Add <code className="font-mono bg-amber-100 px-1 rounded">VITE_DOCUSIGN_CLIENT_ID</code> to
-                  your <code className="font-mono bg-amber-100 px-1 rounded">.env</code> file before connecting.
-                </p>
+                <p className="font-semibold mb-1">App credentials needed</p>
+                <p>Add your Integration Key and Client Secret above before connecting.</p>
               </div>
             )}
             <Button
               onClick={handleConnect}
-              disabled={!CLIENT_ID}
+              disabled={!appConfig?.configured}
               className="w-full bg-[#1A2B3C] hover:bg-[#243647] text-white"
             >
               <LinkIcon className="w-4 h-4 mr-2" />
@@ -738,18 +860,12 @@ function DocuSignTab() {
         <p className="font-semibold mb-2">Setup Instructions</p>
         <ol className="list-decimal list-inside space-y-1 text-xs leading-relaxed">
           <li>Create a DocuSign developer account at <strong>developers.docusign.com</strong></li>
-          <li>Create an integration (app) and copy the <strong>Integration Key</strong></li>
+          <li>Create an integration (app) and copy the <strong>Integration Key</strong> and <strong>Secret Key</strong></li>
           <li>
             Add <strong>{window.location.origin}/DocuSignCallback</strong> as a Redirect URI in your DocuSign app
           </li>
-          <li>
-            Set <code className="font-mono bg-amber-100 px-1 rounded">VITE_DOCUSIGN_CLIENT_ID</code> = Integration Key in your <code>.env</code>
-          </li>
-          <li>
-            Set <code className="font-mono bg-amber-100 px-1 rounded">DOCUSIGN_CLIENT_ID</code> and{" "}
-            <code className="font-mono bg-amber-100 px-1 rounded">DOCUSIGN_CLIENT_SECRET</code> in your Vercel environment variables
-          </li>
-          <li>For production, set <code className="font-mono bg-amber-100 px-1 rounded">VITE_DOCUSIGN_ENV=production</code></li>
+          <li>Paste both into the DocuSign App card above and save</li>
+          <li>For a live (non-sandbox) DocuSign account, set Environment to Production</li>
         </ol>
       </div>
     </div>

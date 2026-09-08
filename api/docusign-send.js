@@ -8,13 +8,8 @@
 // ([{ anchor, value }]) — rendered as locked DocuSign anchor-string text tabs
 // so customer/deal info is merged into the document text at send time.
 
-const SUPABASE_URL           = 'https://fneasddxtejasvsojgcu.supabase.co';
-const SERVICE_KEY            = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const DOCUSIGN_CLIENT_ID     = process.env.DOCUSIGN_CLIENT_ID;
-const DOCUSIGN_CLIENT_SECRET = process.env.DOCUSIGN_CLIENT_SECRET;
-const DOCUSIGN_BASE_URL      = process.env.DOCUSIGN_ENV === 'production'
-  ? 'https://account.docusign.com'
-  : 'https://account-d.docusign.com';
+const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
+const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 async function loadProfile(organization_id) {
   let url = `${SUPABASE_URL}/rest/v1/company_profiles?select=id,settings&limit=1`;
@@ -24,13 +19,28 @@ async function loadProfile(organization_id) {
   return rows[0] || null;
 }
 
+async function loadDocusignCredentials() {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/docusign_credentials?select=*&limit=1`,
+    { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
+  );
+  const rows = await res.json();
+  return rows[0] || null;
+}
+
 async function refreshTokenIfNeeded(docusign, profileId) {
   const expiresAt = docusign.expires_at ? new Date(docusign.expires_at) : null;
   const needsRefresh = !expiresAt || (expiresAt.getTime() - Date.now() < 5 * 60 * 1000);
   if (!needsRefresh || !docusign.refresh_token) return docusign;
-  if (!DOCUSIGN_CLIENT_ID || !DOCUSIGN_CLIENT_SECRET) return docusign;
 
-  const credentials = Buffer.from(`${DOCUSIGN_CLIENT_ID}:${DOCUSIGN_CLIENT_SECRET}`).toString('base64');
+  const creds = await loadDocusignCredentials();
+  if (!creds?.client_id || !creds?.client_secret) return docusign;
+
+  const DOCUSIGN_BASE_URL = creds.environment === 'production'
+    ? 'https://account.docusign.com'
+    : 'https://account-d.docusign.com';
+
+  const credentials = Buffer.from(`${creds.client_id}:${creds.client_secret}`).toString('base64');
   const tokenRes = await fetch(`${DOCUSIGN_BASE_URL}/oauth/token`, {
     method: 'POST',
     headers: { Authorization: `Basic ${credentials}`, 'Content-Type': 'application/x-www-form-urlencoded' },
