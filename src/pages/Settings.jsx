@@ -1010,7 +1010,7 @@ const ALL_TABS = [
   { key: "calendar",     label: "Calendar Feed",       icon: CalendarDays,   adminOnly: false },
   { key: "appearance",   label: "Appearance",          icon: Palette,        adminOnly: false },
   { key: "templates",    label: "Templates",           icon: FileText,       adminOnly: false },
-  { key: "docusign",     label: "DocuSign",            icon: FileSignature,  adminOnly: true  },
+  { key: "docusign",     label: "DocuSign",            icon: FileSignature,  adminOnly: false },
 ];
 
 export default function Settings() {
