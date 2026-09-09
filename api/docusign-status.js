@@ -23,12 +23,25 @@ module.exports = async function handler(req, res) {
     const row = rows[0];
     if (!row) return res.status(404).json({ error: 'Envelope not found.' });
 
-    // Load company profile (org-scoped)
-    let profileUrl = `${SUPABASE_URL}/rest/v1/company_profiles?select=id,settings&limit=1`;
-    if (row.organization_id) profileUrl += `&organization_id=eq.${encodeURIComponent(row.organization_id)}`;
-    const profileRes = await fetch(profileUrl, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } });
-    const profiles = await profileRes.json();
-    const docusign = profiles[0]?.settings?.docusign;
+    // Load company profile (org-scoped; falls back to any profile with
+    // DocuSign connected, since multiple company_profiles rows can exist
+    // with only one actually carrying a connected DocuSign account).
+    async function fetchProfiles(filter) {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/company_profiles?select=id,settings${filter}`,
+        { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
+      );
+      return res.json();
+    }
+    let docusign;
+    if (row.organization_id) {
+      const scoped = await fetchProfiles(`&organization_id=eq.${encodeURIComponent(row.organization_id)}`);
+      docusign = scoped.find((p) => p.settings?.docusign)?.settings?.docusign;
+    }
+    if (!docusign) {
+      const all = await fetchProfiles('');
+      docusign = all.find((p) => p.settings?.docusign)?.settings?.docusign;
+    }
     if (!docusign?.access_token) return res.status(400).json({ error: 'DocuSign not connected.' });
 
     // Fetch status from DocuSign

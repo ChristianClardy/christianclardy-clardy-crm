@@ -11,12 +11,26 @@
 const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-async function loadProfile(organization_id) {
-  let url = `${SUPABASE_URL}/rest/v1/company_profiles?select=id,settings&limit=1`;
-  if (organization_id) url += `&organization_id=eq.${encodeURIComponent(organization_id)}`;
+async function fetchProfiles(filter) {
+  const url = `${SUPABASE_URL}/rest/v1/company_profiles?select=id,settings${filter}`;
   const res = await fetch(url, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } });
-  const rows = await res.json();
-  return rows[0] || null;
+  return res.json();
+}
+
+// Multiple company_profiles rows can exist (e.g. one per legacy org record)
+// with only one actually carrying a connected DocuSign account, so picking
+// "any" row via limit=1 can land on one without settings.docusign. Prefer an
+// org-scoped row that has DocuSign connected, then any org-scoped row, then
+// fall back to searching all profiles for one with DocuSign connected.
+async function loadProfile(organization_id) {
+  if (organization_id) {
+    const scoped = await fetchProfiles(`&organization_id=eq.${encodeURIComponent(organization_id)}`);
+    const scopedWithDocusign = scoped.find((p) => p.settings?.docusign);
+    if (scopedWithDocusign) return scopedWithDocusign;
+    if (scoped.length) return scoped[0];
+  }
+  const all = await fetchProfiles('');
+  return all.find((p) => p.settings?.docusign) || all[0] || null;
 }
 
 async function loadDocusignCredentials() {
@@ -104,9 +118,8 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: 'At least one signer is required.' });
 
   try {
-    // Load profile (org-scoped; fallback to any profile)
+    // Load profile (org-scoped; falls back to any profile with DocuSign connected)
     let profile = await loadProfile(organization_id);
-    if (!profile?.settings?.docusign && organization_id) profile = await loadProfile(null);
     if (!profile?.settings?.docusign?.access_token) {
       return res.status(400).json({ error: 'DocuSign account is not connected. Configure it in Settings.' });
     }
