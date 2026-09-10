@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import LeadFormDialog from "@/components/crm/LeadFormDialog";
+import ContractsPanel from "@/components/crm/ContractsPanel";
 import LeadFollowUpPanel from "@/components/crm/LeadFollowUpPanel";
 import ContactHistoryPanel from "@/components/crm/ContactHistoryPanel";
 import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
@@ -317,6 +318,13 @@ export default function LeadDetail() {
         linkedClientId={lead.linked_contact_id || ""}
         defaultLocation={lead.property_address || ""}
       />
+
+      <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between gap-3 p-5 pb-0">
+          <h2 className="text-lg font-semibold text-slate-900">Contracts</h2>
+        </div>
+        <ContractsPanel lead={lead} />
+      </div>
 
       <LeadFollowUpPanel lead={lead} followUps={followUps} onRefresh={loadData} />
       <NextStepsPanel title="Lead Tasks / Next Steps" linkedClientId={lead.linked_contact_id || lead.id} />

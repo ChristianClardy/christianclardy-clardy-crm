@@ -1,6 +1,8 @@
 // GET /api/docusign-status?envelope_id=...
 // Fetches current envelope status from DocuSign and syncs it to the DB.
 
+const { handleEnvelopeCompleted } = require('./_lib/dealAutomation.js');
+
 const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -68,6 +70,7 @@ module.exports = async function handler(req, res) {
         },
         body: JSON.stringify(patch),
       });
+      if (newStatus === 'completed') await handleEnvelopeCompleted(row.entity_type, row.entity_id);
     }
 
     return res.status(200).json({ status: newStatus, envelope_id });

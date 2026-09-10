@@ -2,6 +2,8 @@
 // Receives DocuSign Connect push notifications and updates envelope status in DB.
 // Configure this URL in DocuSign Connect: https://yourdomain.com/api/docusign-webhook
 
+const { handleEnvelopeCompleted } = require('./_lib/dealAutomation.js');
+
 const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -24,17 +26,23 @@ module.exports = async function handler(req, res) {
     if (status === 'voided')    patch.voided_at    = new Date().toISOString();
     if (status === 'declined')  patch.declined_at  = new Date().toISOString();
 
-    await fetch(
+    const patchRes = await fetch(
       `${SUPABASE_URL}/rest/v1/docusign_envelopes?envelope_id=eq.${encodeURIComponent(envelopeId)}`,
       {
         method: 'PATCH',
         headers: {
           apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`,
-          'Content-Type': 'application/json', Prefer: 'return=minimal',
+          'Content-Type': 'application/json', Prefer: 'return=representation',
         },
         body: JSON.stringify(patch),
       }
     );
+
+    if (status === 'completed') {
+      const updated = await patchRes.json().catch(() => []);
+      const envelope = updated[0];
+      if (envelope) await handleEnvelopeCompleted(envelope.entity_type, envelope.entity_id);
+    }
 
     return res.status(200).json({ received: true });
   } catch (err) {
