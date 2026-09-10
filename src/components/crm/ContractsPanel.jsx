@@ -173,10 +173,13 @@ export default function ContractsPanel({ lead, deal = null }) {
           entity_type: deal ? "deal" : "lead",
           entity_id: deal ? deal.id : lead.id,
           sent_by: user?.id,
+          review: true,
+          return_url: `${window.location.origin}/DocuSignSenderReturn`,
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to send contract package.");
+      if (!res.ok) throw new Error(data.error || "Failed to open the contract for review.");
+      window.open(data.sender_view_url, "_blank");
       setSendOk(true);
     } catch (err) {
       setSendError(err.message);
@@ -309,7 +312,7 @@ export default function ContractsPanel({ lead, deal = null }) {
       </div>
 
       {sendError && <p className="rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-xs text-rose-700">{sendError}</p>}
-      {sendOk && <p className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-700">Contract package sent.</p>}
+      {sendOk && <p className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-700">Opened for review in DocuSign — finish there to send it.</p>}
 
       <div className="flex gap-2">
         {isTextTemplate && (
@@ -319,7 +322,7 @@ export default function ContractsPanel({ lead, deal = null }) {
         )}
         <Button type="button" onClick={handleSend} disabled={sending} className="flex-1 bg-amber-500 hover:bg-amber-600 text-white gap-2">
           {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          {sending ? "Sending…" : "Send Contract Package"}
+          {sending ? "Opening in DocuSign…" : "Review & Send in DocuSign"}
         </Button>
       </div>
 

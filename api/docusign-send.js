@@ -103,7 +103,13 @@ module.exports = async function handler(req, res) {
     documents: documentsInput,      // new: [{ file_url, file_name, merge_fields? }]
     subject,
     signers, organization_id, entity_type, entity_id, sent_by,
+    review, return_url,             // review: true -> create as a draft and hand back a
+                                     // DocuSign Embedded Sender View URL instead of sending
+                                     // immediately, so routing/signers/etc. can be finished
+                                     // inside DocuSign's own UI before it actually sends.
   } = body || {};
+
+  if (review && !return_url) return res.status(400).json({ error: 'return_url is required when review is true.' });
 
   const documents = Array.isArray(documentsInput) && documentsInput.length > 0
     ? documentsInput
@@ -193,7 +199,7 @@ module.exports = async function handler(req, res) {
           },
         })),
       },
-      status: 'sent',
+      status: review ? 'created' : 'sent',
     };
 
     const apiBase = `${docusign.base_uri}/restapi/v2.1/accounts/${docusign.account_id}/envelopes`;
@@ -217,7 +223,7 @@ module.exports = async function handler(req, res) {
       envelope_id:   envelopeData.envelopeId,
       subject:       emailSubject,
       document_name: documentLabel,
-      status:        envelopeData.status || 'sent',
+      status:        envelopeData.status || (review ? 'created' : 'sent'),
       signers:       signers,
       sent_at:       new Date().toISOString(),
       created_at:    new Date().toISOString(),
@@ -234,6 +240,24 @@ module.exports = async function handler(req, res) {
       },
       body: JSON.stringify(envelopeRecord),
     });
+
+    if (review) {
+      // Embedded Sender View — only valid while the envelope is still a
+      // draft ('created'). DocuSign redirects the browser to return_url
+      // once the user finishes (or cancels) reviewing/sending there.
+      const senderViewRes = await fetch(`${apiBase}/${envelopeData.envelopeId}/views/sender`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${docusign.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ returnUrl: return_url, viewAccess: 'envelope' }),
+      });
+      const senderViewData = await senderViewRes.json();
+      if (!senderViewRes.ok) {
+        return res.status(senderViewRes.status).json({
+          error: senderViewData.message || senderViewData.errorCode || 'Failed to open DocuSign for review.',
+        });
+      }
+      return res.status(200).json({ envelope_id: envelopeData.envelopeId, sender_view_url: senderViewData.url });
+    }
 
     return res.status(200).json({ envelope_id: envelopeData.envelopeId, status: envelopeData.status });
   } catch (err) {
