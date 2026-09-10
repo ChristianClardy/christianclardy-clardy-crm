@@ -248,7 +248,19 @@ module.exports = async function handler(req, res) {
       const senderViewRes = await fetch(`${apiBase}/${envelopeData.envelopeId}/views/sender`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${docusign.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ returnUrl: return_url, viewAccess: 'envelope' }),
+        body: JSON.stringify({
+          returnUrl: return_url,
+          viewAccess: 'envelope',
+          // Explicit settings so the review screen opens fully editable —
+          // recipients/routing, field placement, and attached documents —
+          // rather than relying on whatever DocuSign's own defaults are.
+          settings: {
+            startingScreen: 'Prepare',
+            showBackButton: 'true',
+            recipientSettings: { showEditRecipients: 'true', showContactsList: 'true' },
+            documentSettings: { showEditDocuments: 'true', showEditPages: 'true' },
+          },
+        }),
       });
       const senderViewData = await senderViewRes.json();
       if (!senderViewRes.ok) {
