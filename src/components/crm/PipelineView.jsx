@@ -11,7 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/AuthContext";
 import DocuSignEnvelopes from "@/components/docusign/DocuSignEnvelopes";
-import { resolveContractMergeValue } from "@/lib/contractMergeSources";
+import { resolveContractMergeValue, renderContractTemplate } from "@/lib/contractMergeSources";
+import { generateContractPdf } from "@/lib/generateContractPdf";
 
 // ─── Stage definitions ────────────────────────────────────────────────────────
 
@@ -389,11 +390,13 @@ function DealContractsTab({ deal, leads }) {
   }, [mergeEstimate?.id]);
 
   const selectedTemplate = contractTemplates.find((t) => t.id === selectedTemplateId) || null;
+  const isTextTemplate = selectedTemplate?.body_type === "text";
   const mergeCtx = { deal, client, company, project, estimate: mergeEstimate, estimateVersion, selections };
   const resolvedMergeFields = (selectedTemplate?.merge_fields || []).map((mf) => ({
     ...mf,
     value: resolveContractMergeValue(mf.source, mergeCtx),
   }));
+  const resolvedBody = isTextTemplate ? renderContractTemplate(selectedTemplate.body, mergeCtx) : "";
 
   const toggleDoc = (id) => setSelectedDocIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
   const toggleEstimate = (id) => setSelectedEstimateIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
@@ -408,7 +411,11 @@ function DealContractsTab({ deal, leads }) {
     setSendOk(false);
     try {
       const docs = [];
-      if (selectedTemplate) {
+      if (isTextTemplate) {
+        const pdfFile = generateContractPdf(resolvedBody, { title: selectedTemplate.name });
+        const { file_url } = await base44.integrations.Core.UploadFile({ file: pdfFile });
+        docs.push({ file_url, file_name: pdfFile.name });
+      } else if (selectedTemplate) {
         docs.push({
           file_url: selectedTemplate.file_url,
           file_name: selectedTemplate.file_name || `${selectedTemplate.name}.pdf`,
@@ -491,7 +498,13 @@ function DealContractsTab({ deal, leads }) {
         {contractTemplates.length === 0 && (
           <p className="mt-1 text-[11px] text-slate-400">No contract templates yet — add one in Settings → Templates → Contract Templates.</p>
         )}
-        {selectedTemplate && resolvedMergeFields.length > 0 && (
+        {isTextTemplate && resolvedBody && (
+          <div className="mt-2 rounded-lg border border-slate-200 p-2.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Merge Preview</p>
+            <div className="max-h-40 overflow-y-auto text-xs text-slate-700 whitespace-pre-line">{resolvedBody}</div>
+          </div>
+        )}
+        {!isTextTemplate && selectedTemplate && resolvedMergeFields.length > 0 && (
           <div className="mt-2 rounded-lg border border-slate-200 p-2.5 space-y-1">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Merge Preview</p>
             {resolvedMergeFields.map((mf) => (

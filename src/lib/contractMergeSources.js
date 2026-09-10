@@ -1,11 +1,22 @@
-// Merge-field sources a contract_templates.merge_fields row can bind an
-// anchor token to, resolved against a Deal being sent from the Contracts tab
-// (PipelineView.jsx). Deals have no direct client_id — the caller resolves
+// Merge-field sources a contract_templates row can pull in, resolved against
+// a Deal being sent from the Contracts tab (PipelineView.jsx). Deals have no
+// direct client_id — the caller resolves
 // { deal, client, company, project, estimate, estimateVersion } once (chasing
 // deal.lead_id -> lead.linked_contact_id -> client, client.id -> project ->
 // deal.lead_id -> lead.company_id -> company_profiles, and client.id ->
 // estimate -> its active estimate_version) and passes that context into
-// resolveContractMergeValue for every mapped field.
+// resolveContractMergeValue for every field.
+//
+// Two contract_templates.body_type modes consume this list:
+//   'file' — the original flow: an uploaded Word/PDF with a literal anchor
+//            typed into it, mapped by hand to a source via merge_fields
+//            ([{ anchor, source }]). Resolved values become locked DocuSign
+//            anchor-string text tabs at send time (api/docusign-send.js).
+//   'text' — body is authored in-app; the inserted token *is* the source
+//            value itself (e.g. "{{client.name}}"), no separate mapping
+//            step. renderContractTemplate() below resolves the whole body
+//            to real text before a PDF is generated, so DocuSign only needs
+//            to find the "**signature**" marker for signature placement.
 //
 // This same list backs the read-only merge field library shown in
 // Settings -> Templates -> Merge Fields, so `label` and `description` here
@@ -164,4 +175,27 @@ export function resolveContractMergeValue(source, { deal, client, company, proje
     case "today":                    return new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
     default:                         return "";
   }
+}
+
+// Which {{source}} tokens appear in a 'text' mode template body, for the
+// editor to flag ones that aren't a real MERGE_SOURCES value. Mirrors
+// scopeTemplateEngine.js's extractTemplateTokens.
+export function extractContractTokens(body) {
+  const tokens = new Set();
+  for (const m of (body || "").matchAll(/\{\{\s*([\w.-]+)\s*\}\}/g)) {
+    tokens.add(m[1]);
+  }
+  return [...tokens];
+}
+
+// Resolves every {{source}} token in a 'text' mode template body to real
+// data. Unrecognized tokens are left as-is rather than blanked, so a typo
+// stays visible instead of silently disappearing. The literal "**signature**"
+// marker has no braces, so it's untouched here and left for DocuSign's
+// anchor-string signature placement (api/docusign-send.js).
+export function renderContractTemplate(body, ctx) {
+  return (body || "").replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (match, source) => {
+    if (!MERGE_SOURCES.some((s) => s.value === source)) return match;
+    return resolveContractMergeValue(source, ctx);
+  });
 }

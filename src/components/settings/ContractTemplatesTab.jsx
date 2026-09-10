@@ -1,21 +1,27 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
-import { Plus, Edit2, Trash2, FileSignature, Upload, ExternalLink } from "lucide-react";
+import { Plus, Edit2, Trash2, FileSignature, Upload, ExternalLink, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { MERGE_SOURCES } from "@/lib/contractMergeSources";
+import { cn } from "@/lib/utils";
+import { MERGE_SOURCES, extractContractTokens } from "@/lib/contractMergeSources";
+import MergeFieldPicker from "@/components/settings/MergeFieldPicker";
 
 function blankMergeField() {
   return { id: Math.random().toString(36).slice(2, 10), anchor: "", source: MERGE_SOURCES[0].value };
 }
 
 const MERGE_GROUPS = [...new Set(MERGE_SOURCES.map((s) => s.group || "Other"))];
+const KNOWN_SOURCES = new Set(MERGE_SOURCES.map((s) => s.value));
 
 const EMPTY_TEMPLATE = {
   name: "",
   company_id: "",
+  body_type: "text",
+  body: "",
   file_url: "",
   file_name: "",
   file_type: "",
@@ -32,6 +38,8 @@ export default function ContractTemplatesTab() {
   const [form, setForm] = useState(EMPTY_TEMPLATE);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
+  const bodyRef = useRef(null);
+  const cursorPos = useRef(null);
 
   useEffect(() => { load(); }, []);
 
@@ -59,7 +67,9 @@ export default function ContractTemplatesTab() {
     setForm({
       ...EMPTY_TEMPLATE,
       ...t,
+      body_type: t.body_type || "file",
       company_id: t.company_id || "",
+      body: t.body || "",
       merge_fields: Array.isArray(t.merge_fields) && t.merge_fields.length ? t.merge_fields : [],
     });
     setDialogOpen(true);
@@ -90,18 +100,53 @@ export default function ContractTemplatesTab() {
     }
   };
 
+  const trackCursor = () => {
+    if (bodyRef.current) cursorPos.current = bodyRef.current.selectionStart;
+  };
+
+  const insertToken = (token) => {
+    setForm((f) => {
+      const body = f.body || "";
+      const pos = cursorPos.current != null ? cursorPos.current : body.length;
+      const nextBody = body.slice(0, pos) + token + body.slice(pos);
+      cursorPos.current = pos + token.length;
+      return { ...f, body: nextBody };
+    });
+    // Restore focus + caret after the inserted token on the next tick.
+    requestAnimationFrame(() => {
+      if (!bodyRef.current) return;
+      bodyRef.current.focus();
+      const pos = cursorPos.current;
+      bodyRef.current.setSelectionRange(pos, pos);
+    });
+  };
+
+  const handleBodyDrop = (e) => {
+    e.preventDefault();
+    const token = e.dataTransfer.getData("text/plain");
+    if (token) insertToken(token);
+  };
+
+  const foundTokens = useMemo(() => extractContractTokens(form.body), [form.body]);
+  const invalidTokens = foundTokens.filter((t) => !KNOWN_SOURCES.has(t));
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.file_url) return;
+    if (!form.name.trim()) return;
+    if (form.body_type === "text" ? !form.body.trim() : !form.file_url) return;
     const payload = {
       name: form.name.trim(),
       company_id: form.company_id || null,
-      file_url: form.file_url,
-      file_name: form.file_name || null,
-      file_type: form.file_type || null,
-      merge_fields: (form.merge_fields || [])
-        .filter((m) => (m.anchor || "").trim())
-        .map((m) => ({ anchor: m.anchor.trim(), source: m.source })),
+      body_type: form.body_type,
+      body: form.body_type === "text" ? form.body : null,
+      file_url: form.body_type === "file" ? form.file_url : null,
+      file_name: form.body_type === "file" ? (form.file_name || null) : null,
+      file_type: form.body_type === "file" ? (form.file_type || null) : null,
+      merge_fields: form.body_type === "file"
+        ? (form.merge_fields || [])
+            .filter((m) => (m.anchor || "").trim())
+            .map((m) => ({ anchor: m.anchor.trim(), source: m.source }))
+        : [],
       is_active: form.is_active !== false,
     };
     if (editing) {
@@ -120,15 +165,17 @@ export default function ContractTemplatesTab() {
     }
   };
 
+  const canSubmit = form.body_type === "text" ? Boolean(form.body.trim()) : Boolean(form.file_url);
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Contract Templates</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Upload a contract file (Word/PDF) with tokens like {"{{client_name}}"} typed where they should appear,
-            then map each token to a merge source below. DocuSign fills them in as locked text when a deal's Contracts
-            tab sends the package. See the <span className="font-medium text-slate-600">Merge Fields</span> tab for the full list of what each source pulls in.
+            Write the contract in-app and search or drag merge fields straight into the text, or upload a Word/PDF
+            file with tokens typed in and map them below. See the <span className="font-medium text-slate-600">Merge Fields</span> tab
+            for the full list of what each field pulls in.
           </p>
         </div>
         <Button onClick={openNew} size="sm" className="bg-gradient-to-r from-amber-500 to-orange-500 text-white gap-1">
@@ -143,40 +190,55 @@ export default function ContractTemplatesTab() {
       ) : templates.length === 0 ? (
         <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-white py-16 text-center text-slate-500">
           <FileSignature className="w-8 h-8 text-slate-200 mx-auto mb-2" />
-          No contract templates yet. Upload one to reuse from a deal's Contracts tab.
+          No contract templates yet. Add one to reuse from a deal's Contracts tab.
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
-          {templates.map((t) => (
-            <div key={t.id} className="rounded-xl border border-slate-200 bg-white p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-semibold text-slate-900 truncate">{t.name}</p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {companyName(t.company_id)} · {(t.merge_fields || []).length} merge field{(t.merge_fields || []).length !== 1 ? "s" : ""}
-                  </p>
-                  {t.file_url && (
-                    <a href={t.file_url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700">
-                      <ExternalLink className="w-3 h-3" /> {t.file_name || "View file"}
-                    </a>
-                  )}
-                </div>
-                <div className="flex gap-1 flex-shrink-0">
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(t)} title="Edit">
-                    <Edit2 className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-500" onClick={() => handleDelete(t.id)} title="Delete">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+          {templates.map((t) => {
+            const isText = (t.body_type || "file") === "text";
+            const tokenCount = isText ? extractContractTokens(t.body).length : (t.merge_fields || []).length;
+            return (
+              <div key={t.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-slate-900 truncate">{t.name}</p>
+                      <span className={cn(
+                        "text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0",
+                        isText ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"
+                      )}>
+                        {isText ? "Text" : "File"}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {companyName(t.company_id)} · {tokenCount} merge field{tokenCount !== 1 ? "s" : ""}
+                    </p>
+                    {isText && t.body && (
+                      <p className="mt-2 text-xs text-slate-500 line-clamp-3 whitespace-pre-line">{t.body}</p>
+                    )}
+                    {!isText && t.file_url && (
+                      <a href={t.file_url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700">
+                        <ExternalLink className="w-3 h-3" /> {t.file_name || "View file"}
+                      </a>
+                    )}
+                  </div>
+                  <div className="flex gap-1 flex-shrink-0">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(t)} title="Edit">
+                      <Edit2 className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-500" onClick={() => handleDelete(t.id)} title="Delete">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit Contract Template" : "Add Contract Template"}</DialogTitle>
           </DialogHeader>
@@ -195,65 +257,118 @@ export default function ContractTemplatesTab() {
               </div>
             </div>
 
-            <div>
-              <Label className="text-xs">Contract File *</Label>
-              <div className="mt-1 flex items-center gap-2">
-                <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" onChange={handleFileChange} className="hidden" id="contract-file-input" />
-                <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-1.5">
-                  <Upload className="w-3.5 h-3.5" /> {uploading ? "Uploading…" : form.file_url ? "Replace file" : "Upload file"}
-                </Button>
-                {form.file_url && !uploading && (
-                  <a href={form.file_url} target="_blank" rel="noopener noreferrer" className="text-xs text-amber-600 hover:text-amber-700 truncate">
-                    {form.file_name}
-                  </a>
-                )}
+            {!editing && (
+              <div className="flex gap-2 border-b border-slate-200 pb-1">
+                {[{ key: "text", label: "Text Template", icon: FileText }, { key: "file", label: "Uploaded File", icon: Upload }].map(({ key, label, icon: Icon }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => ff("body_type", key)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-t-md border-b-2 -mb-px transition-colors",
+                      form.body_type === key ? "border-amber-500 text-amber-700" : "border-transparent text-slate-500 hover:text-slate-800"
+                    )}
+                  >
+                    <Icon className="w-3.5 h-3.5" /> {label}
+                  </button>
+                ))}
               </div>
-            </div>
+            )}
 
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <Label className="text-xs">Merge Fields</Label>
-                <button type="button" onClick={addMergeField} className="flex items-center gap-1 text-xs font-medium text-amber-600 hover:text-amber-700">
-                  <Plus className="w-3.5 h-3.5" /> Add merge field
-                </button>
+            {form.body_type === "text" ? (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <Label className="text-xs">Contract Body</Label>
+                  {invalidTokens.length > 0 && (
+                    <p className="text-[11px] text-amber-600">
+                      Not a recognized field: {invalidTokens.map((t) => `{{${t}}}`).join(", ")}
+                    </p>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-3" style={{ height: 360 }}>
+                  <Textarea
+                    ref={bodyRef}
+                    value={form.body}
+                    onChange={(e) => { ff("body", e.target.value); trackCursor(); }}
+                    onSelect={trackCursor}
+                    onClick={trackCursor}
+                    onKeyUp={trackCursor}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={handleBodyDrop}
+                    className="col-span-2 h-full resize-none text-sm font-mono"
+                    placeholder="Dear {{client.name}},&#10;&#10;This agreement is for the project at {{project.address}}…&#10;&#10;Signature: **signature**"
+                  />
+                  <div className="col-span-1 h-full">
+                    <MergeFieldPicker onInsert={insertToken} />
+                  </div>
+                </div>
+                <p className="mt-1.5 text-[11px] text-slate-400">
+                  Click or drag a field from the panel to insert it at your cursor. Values are filled in automatically when a deal's Contracts tab sends the package.
+                </p>
               </div>
-              <div className="space-y-2">
-                {form.merge_fields.map((m) => (
-                  <div key={m.id} className="flex items-center gap-2 border border-slate-200 rounded-lg p-2">
-                    <input
-                      type="text"
-                      value={m.anchor}
-                      onChange={(e) => updateMergeField(m.id, { anchor: e.target.value })}
-                      placeholder="{{client_name}}"
-                      className="h-8 text-xs font-mono border border-slate-200 rounded-md px-2 outline-none focus:ring-1 focus:ring-amber-400 w-40 flex-shrink-0"
-                    />
-                    <select
-                      value={m.source}
-                      onChange={(e) => updateMergeField(m.id, { source: e.target.value })}
-                      className="h-8 text-xs border border-slate-200 rounded-md px-1.5 outline-none focus:ring-1 focus:ring-amber-400 bg-white flex-1 min-w-0"
-                    >
-                      {MERGE_GROUPS.map((group) => (
-                        <optgroup key={group} label={group}>
-                          {MERGE_SOURCES.filter((s) => (s.group || "Other") === group).map((s) => (
-                            <option key={s.value} value={s.value}>{s.label}</option>
-                          ))}
-                        </optgroup>
-                      ))}
-                    </select>
-                    <button type="button" onClick={() => removeMergeField(m.id)} className="p-1 text-slate-300 hover:text-rose-500 flex-shrink-0">
-                      <Trash2 className="w-3.5 h-3.5" />
+            ) : (
+              <>
+                <div>
+                  <Label className="text-xs">Contract File *</Label>
+                  <div className="mt-1 flex items-center gap-2">
+                    <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" onChange={handleFileChange} className="hidden" id="contract-file-input" />
+                    <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-1.5">
+                      <Upload className="w-3.5 h-3.5" /> {uploading ? "Uploading…" : form.file_url ? "Replace file" : "Upload file"}
+                    </Button>
+                    {form.file_url && !uploading && (
+                      <a href={form.file_url} target="_blank" rel="noopener noreferrer" className="text-xs text-amber-600 hover:text-amber-700 truncate">
+                        {form.file_name}
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-xs">Merge Fields</Label>
+                    <button type="button" onClick={addMergeField} className="flex items-center gap-1 text-xs font-medium text-amber-600 hover:text-amber-700">
+                      <Plus className="w-3.5 h-3.5" /> Add merge field
                     </button>
                   </div>
-                ))}
-                {form.merge_fields.length === 0 && (
-                  <p className="text-xs text-slate-400 italic text-center py-3">No merge fields yet — the anchor text must appear literally in the uploaded file.</p>
-                )}
-              </div>
-            </div>
+                  <div className="space-y-2">
+                    {form.merge_fields.map((m) => (
+                      <div key={m.id} className="flex items-center gap-2 border border-slate-200 rounded-lg p-2">
+                        <input
+                          type="text"
+                          value={m.anchor}
+                          onChange={(e) => updateMergeField(m.id, { anchor: e.target.value })}
+                          placeholder="{{client_name}}"
+                          className="h-8 text-xs font-mono border border-slate-200 rounded-md px-2 outline-none focus:ring-1 focus:ring-amber-400 w-40 flex-shrink-0"
+                        />
+                        <select
+                          value={m.source}
+                          onChange={(e) => updateMergeField(m.id, { source: e.target.value })}
+                          className="h-8 text-xs border border-slate-200 rounded-md px-1.5 outline-none focus:ring-1 focus:ring-amber-400 bg-white flex-1 min-w-0"
+                        >
+                          {MERGE_GROUPS.map((group) => (
+                            <optgroup key={group} label={group}>
+                              {MERGE_SOURCES.filter((s) => (s.group || "Other") === group).map((s) => (
+                                <option key={s.value} value={s.value}>{s.label}</option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                        <button type="button" onClick={() => removeMergeField(m.id)} className="p-1 text-slate-300 hover:text-rose-500 flex-shrink-0">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                    {form.merge_fields.length === 0 && (
+                      <p className="text-xs text-slate-400 italic text-center py-3">No merge fields yet — the anchor text must appear literally in the uploaded file.</p>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
 
             <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
               <Button type="button" variant="outline" size="sm" onClick={() => setDialogOpen(false)}>Cancel</Button>
-              <Button type="submit" size="sm" disabled={!form.file_url} className="bg-gradient-to-r from-amber-500 to-orange-500 text-white">{editing ? "Update" : "Add"} Template</Button>
+              <Button type="submit" size="sm" disabled={!canSubmit} className="bg-gradient-to-r from-amber-500 to-orange-500 text-white">{editing ? "Update" : "Add"} Template</Button>
             </div>
           </form>
         </DialogContent>

@@ -53,3 +53,9 @@ END $$;
 -- src/lib/leadConversion.js already uses. Deals created manually on the
 -- Pipeline board with no lead_id simply won't have merge-field data to pull
 -- from client.* sources (the UI surfaces this rather than failing silently).
+--
+-- See migration 024 for a second `body_type = 'text'` mode added later: an
+-- in-app text body with a searchable/drag-drop merge field picker, resolved
+-- to real text and rendered to a PDF at send time instead of relying on
+-- DocuSign anchor-tag text tabs. This migration's `file_url`/`merge_fields`
+-- shape remains exactly as described above for `body_type = 'file'` rows.
