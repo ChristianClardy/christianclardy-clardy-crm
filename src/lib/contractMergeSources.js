@@ -193,9 +193,75 @@ export function extractContractTokens(body) {
 // stays visible instead of silently disappearing. The literal "**signature**"
 // marker has no braces, so it's untouched here and left for DocuSign's
 // anchor-string signature placement (api/docusign-send.js).
-export function renderContractTemplate(body, ctx) {
+//
+// `fieldDefaults` is a template's { source: value } map (contract_templates
+// .field_defaults) — a non-empty entry there always wins over the
+// live-resolved value, letting a template pin a value that should stay the
+// same regardless of which deal it's sent from.
+export function renderContractTemplate(body, ctx, fieldDefaults) {
   return (body || "").replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (match, source) => {
     if (!MERGE_SOURCES.some((s) => s.value === source)) return match;
+    const override = fieldDefaults?.[source];
+    if (typeof override === "string" && override.trim()) return override;
     return resolveContractMergeValue(source, ctx);
   });
 }
+
+// Canned placeholder data for the template editor's sample-data Preview —
+// covers every source resolveContractMergeValue switches on so every group
+// renders something non-blank without needing a real deal.
+export const SAMPLE_CONTEXT = {
+  deal: {
+    title: "Sample Deal — Backyard Renovation",
+    value: 45000,
+    stage: "Proposal",
+    probability: 60,
+    close_date: "2026-10-15",
+    assigned_to: "Jordan Rep",
+    description: "Full backyard renovation including pool and decking.",
+  },
+  client: {
+    name: "John Sample",
+    contact_person: "Jane Sample",
+    email: "john.sample@example.com",
+    phone: "(555) 123-4567",
+    address: "123 Main St, Austin, TX 78701",
+    company: "Sample Holdings LLC",
+  },
+  company: {
+    invoice_company_name: "Clardy Construction",
+    address: "456 Builder Ave, Austin, TX 78702",
+    phone: "(555) 987-6543",
+    email: "info@clardy.io",
+    website: "https://clardy.io",
+    license_number: "TX-00000",
+  },
+  project: {
+    name: "Sample Backyard Project",
+    address: "123 Main St, Austin, TX 78701",
+    status: "in_progress",
+    project_manager: "Alex Manager",
+    contract_value: 45000,
+    start_date: "2026-11-01",
+    end_date: "2027-02-01",
+  },
+  estimate: {
+    estimate_number: "EST-1000",
+    title: "Backyard Renovation Estimate",
+    issue_date: "2026-09-01",
+    expiry_date: "2026-10-01",
+    terms: "50% deposit due at signing, balance due at completion.",
+  },
+  estimateVersion: {
+    total_price: 45000,
+  },
+  selections: {
+    equipment: [{ equipment: "Pump", manufacturer: "Pentair", model: "IntelliFlo", warranty: "3 years" }],
+    finishes: [{ item: "Interior Finish", manufacturer_product: "Diamond Brite", color_finish: "Blue Granite" }],
+    allowances: [{ item: "Tile Allowance", amount: 2000 }],
+    payment_schedule: [{ milestone: "Deposit", amount: 22500 }, { milestone: "Completion", amount: 22500 }],
+    water_features: "Raised spa with waterfall.",
+    other_improvements: "New paver decking.",
+    notes: "Sample selection notes.",
+  },
+};

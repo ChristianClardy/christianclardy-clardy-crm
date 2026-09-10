@@ -3,7 +3,7 @@ import { base44, getCurrentOrgId } from "@/api/base44Client";
 import {
   Plus, Search, X, DollarSign, TrendingUp, Briefcase, Users,
   CalendarDays, UserRound, ChevronDown, AlertCircle,
-  FileSignature, Paperclip, FileText, Send, Loader2, Trash2,
+  FileSignature, Paperclip, FileText, Send, Loader2, Trash2, Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -396,7 +396,7 @@ function DealContractsTab({ deal, leads }) {
     ...mf,
     value: resolveContractMergeValue(mf.source, mergeCtx),
   }));
-  const resolvedBody = isTextTemplate ? renderContractTemplate(selectedTemplate.body, mergeCtx) : "";
+  const resolvedBody = isTextTemplate ? renderContractTemplate(selectedTemplate.body, mergeCtx, selectedTemplate.field_defaults) : "";
 
   const toggleDoc = (id) => setSelectedDocIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
   const toggleEstimate = (id) => setSelectedEstimateIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
@@ -404,6 +404,16 @@ function DealContractsTab({ deal, leads }) {
   const updateSigner = (i, patch) => setSigners((prev) => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s));
   const addSigner = () => setSigners((prev) => [...prev, { name: "", email: "" }]);
   const removeSigner = (i) => setSigners((prev) => prev.filter((_, idx) => idx !== i));
+
+  // Renders the same PDF handleSend would upload, but only opens it locally —
+  // no upload, no DocuSign call — so it's free to check before signers are
+  // even filled in.
+  const handlePreviewPdf = () => {
+    const pdfFile = generateContractPdf(resolvedBody, { title: selectedTemplate.name });
+    const url = URL.createObjectURL(pdfFile);
+    window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  };
 
   const handleSend = async () => {
     setSending(true);
@@ -587,10 +597,17 @@ function DealContractsTab({ deal, leads }) {
       {sendError && <p className="rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-xs text-rose-700">{sendError}</p>}
       {sendOk && <p className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-700">Contract package sent.</p>}
 
-      <Button type="button" onClick={handleSend} disabled={sending} className="w-full bg-amber-500 hover:bg-amber-600 text-white gap-2">
-        {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-        {sending ? "Sending…" : "Send Contract Package"}
-      </Button>
+      <div className="flex gap-2">
+        {isTextTemplate && (
+          <Button type="button" variant="outline" onClick={handlePreviewPdf} className="gap-2">
+            <Eye className="h-4 w-4" /> Preview PDF
+          </Button>
+        )}
+        <Button type="button" onClick={handleSend} disabled={sending} className="flex-1 bg-amber-500 hover:bg-amber-600 text-white gap-2">
+          {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          {sending ? "Sending…" : "Send Contract Package"}
+        </Button>
+      </div>
 
       <div className="border-t border-slate-100 pt-3">
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Sent Envelopes</p>

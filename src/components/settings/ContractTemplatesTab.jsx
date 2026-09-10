@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
-import { Plus, Edit2, Trash2, FileSignature, Upload, ExternalLink, FileText } from "lucide-react";
+import { Plus, Edit2, Trash2, FileSignature, Upload, ExternalLink, FileText, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { MERGE_SOURCES, extractContractTokens } from "@/lib/contractMergeSources";
+import { MERGE_SOURCES, extractContractTokens, renderContractTemplate, SAMPLE_CONTEXT } from "@/lib/contractMergeSources";
 import MergeFieldPicker from "@/components/settings/MergeFieldPicker";
 
 function blankMergeField() {
@@ -22,6 +22,7 @@ const EMPTY_TEMPLATE = {
   company_id: "",
   body_type: "text",
   body: "",
+  field_defaults: {},
   file_url: "",
   file_name: "",
   file_type: "",
@@ -37,6 +38,7 @@ export default function ContractTemplatesTab() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_TEMPLATE);
   const [uploading, setUploading] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const fileInputRef = useRef(null);
   const bodyRef = useRef(null);
   const cursorPos = useRef(null);
@@ -70,6 +72,7 @@ export default function ContractTemplatesTab() {
       body_type: t.body_type || "file",
       company_id: t.company_id || "",
       body: t.body || "",
+      field_defaults: t.field_defaults && typeof t.field_defaults === "object" ? t.field_defaults : {},
       merge_fields: Array.isArray(t.merge_fields) && t.merge_fields.length ? t.merge_fields : [],
     });
     setDialogOpen(true);
@@ -129,6 +132,15 @@ export default function ContractTemplatesTab() {
 
   const foundTokens = useMemo(() => extractContractTokens(form.body), [form.body]);
   const invalidTokens = foundTokens.filter((t) => !KNOWN_SOURCES.has(t));
+  const defaultableTokens = foundTokens.filter((t) => KNOWN_SOURCES.has(t));
+
+  const setFieldDefault = (source, value) =>
+    setForm((f) => ({ ...f, field_defaults: { ...f.field_defaults, [source]: value } }));
+
+  const previewText = useMemo(
+    () => renderContractTemplate(form.body, SAMPLE_CONTEXT, form.field_defaults),
+    [form.body, form.field_defaults]
+  );
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -139,6 +151,11 @@ export default function ContractTemplatesTab() {
       company_id: form.company_id || null,
       body_type: form.body_type,
       body: form.body_type === "text" ? form.body : null,
+      field_defaults: form.body_type === "text"
+        ? Object.fromEntries(
+            Object.entries(form.field_defaults || {}).filter(([, v]) => (v || "").trim())
+          )
+        : {},
       file_url: form.body_type === "file" ? form.file_url : null,
       file_name: form.body_type === "file" ? (form.file_name || null) : null,
       file_type: form.body_type === "file" ? (form.file_type || null) : null,
@@ -305,6 +322,34 @@ export default function ContractTemplatesTab() {
                 <p className="mt-1.5 text-[11px] text-slate-400">
                   Click or drag a field from the panel to insert it at your cursor. Values are filled in automatically when a deal's Contracts tab sends the package.
                 </p>
+
+                {defaultableTokens.length > 0 && (
+                  <div className="mt-3">
+                    <Label className="text-xs">Field Defaults</Label>
+                    <p className="text-[11px] text-slate-400 mb-2">
+                      Optional — pin a fixed value for this template instead of pulling it from the deal/client each time. Leave blank to use live deal data.
+                    </p>
+                    <div className="space-y-1.5">
+                      {defaultableTokens.map((source) => {
+                        const meta = MERGE_SOURCES.find((s) => s.value === source);
+                        return (
+                          <div key={source} className="flex items-center gap-2">
+                            <span className="text-xs text-slate-600 w-40 flex-shrink-0 truncate" title={source}>
+                              {meta?.label || source}
+                            </span>
+                            <input
+                              type="text"
+                              value={form.field_defaults?.[source] || ""}
+                              onChange={(e) => setFieldDefault(source, e.target.value)}
+                              placeholder="Use deal/client data"
+                              className="h-8 text-xs border border-slate-200 rounded-md px-2 outline-none focus:ring-1 focus:ring-amber-400 flex-1 min-w-0"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <>
@@ -367,10 +412,29 @@ export default function ContractTemplatesTab() {
             )}
 
             <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+              {form.body_type === "text" && (
+                <Button type="button" variant="outline" size="sm" onClick={() => setPreviewOpen(true)} disabled={!form.body.trim()} className="gap-1.5 mr-auto">
+                  <Eye className="w-3.5 h-3.5" /> Preview
+                </Button>
+              )}
               <Button type="button" variant="outline" size="sm" onClick={() => setDialogOpen(false)}>Cancel</Button>
               <Button type="submit" size="sm" disabled={!canSubmit} className="bg-gradient-to-r from-amber-500 to-orange-500 text-white">{editing ? "Update" : "Add"} Template</Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Template Preview</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-slate-400 -mt-2">
+            Rendered with sample data — real sends pull from the actual deal/client/project instead.
+          </p>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-800 whitespace-pre-line">
+            {previewText}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
