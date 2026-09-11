@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { MERGE_SOURCES, anchorForSource, extractContractTokens, renderContractTemplate, SAMPLE_CONTEXT } from "@/lib/contractMergeSources";
+import { scanTemplateFileForMergeTokens } from "@/lib/scanTemplateFileTokens";
 import MergeFieldPicker from "@/components/settings/MergeFieldPicker";
 
 function blankMergeField() {
@@ -38,6 +39,7 @@ export default function ContractTemplatesTab() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_TEMPLATE);
   const [uploading, setUploading] = useState(false);
+  const [scanMessage, setScanMessage] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
   const fileInputRef = useRef(null);
   const bodyRef = useRef(null);
@@ -61,11 +63,13 @@ export default function ContractTemplatesTab() {
   const openNew = () => {
     setEditing(null);
     setForm({ ...EMPTY_TEMPLATE, company_id: companies[0]?.id || "" });
+    setScanMessage("");
     setDialogOpen(true);
   };
 
   const openEdit = (t) => {
     setEditing(t);
+    setScanMessage("");
     setForm({
       ...EMPTY_TEMPLATE,
       ...t,
@@ -89,17 +93,57 @@ export default function ContractTemplatesTab() {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
+    setScanMessage("");
     try {
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
       ff("file_url", file_url);
       ff("file_name", file.name);
       ff("file_type", file.type || "");
       if (!form.name) ff("name", file.name.replace(/\.[^.]+$/, ""));
+      await scanFileForMergeFields(file);
     } catch (err) {
       alert(`Upload failed: ${err.message}`);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  // Reads the uploaded PDF/DOCX's text for {{dotted.path}} placeholders and
+  // adds a merge field row for every one that matches a known source, so
+  // authors don't have to find and re-type each anchor by hand. Anchors
+  // already configured (by source) are left untouched; unrecognized
+  // {{...}} tokens are called out but not added, since there's no source to
+  // map them to.
+  const scanFileForMergeFields = async (file) => {
+    try {
+      const result = await scanTemplateFileForMergeTokens(file);
+      if (!result.supported) {
+        setScanMessage("Couldn't scan .doc files automatically — add merge fields manually below.");
+        return;
+      }
+
+      const existingSources = new Set(form.merge_fields.map((m) => m.source));
+      const known = result.tokens.filter((t) => KNOWN_SOURCES.has(t) && !existingSources.has(t));
+      const unknown = result.tokens.filter((t) => !KNOWN_SOURCES.has(t));
+
+      if (known.length) {
+        setForm((f) => ({
+          ...f,
+          merge_fields: [
+            ...f.merge_fields,
+            ...known.map((source) => ({ id: Math.random().toString(36).slice(2, 10), anchor: `{{${source}}}`, source })),
+          ],
+        }));
+      }
+
+      const parts = [];
+      if (known.length) parts.push(`Added ${known.length} merge field${known.length === 1 ? "" : "s"} found in the file.`);
+      if (unknown.length) parts.push(`Found unrecognized token${unknown.length === 1 ? "" : "s"} ${unknown.map((t) => `{{${t}}}`).join(", ")} — no matching source, add manually if needed.`);
+      if (!known.length && !unknown.length) parts.push("No {{...}} placeholders found in this file.");
+      setScanMessage(parts.join(" "));
+    } catch (err) {
+      setScanMessage(`Couldn't scan the file for merge fields: ${err.message}`);
     }
   };
 
@@ -366,6 +410,7 @@ export default function ContractTemplatesTab() {
                       </a>
                     )}
                   </div>
+                  {scanMessage && <p className="mt-1.5 text-xs text-slate-500">{scanMessage}</p>}
                 </div>
 
                 <div>
