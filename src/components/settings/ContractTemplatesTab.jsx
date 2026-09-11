@@ -7,11 +7,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { MERGE_SOURCES, extractContractTokens, renderContractTemplate, SAMPLE_CONTEXT } from "@/lib/contractMergeSources";
+import { MERGE_SOURCES, anchorForSource, extractContractTokens, renderContractTemplate, SAMPLE_CONTEXT } from "@/lib/contractMergeSources";
 import MergeFieldPicker from "@/components/settings/MergeFieldPicker";
 
 function blankMergeField() {
-  return { id: Math.random().toString(36).slice(2, 10), anchor: "", source: MERGE_SOURCES[0].value };
+  return { id: Math.random().toString(36).slice(2, 10), anchor: anchorForSource(MERGE_SOURCES[0]), source: MERGE_SOURCES[0].value };
 }
 
 const MERGE_GROUPS = [...new Set(MERGE_SOURCES.map((s) => s.group || "Other"))];
@@ -387,7 +387,13 @@ export default function ContractTemplatesTab() {
                         />
                         <select
                           value={m.source}
-                          onChange={(e) => updateMergeField(m.id, { source: e.target.value })}
+                          onChange={(e) => {
+                            const nextSource = MERGE_SOURCES.find((s) => s.value === e.target.value);
+                            // Auto-fill the anchor with the canonical {{source}} text so the
+                            // author doesn't have to hand-type it — they can still edit it
+                            // afterward if the document uses different anchor text.
+                            updateMergeField(m.id, { source: e.target.value, anchor: nextSource ? anchorForSource(nextSource) : m.anchor });
+                          }}
                           className="h-8 text-xs border border-slate-200 rounded-md px-1.5 outline-none focus:ring-1 focus:ring-amber-400 bg-white flex-1 min-w-0"
                         >
                           {MERGE_GROUPS.map((group) => (
