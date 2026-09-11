@@ -382,7 +382,7 @@ export default function ContractTemplatesTab() {
                           type="text"
                           value={m.anchor}
                           onChange={(e) => updateMergeField(m.id, { anchor: e.target.value })}
-                          placeholder="{{client_name}}"
+                          placeholder="{{client.name}}"
                           className="h-8 text-xs font-mono border border-slate-200 rounded-md px-2 outline-none focus:ring-1 focus:ring-amber-400 w-40 flex-shrink-0"
                         />
                         <select

@@ -80,6 +80,26 @@ export const MERGE_SOURCES = [
   { value: "today",                label: "Today's Date",              group: "Other",    description: "Today's date, e.g. \"January 1, 2026\"." },
 ];
 
+// The signature placement marker. It isn't a MERGE_SOURCES entry — it has no
+// resolved value, it's a literal string DocuSign's anchor-string matching
+// looks for (api/docusign-send.js) — but it belongs in the library and any
+// export of it since it's a real anchor a template author needs to place.
+export const SIGNATURE_FIELD = {
+  value: "**signature**",
+  label: "Signer's Signature",
+  group: "Signature",
+  description: "Where the signer's signature goes. DocuSign finds this marker and places the signature block there.",
+};
+
+// Canonical anchor text for a merge source: the literal string a template
+// author types into an uploaded Word/PDF ('file' mode) or that gets inserted
+// into an in-app body ('text' mode, see MergeFieldPicker.jsx). Every source
+// uses the same {{dotted.path}} shape so the library, the picker, and any
+// exported reference doc all agree on one anchor per field.
+export function anchorForSource(source) {
+  return source.value === SIGNATURE_FIELD.value ? source.value : `{{${source.value}}}`;
+}
+
 function formatCurrency(n) {
   return "$" + Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
 }

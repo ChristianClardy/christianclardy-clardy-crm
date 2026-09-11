@@ -1,13 +1,12 @@
 import { useMemo, useState } from "react";
 import { Search, PenLine } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { MERGE_SOURCES } from "@/lib/contractMergeSources";
+import { MERGE_SOURCES, SIGNATURE_FIELD, anchorForSource } from "@/lib/contractMergeSources";
 
 // Searchable panel of insertable merge tokens for a 'text' mode Contract
 // Template body. Each row is click-to-insert (onInsert) and draggable via
 // plain HTML5 drag events — not @hello-pangea/dnd, which is built for
 // sortable lists rather than dropping text into an arbitrary target.
-const SIGNATURE_FIELD = { value: "**signature**", label: "Signer's Signature", description: "Where the signer's signature goes. DocuSign finds this marker and places the signature block there." };
 
 export default function MergeFieldPicker({ onInsert }) {
   const [search, setSearch] = useState("");
@@ -31,7 +30,7 @@ export default function MergeFieldPicker({ onInsert }) {
     return [...byGroup.entries()];
   }, [search]);
 
-  const tokenFor = (s) => (s === SIGNATURE_FIELD ? s.value : `{{${s.value}}}`);
+  const tokenFor = anchorForSource;
 
   return (
     <div className="flex h-full flex-col rounded-lg border border-slate-200 bg-slate-50">

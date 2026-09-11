@@ -1,9 +1,11 @@
 import { useState, useMemo } from "react";
-import { Copy, Check, FileSignature, ScrollText } from "lucide-react";
-import { MERGE_SOURCES } from "@/lib/contractMergeSources";
+import { Copy, Check, FileSignature, ScrollText, FileText, FileSpreadsheet, FileType } from "lucide-react";
+import { MERGE_SOURCES, SIGNATURE_FIELD, anchorForSource } from "@/lib/contractMergeSources";
+import { downloadMergeFieldPdf, downloadMergeFieldExcel, downloadMergeFieldWord } from "@/lib/mergeFieldExport";
+import { Button } from "@/components/ui/button";
 
 // Read-only reference for every merge field a template can pull in. Contract
-// Templates bind a literal anchor (e.g. {{client_name}}) to one of these
+// Templates bind a literal anchor (e.g. {{client.name}}) to one of these
 // fixed MERGE_SOURCES; Scope Templates use their own per-template tokens
 // bound to cost codes, so those are documented rather than listed.
 
@@ -34,7 +36,7 @@ function CopyToken({ text }) {
 export default function MergeFieldsLibraryTab() {
   const grouped = useMemo(() => {
     const byGroup = new Map();
-    for (const s of MERGE_SOURCES) {
+    for (const s of [...MERGE_SOURCES, SIGNATURE_FIELD]) {
       const g = s.group || "Other";
       if (!byGroup.has(g)) byGroup.set(g, []);
       byGroup.get(g).push(s);
@@ -44,11 +46,24 @@ export default function MergeFieldsLibraryTab() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-900">Merge Field Library</h2>
-        <p className="text-xs text-slate-500 mt-0.5">
-          Every value a template can pull in, in one place. Use this as a reference while building templates below.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Merge Field Library</h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Every value a template can pull in, in one place. Use this as a reference while building templates below.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Button type="button" variant="outline" size="sm" onClick={downloadMergeFieldPdf} className="gap-1.5">
+            <FileText className="w-3.5 h-3.5" /> PDF
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={downloadMergeFieldWord} className="gap-1.5">
+            <FileType className="w-3.5 h-3.5" /> Word
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={downloadMergeFieldExcel} className="gap-1.5">
+            <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
+          </Button>
+        </div>
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -57,7 +72,7 @@ export default function MergeFieldsLibraryTab() {
           <h3 className="text-sm font-semibold text-slate-900">Contract Templates</h3>
         </div>
         <p className="text-xs text-slate-500 mb-4">
-          In a <span className="font-medium text-slate-600">Contract Template</span>, each of these is a merge source you map an anchor token to (e.g. anchor <code className="font-mono">{"{{client_name}}"}</code> → source "Client — Name").
+          In a <span className="font-medium text-slate-600">Contract Template</span>, each of these is a merge source you map an anchor token to (e.g. anchor <code className="font-mono">{"{{client.name}}"}</code> → source "Client — Name").
           The value shown is filled in automatically when a deal's Contracts tab sends the package, resolved from that deal's linked client, company, and — where available — its most recent project and estimate.
         </p>
         <div className="space-y-5">
@@ -71,7 +86,7 @@ export default function MergeFieldsLibraryTab() {
                       <p className="text-sm font-medium text-slate-800">{s.label}</p>
                       <p className="text-xs text-slate-500 mt-0.5">{s.description}</p>
                     </div>
-                    <CopyToken text={s.value} />
+                    <CopyToken text={anchorForSource(s)} />
                   </div>
                 ))}
               </div>
