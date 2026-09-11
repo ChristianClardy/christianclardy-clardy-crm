@@ -99,9 +99,14 @@ const TABLE_OPTIONAL_FIELDS = {
 
 function cleanForWrite(record) {
   const { created_date, updated_date, created_at, updated_at, ...rest } = record;
-  // Remove undefined values and UI-only fields that have no DB column
+  // Remove undefined values and UI-only fields that have no DB column.
+  // Empty-string "" is coerced to null: several callers default optional
+  // foreign-key props (e.g. linked_lead_id, linked_client_id) to "" when
+  // unset, and Postgres rejects "" for uuid/date/numeric columns.
   return Object.fromEntries(
-    Object.entries(rest).filter(([k, v]) => v !== undefined && !CLIENT_ONLY_FIELDS.has(k))
+    Object.entries(rest)
+      .filter(([k, v]) => v !== undefined && !CLIENT_ONLY_FIELDS.has(k))
+      .map(([k, v]) => [k, v === '' ? null : v])
   );
 }
 
