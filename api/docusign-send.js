@@ -168,7 +168,11 @@ module.exports = async function handler(req, res) {
           anchorString: mf.anchor,
           anchorIgnoreIfNotPresent: 'true',
           anchorXOffset: '0', anchorYOffset: '0', anchorUnits: 'pixels',
-          tabLabel: mf.anchor,
+          // Unique per document: several documents in one package can carry
+          // the same anchor (two templates both merging {{client_name}}), and
+          // DocuSign links same-labelled tabs on a recipient into one shared
+          // value — which would let one document's value overwrite another's.
+          tabLabel: `${mf.anchor}-doc${i + 1}`,
           value,
           locked: 'true',
           font: 'helvetica', fontSize: 'size9',

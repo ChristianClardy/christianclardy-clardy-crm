@@ -10,8 +10,8 @@ import { resolveContractMergeValue, renderContractTemplate } from "@/lib/contrac
 import { generateContractPdf } from "@/lib/generateContractPdf";
 
 // ─── Contracts Panel ────────────────────────────────────────────────────────
-// Bundles a Contract Template (merge-field mapped) + selected Documents +
-// selected Estimates into one DocuSign envelope. Shared by the Deal detail
+// Bundles any number of Contract Templates (merge-field mapped) + selected
+// Documents + selected Estimates into one DocuSign envelope. Shared by the Deal detail
 // modal's Contracts tab (deal + its lead) and a Lead's own page (lead only,
 // no deal yet — sending the initial contract shouldn't require converting to
 // a Deal first; api/_lib/dealAutomation.js creates/advances the Deal
@@ -39,7 +39,7 @@ export default function ContractsPanel({ lead, deal = null }) {
   const [estimates, setEstimates] = useState([]);
   const [estimateVersion, setEstimateVersion] = useState(null);
 
-  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState([]);
   const [selectedDocIds, setSelectedDocIds] = useState([]);
   const [selectedEstimateIds, setSelectedEstimateIds] = useState([]);
   const [signers, setSigners] = useState([{ name: "", email: "" }]);
@@ -103,15 +103,27 @@ export default function ContractsPanel({ lead, deal = null }) {
     return () => { cancelled = true; };
   }, [mergeEstimate?.id]);
 
-  const selectedTemplate = contractTemplates.find((t) => t.id === selectedTemplateId) || null;
-  const isTextTemplate = selectedTemplate?.body_type === "text";
   const mergeCtx = { deal: deal || null, client, company, project, estimate: mergeEstimate, estimateVersion, selections };
-  const resolvedMergeFields = (selectedTemplate?.merge_fields || []).map((mf) => ({
-    ...mf,
-    value: resolveContractMergeValue(mf.source, mergeCtx),
-  }));
-  const resolvedBody = isTextTemplate ? renderContractTemplate(selectedTemplate.body, mergeCtx, selectedTemplate.field_defaults) : "";
 
+  // Templates resolve in the order they were checked, and that's the order
+  // they stack into the envelope — ahead of documents, then estimates.
+  const preparedTemplates = selectedTemplateIds
+    .map((id) => contractTemplates.find((t) => t.id === id))
+    .filter(Boolean)
+    .map((template) => {
+      const isText = template.body_type === "text";
+      return {
+        template,
+        isText,
+        body: isText ? renderContractTemplate(template.body, mergeCtx, template.field_defaults) : "",
+        mergeFields: isText ? [] : (template.merge_fields || []).map((mf) => ({
+          ...mf,
+          value: resolveContractMergeValue(mf.source, mergeCtx),
+        })),
+      };
+    });
+
+  const toggleTemplate = (id) => setSelectedTemplateIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
   const toggleDoc = (id) => setSelectedDocIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
   const toggleEstimate = (id) => setSelectedEstimateIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
 
@@ -122,8 +134,8 @@ export default function ContractsPanel({ lead, deal = null }) {
   // Renders the same PDF handleSend would upload, but only opens it locally —
   // no upload, no DocuSign call — so it's free to check before signers are
   // even filled in.
-  const handlePreviewPdf = () => {
-    const pdfFile = generateContractPdf(resolvedBody, { title: selectedTemplate.name });
+  const handlePreviewPdf = (prepared) => {
+    const pdfFile = generateContractPdf(prepared.body, { title: prepared.template.name });
     const url = URL.createObjectURL(pdfFile);
     window.open(url, "_blank");
     setTimeout(() => URL.revokeObjectURL(url), 60000);
@@ -135,16 +147,18 @@ export default function ContractsPanel({ lead, deal = null }) {
     setSendOk(false);
     try {
       const docs = [];
-      if (isTextTemplate) {
-        const pdfFile = generateContractPdf(resolvedBody, { title: selectedTemplate.name });
-        const { file_url } = await base44.integrations.Core.UploadFile({ file: pdfFile });
-        docs.push({ file_url, file_name: pdfFile.name });
-      } else if (selectedTemplate) {
-        docs.push({
-          file_url: selectedTemplate.file_url,
-          file_name: selectedTemplate.file_name || `${selectedTemplate.name}.pdf`,
-          merge_fields: resolvedMergeFields.map((mf) => ({ anchor: mf.anchor, value: mf.value })),
-        });
+      for (const p of preparedTemplates) {
+        if (p.isText) {
+          const pdfFile = generateContractPdf(p.body, { title: p.template.name });
+          const { file_url } = await base44.integrations.Core.UploadFile({ file: pdfFile });
+          docs.push({ file_url, file_name: pdfFile.name });
+        } else {
+          docs.push({
+            file_url: p.template.file_url,
+            file_name: p.template.file_name || `${p.template.name}.pdf`,
+            merge_fields: p.mergeFields.map((mf) => ({ anchor: mf.anchor, value: mf.value })),
+          });
+        }
       }
       for (const docId of selectedDocIds) {
         const d = documents.find((x) => x.id === docId);
@@ -209,41 +223,65 @@ export default function ContractsPanel({ lead, deal = null }) {
         </p>
       )}
 
-      {/* Contract template */}
+      {/* Contract templates */}
       <div>
         <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-          <FileSignature className="h-3.5 w-3.5" /> Contract Template
+          <FileSignature className="h-3.5 w-3.5" /> Contract Templates
         </label>
-        <select
-          value={selectedTemplateId}
-          onChange={(e) => setSelectedTemplateId(e.target.value)}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
-        >
-          <option value="">— None —</option>
-          {contractTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-        {contractTemplates.length === 0 && (
-          <p className="mt-1 text-[11px] text-slate-400">No contract templates yet — add one in Settings → Templates → Contract Templates.</p>
-        )}
-        {isTextTemplate && resolvedBody && (
-          <div className="mt-2 rounded-lg border border-slate-200 p-2.5">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Merge Preview</p>
-            <div className="max-h-40 overflow-y-auto text-xs text-slate-700 whitespace-pre-line">{resolvedBody}</div>
+        {contractTemplates.length === 0 ? (
+          <p className="text-[11px] text-slate-400">No contract templates yet — add one in Settings → Templates → Contract Templates.</p>
+        ) : (
+          <div className="max-h-32 overflow-y-auto space-y-1 rounded-md border border-slate-200 p-2">
+            {contractTemplates.map((t) => {
+              const order = selectedTemplateIds.indexOf(t.id);
+              return (
+                <label key={t.id} className="flex items-center gap-2 text-xs text-slate-700 py-0.5 cursor-pointer">
+                  <input type="checkbox" checked={order !== -1} onChange={() => toggleTemplate(t.id)} className="rounded" />
+                  <span className="truncate flex-1">{t.name}</span>
+                  {order !== -1 && (
+                    <span className="flex-shrink-0 rounded bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-700">#{order + 1}</span>
+                  )}
+                </label>
+              );
+            })}
           </div>
         )}
-        {!isTextTemplate && selectedTemplate && resolvedMergeFields.length > 0 && (
-          <div className="mt-2 rounded-lg border border-slate-200 p-2.5 space-y-1">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Merge Preview</p>
-            {resolvedMergeFields.map((mf) => (
-              <div key={mf.anchor} className="flex items-center justify-between gap-2 text-xs">
-                <span className="font-mono text-slate-500 truncate">{mf.anchor}</span>
-                <span className={cn("truncate", mf.value ? "text-slate-800 font-medium" : "text-slate-300 italic")}>
-                  {mf.value || "blank"}
-                </span>
-              </div>
-            ))}
-          </div>
+        {selectedTemplateIds.length > 1 && (
+          <p className="mt-1 text-[11px] text-slate-400">Templates stack into the envelope in the order you check them.</p>
         )}
+
+        {preparedTemplates.map((p) => (
+          <div key={p.template.id} className="mt-2 rounded-lg border border-slate-200 p-2.5 space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <p className="truncate text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Merge Preview — {p.template.name}
+              </p>
+              {p.isText && (
+                <button
+                  type="button"
+                  onClick={() => handlePreviewPdf(p)}
+                  className="flex-shrink-0 inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 hover:text-amber-700"
+                >
+                  <Eye className="h-3 w-3" /> Preview PDF
+                </button>
+              )}
+            </div>
+            {p.isText ? (
+              <div className="max-h-40 overflow-y-auto text-xs text-slate-700 whitespace-pre-line">{p.body}</div>
+            ) : p.mergeFields.length > 0 ? (
+              p.mergeFields.map((mf) => (
+                <div key={mf.anchor} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="font-mono text-slate-500 truncate">{mf.anchor}</span>
+                  <span className={cn("truncate", mf.value ? "text-slate-800 font-medium" : "text-slate-300 italic")}>
+                    {mf.value || "blank"}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <p className="text-[11px] text-slate-400">No merge fields mapped on this template.</p>
+            )}
+          </div>
+        ))}
       </div>
 
       {/* Documents */}
@@ -314,17 +352,10 @@ export default function ContractsPanel({ lead, deal = null }) {
       {sendError && <p className="rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-xs text-rose-700">{sendError}</p>}
       {sendOk && <p className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-700">Opened for review in DocuSign — finish there to send it.</p>}
 
-      <div className="flex gap-2">
-        {isTextTemplate && (
-          <Button type="button" variant="outline" onClick={handlePreviewPdf} className="gap-2">
-            <Eye className="h-4 w-4" /> Preview PDF
-          </Button>
-        )}
-        <Button type="button" onClick={handleSend} disabled={sending} className="flex-1 bg-amber-500 hover:bg-amber-600 text-white gap-2">
-          {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          {sending ? "Opening in DocuSign…" : "Review & Send in DocuSign"}
-        </Button>
-      </div>
+      <Button type="button" onClick={handleSend} disabled={sending} className="w-full bg-amber-500 hover:bg-amber-600 text-white gap-2">
+        {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+        {sending ? "Opening in DocuSign…" : "Review & Send in DocuSign"}
+      </Button>
 
       <div className="border-t border-slate-100 pt-3">
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Sent Envelopes</p>
