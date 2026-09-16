@@ -24,6 +24,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { DEFAULT_LEAD_SOURCE_OPTIONS, fetchCustomLeadSources, addCustomLeadSource, removeCustomLeadSource } from "@/lib/leadSources";
 import { fetchDesigners, addDesigner, removeDesigner } from "@/lib/designers";
 import SubcontractorsTab from "@/components/settings/SubcontractorsTab";
+import QuickBooksTab from "@/components/settings/QuickBooksTab";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -1127,12 +1128,15 @@ const ALL_TABS = [
   { key: "appearance",   label: "Appearance",          icon: Palette,        adminOnly: false },
   { key: "templates",    label: "Templates",           icon: FileText,       adminOnly: false },
   { key: "docusign",     label: "DocuSign",            icon: FileSignature,  adminOnly: false },
+  { key: "quickbooks",   label: "QuickBooks",          icon: LinkIcon,       adminOnly: false },
 ];
 
 export default function Settings() {
   const { user }        = useAuth();
   const isAdmin         = user?.role === "admin";
-  const [activeTab, setActiveTab] = useState("teamSubs");
+  const [activeTab, setActiveTab] = useState(
+    () => new URLSearchParams(window.location.search).get("tab") || "teamSubs"
+  );
 
   const visibleTabs = ALL_TABS.filter((t) => !t.adminOnly || isAdmin);
 
@@ -1173,6 +1177,7 @@ export default function Settings() {
       {activeTab === "appearance"  && <AppearanceTab />}
       {activeTab === "templates"   && <TemplatesTab />}
       {activeTab === "docusign"    && <DocuSignTab />}
+      {activeTab === "quickbooks"  && <QuickBooksTab />}
     </div>
   );
 }

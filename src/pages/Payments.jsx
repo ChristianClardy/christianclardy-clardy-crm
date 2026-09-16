@@ -8,8 +8,9 @@ import { Input } from "@/components/ui/input";
 import ReceivedPaymentsTable from "@/components/payments/ReceivedPaymentsTable";
 import InvoicesTable from "@/components/payments/InvoicesTable";
 import InvoiceDialog from "@/components/payments/InvoiceDialog";
+import PaymentScheduleRules from "@/components/payments/PaymentScheduleRules";
 import { getInvoiceBranding } from "@/components/payments/invoiceBrandingUtils";
-import { DollarSign, Search, CheckCircle2, Clock, AlertCircle, RefreshCw, Plus, Palette } from "lucide-react";
+import { DollarSign, Search, CheckCircle2, Clock, AlertCircle, RefreshCw, Plus, Palette, Cloud, ExternalLink, X } from "lucide-react";
 import { getSelectedCompanyScope, subscribeToCompanyScope } from "@/lib/companyScope";
 import { cn } from "@/lib/utils";
 
@@ -174,6 +175,32 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
     await loadData();
   };
 
+  // ── QuickBooks send ───────────────────────────────────────────────────────
+  const [qbSending, setQbSending] = useState(null); // invoice.id while in-flight
+  const [qbResult, setQbResult] = useState(null);   // { invoice_name, qb_payment_link } after success
+  const [qbError, setQbError] = useState(null);
+
+  const handleSendToQB = async (invoice) => {
+    setQbSending(invoice.id);
+    setQbError(null);
+    setQbResult(null);
+    try {
+      const res = await fetch("/api/quickbooks-create-invoice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoice_id: invoice.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to push invoice to QuickBooks.");
+      setQbResult({ invoice_name: invoice.invoice_name, qb_payment_link: data.qb_payment_link });
+      await loadData();
+    } catch (err) {
+      setQbError(err.message);
+    } finally {
+      setQbSending(null);
+    }
+  };
+
   if (loading) {
     return <div className="flex min-h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-amber-500 border-t-transparent" /></div>;
   }
@@ -217,7 +244,35 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
         ))}
       </div>
 
-<InvoicesTable
+      {/* QuickBooks result / error banner */}
+      {qbResult && (
+        <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-emerald-900">Invoice pushed to QuickBooks</p>
+            <p className="mt-0.5 text-sm text-emerald-700">{qbResult.invoice_name} — client will receive a payment link via email.</p>
+            {qbResult.qb_payment_link && (
+              <a href={qbResult.qb_payment_link} target="_blank" rel="noopener noreferrer"
+                className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-emerald-700 underline">
+                <ExternalLink className="h-3.5 w-3.5" /> View in QuickBooks
+              </a>
+            )}
+          </div>
+          <button onClick={() => setQbResult(null)} className="text-emerald-500 hover:text-emerald-700"><X className="h-4 w-4" /></button>
+        </div>
+      )}
+      {qbError && (
+        <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 shadow-sm">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />
+          <div className="flex-1">
+            <p className="font-semibold text-rose-900">QuickBooks send failed</p>
+            <p className="mt-0.5 text-sm text-rose-700">{qbError}</p>
+          </div>
+          <button onClick={() => setQbError(null)} className="text-rose-400 hover:text-rose-600"><X className="h-4 w-4" /></button>
+        </div>
+      )}
+
+      <InvoicesTable
         invoices={filteredInvoices}
         projectMap={projectMap}
         clientMap={clientMap}
@@ -225,6 +280,8 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
         onEdit={openInvoiceDialog}
         onMarkSent={handleMarkInvoiceSent}
         onDelete={handleDeleteInvoice}
+        onSendToQB={handleSendToQB}
+        qbSendingId={qbSending}
       />
 
       <ReceivedPaymentsTable payments={filteredPayments} projectMap={projectMap} clientMap={clientMap} companyMap={companyMap} />
@@ -292,6 +349,8 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
         Need to add or edit payment draws? Open any <Link to={createPageUrl("Projects")} className="font-semibold underline">project</Link> and use its <span className="font-semibold">Cash Flow</span> tab.
       </div>
+
+      <PaymentScheduleRules companyId={selectedCompanyScope !== "all" ? selectedCompanyScope : null} />
 
       <InvoiceDialog
         open={invoiceDialogOpen}

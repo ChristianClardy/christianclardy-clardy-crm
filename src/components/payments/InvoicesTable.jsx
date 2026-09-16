@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Pencil, Send, Trash2 } from "lucide-react";
+import { Pencil, Send, Trash2, ExternalLink, Cloud, Loader2 } from "lucide-react";
 import InvoicePreviewCard from "@/components/payments/InvoicePreviewCard";
 import InvoicePdfDownloadButton from "@/components/payments/InvoicePdfDownloadButton";
 import { getInvoiceBranding } from "@/components/payments/invoiceBrandingUtils";
@@ -13,7 +13,7 @@ const statusStyles = {
   Overdue: "bg-rose-100 text-rose-700",
 };
 
-export default function InvoicesTable({ invoices, projectMap, clientMap, companyMap, onEdit, onMarkSent, onDelete }) {
+export default function InvoicesTable({ invoices, projectMap, clientMap, companyMap, onEdit, onMarkSent, onDelete, onSendToQB, qbSendingId }) {
   const getInvoicePdfTargetId = (invoiceId) => `invoice-preview-${invoiceId}`;
   const previewInvoice = invoices[0];
   const previewProject = previewInvoice ? projectMap[previewInvoice.linked_job_id] : null;
@@ -69,7 +69,12 @@ export default function InvoicesTable({ invoices, projectMap, clientMap, company
                       <td className="px-5 py-4 text-slate-600">{invoice.invoice_type || "Other"}</td>
                       <td className="px-5 py-4 text-slate-600">{invoice.due_date || "—"}</td>
                       <td className="px-5 py-4 text-right font-semibold text-slate-900">${Number(invoice.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className="px-5 py-4"><Badge className={statusStyles[invoice.invoice_status] || statusStyles.Draft}>{invoice.invoice_status || "Draft"}</Badge></td>
+                      <td className="px-5 py-4">
+                        <Badge className={statusStyles[invoice.invoice_status] || statusStyles.Draft}>{invoice.invoice_status || "Draft"}</Badge>
+                        {invoice.qb_sync_status === "synced" && (
+                          <p className="mt-1 text-xs font-medium text-emerald-600">QB ✓</p>
+                        )}
+                      </td>
                       <td className="px-5 py-4">
                         <div className="flex justify-end gap-1">
                           <InvoicePdfDownloadButton
@@ -85,6 +90,30 @@ export default function InvoicesTable({ invoices, projectMap, clientMap, company
                           <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-500" onClick={() => onDelete(invoice)}>
                             <Trash2 className="w-3.5 h-3.5" />
                           </Button>
+                          {invoice.qb_invoice_id ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-emerald-600"
+                              title="View in QuickBooks"
+                              onClick={() => window.open(invoice.qb_payment_link, "_blank")}
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-slate-400"
+                              title="Send to QuickBooks"
+                              disabled={qbSendingId === invoice.id}
+                              onClick={() => onSendToQB && onSendToQB(invoice)}
+                            >
+                              {qbSendingId === invoice.id
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <Cloud className="w-3.5 h-3.5" />}
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>

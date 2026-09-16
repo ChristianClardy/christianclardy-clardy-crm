@@ -65,6 +65,35 @@ async function findExistingDealForLead(leadId) {
   return Array.isArray(matches) && matches.length > 0 ? matches[0] : null;
 }
 
+// Finds a Project already created for this lead's client, if any, so
+// winning a lead twice doesn't create a duplicate project.
+async function findExistingProjectForLead(clientId) {
+  if (!clientId) return null;
+  const matches = await base44.entities.Project.filter({ client_id: clientId });
+  return Array.isArray(matches) && matches.length > 0 ? matches[0] : null;
+}
+
+// When a lead reaches WON_STATUS, auto-create a Project in the "planning"
+// stage so the job is immediately visible on the Projects board.
+async function createProjectFromLead(lead, client) {
+  const existingProject = await findExistingProjectForLead(client?.id);
+  if (existingProject) {
+    return existingProject;
+  }
+
+  const payload = {
+    name: client?.name || lead.full_name,
+    client_id: client?.id,
+    status: "planning",
+    contract_value: Number(lead.estimated_budget) || 0,
+    address: lead.property_address || "",
+    notes: lead.notes || "",
+    company_id: lead.company_id || null,
+  };
+
+  return await base44.entities.Project.create(payload);
+}
+
 // Reaching WON_STATUS pushes the lead's (and its contact-book Client's)
 // details into a Deal on the Pipeline board, landed directly in Closed Won.
 async function pushWonLeadToPipeline(lead, client) {
@@ -105,11 +134,17 @@ export async function setLeadStatus(lead, newStatus) {
     // The lead's own status change already committed above — a failure
     // pushing it to the Pipeline board must not look like the whole move
     // failed (moveLeadToColumn reverts the Kanban card on any thrown error).
+    let client;
     try {
-      const client = await ensureContactForLead(updatedLead);
+      client = await ensureContactForLead(updatedLead);
       await pushWonLeadToPipeline(updatedLead, client);
     } catch (err) {
       console.error("Failed to push won lead to Pipeline board:", err?.message || err);
+    }
+    try {
+      await createProjectFromLead(updatedLead, client);
+    } catch (err) {
+      console.error("Failed to auto-create project from won lead:", err?.message || err);
     }
   }
 

@@ -31,6 +31,7 @@ import Settings from './pages/Settings';
 import MaterialLibraryPage from './pages/MaterialLibrary';
 import DocuSignCallback from './pages/DocuSignCallback';
 import DocuSignSenderReturn from './pages/DocuSignSenderReturn';
+import QuickBooksCallback from './pages/QuickBooksCallback';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -120,6 +121,7 @@ const AuthenticatedApp = () => {
       <Route path="/MaterialLibrary" element={<LayoutWrapper currentPageName="MaterialLibrary"><MaterialLibraryPage /></LayoutWrapper>} />
       <Route path="/DocuSignCallback" element={<DocuSignCallback />} />
       <Route path="/DocuSignSenderReturn" element={<DocuSignSenderReturn />} />
+      <Route path="/QuickBooksCallback" element={<QuickBooksCallback />} />
       <Route path="/lead-form" element={<PublicLeadForm />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
