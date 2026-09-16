@@ -65,25 +65,12 @@ async function findExistingDealForLead(leadId) {
   return Array.isArray(matches) && matches.length > 0 ? matches[0] : null;
 }
 
-// Finds a Project already created for this lead's client, if any, so
-// winning a lead twice doesn't create a duplicate project.
-async function findExistingProjectForLead(clientId) {
-  if (!clientId) return null;
-  const matches = await base44.entities.Project.filter({ client_id: clientId });
-  return Array.isArray(matches) && matches.length > 0 ? matches[0] : null;
-}
-
 // When a lead reaches WON_STATUS, auto-create a Project in the "planning"
 // stage so the job is immediately visible on the Projects board.
 async function createProjectFromLead(lead, client) {
-  const existingProject = await findExistingProjectForLead(client?.id);
-  if (existingProject) {
-    return existingProject;
-  }
-
   const payload = {
     name: client?.name || lead.full_name,
-    client_id: client?.id,
+    client_id: client?.id || null,
     status: "planning",
     contract_value: Number(lead.estimated_budget) || 0,
     address: lead.property_address || "",
