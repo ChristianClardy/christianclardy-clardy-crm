@@ -133,6 +133,10 @@ export async function setLeadStatus(lead, newStatus) {
     try {
       client = await ensureContactForLead(updatedLead);
       await pushWonLeadToPipeline(updatedLead, client);
+      // Advance the client's workflow stage to "approved" to match Won status
+      if (client?.id) {
+        await base44.entities.Client.update(client.id, { workflow_stage: "approved" });
+      }
     } catch (err) {
       console.error("Failed to push won lead to Pipeline board:", err?.message || err);
     }
