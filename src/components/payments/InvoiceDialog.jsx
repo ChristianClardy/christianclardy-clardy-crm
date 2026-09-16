@@ -25,22 +25,22 @@ export default function InvoiceDialog({ open, onOpenChange, form, onChange, onSu
             </Select>
           </div>
           <div>
-            <Label>Invoice Name *</Label>
-            <Input value={form.invoice_name} onChange={(e) => onChange("invoice_name", e.target.value)} className="mt-1.5" required />
+            <Label htmlFor="inv-name">Invoice Name *</Label>
+            <Input id="inv-name" name="invoice_name" value={form.invoice_name} onChange={(e) => onChange("invoice_name", e.target.value)} className="mt-1.5" required />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>Amount *</Label>
-              <Input type="number" min="0" step="0.01" value={form.amount} onChange={(e) => onChange("amount", e.target.value)} className="mt-1.5" required />
+              <Label htmlFor="inv-amount">Amount *</Label>
+              <Input id="inv-amount" name="amount" type="number" min="0" step="0.01" value={form.amount} onChange={(e) => onChange("amount", e.target.value)} className="mt-1.5" required />
             </div>
             <div>
-              <Label>Due Date</Label>
-              <Input type="date" value={form.due_date} onChange={(e) => onChange("due_date", e.target.value)} className="mt-1.5" />
+              <Label htmlFor="inv-due">Due Date</Label>
+              <Input id="inv-due" name="due_date" type="date" value={form.due_date} onChange={(e) => onChange("due_date", e.target.value)} className="mt-1.5" />
             </div>
           </div>
           <div>
-            <Label>Description of Work / Billing Reason</Label>
-            <Textarea value={form.notes || ""} onChange={(e) => onChange("notes", e.target.value)} className="mt-1.5" rows={4} placeholder="Example: Deposit for pergola construction, including design, material ordering, and project scheduling." />
+            <Label htmlFor="inv-notes">Description of Work / Billing Reason</Label>
+            <Textarea id="inv-notes" name="notes" value={form.notes || ""} onChange={(e) => onChange("notes", e.target.value)} className="mt-1.5" rows={4} placeholder="Example: Deposit for pergola construction, including design, material ordering, and project scheduling." />
           </div>
           <div>
             <Label>Invoice Type</Label>
