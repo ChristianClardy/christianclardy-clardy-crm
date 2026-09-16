@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Trash2, Save } from "lucide-react";
+import { Plus, Trash2, Save, TrendingUp } from "lucide-react";
 
 // ─── Stock rows — the contract's own line items, pre-labeled so the form
 // starts matching the document instead of blank. Manufacturer/model/color/$
@@ -57,6 +57,7 @@ function Row({ children }) {
 export default function PoolSelectionsPanel({ project }) {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(() => emptyForm(project.id));
+  const [draws, setDraws] = useState([]);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
 
@@ -65,9 +66,13 @@ export default function PoolSelectionsPanel({ project }) {
     (async () => {
       setLoading(true);
       try {
-        const rows = await base44.entities.PoolSelection.filter({ project_id: project.id });
+        const [rows, drawData] = await Promise.all([
+          base44.entities.PoolSelection.filter({ project_id: project.id }),
+          base44.entities.Draw.filter({ project_id: project.id }, "draw_number"),
+        ]);
         const existing = rows?.[0] || null;
         if (cancelled) return;
+        setDraws(drawData || []);
         setForm(existing ? {
           id: existing.id,
           project_id: project.id,
@@ -229,31 +234,49 @@ export default function PoolSelectionsPanel({ project }) {
           </button>
         </div>
 
-        {/* Payment schedule */}
+        {/* Payment schedule — driven by the Draw Schedule on the Billing tab */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Payment Schedule</h3>
-            <span className={`text-xs font-semibold ${contractValue && paymentTotal !== contractValue ? "text-amber-600" : "text-slate-500"}`}>
-              Total: {formatMoney(paymentTotal)}{contractValue ? ` / ${formatMoney(contractValue)} contract` : ""}
-            </span>
+            {draws.length > 0 && (
+              <span className="text-xs font-semibold text-slate-500">
+                Total: {formatMoney(draws.reduce((s, d) => s + (d.amount || 0), 0))}
+                {contractValue ? ` / ${formatMoney(contractValue)} contract` : ""}
+              </span>
+            )}
           </div>
-          <div className="mt-3 divide-y divide-slate-100">
-            {form.payment_schedule.map((row) => (
-              <Row key={row.id}>
-                <span className="col-span-6 text-sm font-medium text-slate-700">{row.milestone}</span>
-                <div className="col-span-5 flex items-center gap-1">
-                  <span className="text-sm text-slate-400">$</span>
-                  <Input type="number" className="h-8 text-sm" value={row.amount} onChange={(e) => updateRow("payment_schedule", row.id, { amount: e.target.value })} placeholder="0" />
+          {draws.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-200 py-6 text-center">
+              <TrendingUp className="mx-auto h-6 w-6 text-slate-300 mb-1.5" />
+              <p className="text-sm text-slate-500 font-medium">No draws scheduled yet</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Add draws on the <span className="font-semibold">Billing</span> tab — they'll appear here automatically and flow into contracts as merge fields.
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              <div className="grid grid-cols-12 gap-2 px-1 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <span className="col-span-5">Milestone</span>
+                <span className="col-span-3 text-right">% of Contract</span>
+                <span className="col-span-4 text-right">Amount</span>
+              </div>
+              {draws.map((draw) => (
+                <div key={draw.id} className="grid grid-cols-12 items-center gap-2 py-2">
+                  <span className="col-span-5 text-sm font-medium text-slate-700">{draw.title}</span>
+                  <span className="col-span-3 text-right text-sm text-slate-500">
+                    {draw.percent_of_contract > 0 ? `${Number(draw.percent_of_contract).toFixed(1)}%` : "—"}
+                  </span>
+                  <span className="col-span-4 text-right text-sm font-semibold text-slate-900">
+                    {formatMoney(draw.amount)}
+                  </span>
                 </div>
-                <button type="button" onClick={() => removeRow("payment_schedule", row.id)} className="col-span-1 flex justify-end text-slate-300 hover:text-rose-500">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </Row>
-            ))}
-          </div>
-          <button type="button" onClick={() => addRow("payment_schedule", () => ({ id: rid(), milestone: "", amount: "" }))} className="mt-2 flex items-center gap-1 text-xs font-medium text-amber-600 hover:text-amber-700">
-            <Plus className="h-3.5 w-3.5" /> Add milestone
-          </button>
+              ))}
+            </div>
+          )}
+          <p className="mt-3 text-xs text-slate-400 flex items-center gap-1">
+            <TrendingUp className="h-3 w-3" />
+            Managed on the <span className="font-medium text-amber-600">Billing</span> tab · flows into contracts via <code className="bg-slate-100 px-1 rounded">{"{{draws.payment_schedule}}"}</code>
+          </p>
         </div>
       </div>
 

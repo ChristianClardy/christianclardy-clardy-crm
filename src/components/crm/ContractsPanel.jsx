@@ -34,6 +34,7 @@ export default function ContractsPanel({ lead, deal = null }) {
   const [company, setCompany] = useState(null);
   const [project, setProject] = useState(null);
   const [selections, setSelections] = useState(null);
+  const [draws, setDraws] = useState([]);
   const [contractTemplates, setContractTemplates] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [estimates, setEstimates] = useState([]);
@@ -69,15 +70,19 @@ export default function ContractsPanel({ lead, deal = null }) {
           base44.entities.Project.filter({ client_id: resolvedClient.id }, "-created_date").then((rows) => rows?.[0] || null).catch(() => null),
         ]);
       }
-      const resolvedSelections = resolvedProject?.id
-        ? await base44.entities.PoolSelection.filter({ project_id: resolvedProject.id }).then((rows) => rows?.[0] || null).catch(() => null)
-        : null;
+      const [resolvedSelections, resolvedDraws] = resolvedProject?.id
+        ? await Promise.all([
+            base44.entities.PoolSelection.filter({ project_id: resolvedProject.id }).then((rows) => rows?.[0] || null).catch(() => null),
+            base44.entities.Draw.filter({ project_id: resolvedProject.id }, "draw_number").catch(() => []),
+          ])
+        : [null, []];
       if (cancelled) return;
       const resolvedCompany = (lead?.company_id && comps.find((c) => c.id === lead.company_id)) || comps[0] || null;
       setClient(resolvedClient);
       setCompany(resolvedCompany);
       setProject(resolvedProject);
       setSelections(resolvedSelections);
+      setDraws(resolvedDraws || []);
       setContractTemplates((templates || []).filter((t) => t.is_active !== false));
       setDocuments(docs || []);
       setEstimates(ests || []);
@@ -103,7 +108,7 @@ export default function ContractsPanel({ lead, deal = null }) {
     return () => { cancelled = true; };
   }, [mergeEstimate?.id]);
 
-  const mergeCtx = { deal: deal || null, client, company, project, estimate: mergeEstimate, estimateVersion, selections };
+  const mergeCtx = { deal: deal || null, client, company, project, estimate: mergeEstimate, estimateVersion, selections, draws };
 
   // Templates resolve in the order they were checked, and that's the order
   // they stack into the envelope — ahead of documents, then estimates.

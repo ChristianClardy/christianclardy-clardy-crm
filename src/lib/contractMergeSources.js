@@ -77,6 +77,9 @@ export const MERGE_SOURCES = [
   { value: "selections.other_improvements",     label: "Selections — Other Improvements",        group: "Pool Selections", description: "Free-text description of other improvements included in the project." },
   { value: "selections.notes",                  label: "Selections — Notes",                     group: "Pool Selections", description: "Free-text selection notes." },
 
+  { value: "draws.payment_schedule",       label: "Draws — Payment Schedule",        group: "Draw Schedule", description: "The project's draw schedule — one line per draw with milestone name, percentage, and dollar amount. Managed on the project's Billing tab." },
+  { value: "draws.payment_schedule_total", label: "Draws — Payment Schedule Total ($)", group: "Draw Schedule", description: "Sum of all draw amounts on the project's Billing tab." },
+
   { value: "today",                label: "Today's Date",              group: "Other",    description: "Today's date, e.g. \"January 1, 2026\"." },
 ];
 
@@ -132,11 +135,21 @@ function formatAmountSchedule(rows, labelField) {
     .join("\n");
 }
 
+function formatDrawSchedule(draws) {
+  return (draws || [])
+    .filter((d) => d.title)
+    .map((d) => {
+      const pct = d.percent_of_contract > 0 ? ` (${Number(d.percent_of_contract).toFixed(1)}%)` : "";
+      return `${d.title}: ${formatCurrency(d.amount)}${pct}`;
+    })
+    .join("\n");
+}
+
 function sumAmounts(rows) {
   return (rows || []).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 }
 
-export function resolveContractMergeValue(source, { deal, client, company, project, estimate, estimateVersion, selections } = {}) {
+export function resolveContractMergeValue(source, { deal, client, company, project, estimate, estimateVersion, selections, draws } = {}) {
   switch (source) {
     case "client.name":              return client?.name || "";
     case "client.contact_person":    return client?.contact_person || "";
@@ -179,8 +192,17 @@ export function resolveContractMergeValue(source, { deal, client, company, proje
     case "selections.finish_selections":       return formatFinishSelections(selections);
     case "selections.allowances_schedule":     return formatAmountSchedule(selections?.allowances, "item");
     case "selections.allowances_total":        return formatCurrency(sumAmounts(selections?.allowances));
-    case "selections.payment_schedule":        return formatAmountSchedule(selections?.payment_schedule, "milestone");
-    case "selections.payment_schedule_total":  return formatCurrency(sumAmounts(selections?.payment_schedule));
+    case "selections.payment_schedule": {
+      // Prefer pool_selections JSONB data; fall back to the draw schedule if empty
+      const rows = selections?.payment_schedule?.filter((r) => r.milestone && Number(r.amount) > 0) || [];
+      if (rows.length > 0) return formatAmountSchedule(rows, "milestone");
+      return formatDrawSchedule(draws);
+    }
+    case "selections.payment_schedule_total": {
+      const rows = selections?.payment_schedule?.filter((r) => Number(r.amount) > 0) || [];
+      if (rows.length > 0) return formatCurrency(sumAmounts(rows));
+      return formatCurrency(sumAmounts(draws));
+    }
     case "selections.interior_finish_product": return findFinish(selections, "Interior Finish")?.manufacturer_product || "";
     case "selections.interior_finish_color":   return findFinish(selections, "Interior Finish")?.color_finish || "";
     case "selections.tile_product":            return findFinish(selections, "Waterline Tile")?.manufacturer_product || "";
@@ -191,6 +213,9 @@ export function resolveContractMergeValue(source, { deal, client, company, proje
     case "selections.water_features":          return selections?.water_features || "";
     case "selections.other_improvements":      return selections?.other_improvements || "";
     case "selections.notes":                   return selections?.notes || "";
+
+    case "draws.payment_schedule":       return formatDrawSchedule(draws);
+    case "draws.payment_schedule_total": return formatCurrency(sumAmounts(draws));
 
     case "today":                    return new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
     default:                         return "";
@@ -279,9 +304,14 @@ export const SAMPLE_CONTEXT = {
     equipment: [{ equipment: "Pump", manufacturer: "Pentair", model: "IntelliFlo", warranty: "3 years" }],
     finishes: [{ item: "Interior Finish", manufacturer_product: "Diamond Brite", color_finish: "Blue Granite" }],
     allowances: [{ item: "Tile Allowance", amount: 2000 }],
-    payment_schedule: [{ milestone: "Deposit", amount: 22500 }, { milestone: "Completion", amount: 22500 }],
+    payment_schedule: [],
     water_features: "Raised spa with waterfall.",
     other_improvements: "New paver decking.",
     notes: "Sample selection notes.",
   },
+  draws: [
+    { title: "30% Deposit", percent_of_contract: 30, amount: 13500 },
+    { title: "40% Midway", percent_of_contract: 40, amount: 18000 },
+    { title: "30% Final", percent_of_contract: 30, amount: 13500 },
+  ],
 };
