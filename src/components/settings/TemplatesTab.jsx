@@ -4,12 +4,14 @@ import ScopeTemplatesTab from "@/components/settings/ScopeTemplatesTab";
 import ContractTemplatesTab from "@/components/settings/ContractTemplatesTab";
 import MergeFieldsLibraryTab from "@/components/settings/MergeFieldsLibraryTab";
 import PaymentScheduleTemplatesTab from "@/components/settings/PaymentScheduleTemplatesTab";
+import AllowancesTemplatesTab from "@/components/settings/AllowancesTemplatesTab";
 
 const SUB_TABS = [
-  { key: "scope",    label: "Scope Templates" },
-  { key: "contract", label: "Contract Templates" },
-  { key: "payment",  label: "Payment Schedule" },
-  { key: "merge",    label: "Merge Fields" },
+  { key: "scope",      label: "Scope Templates" },
+  { key: "contract",   label: "Contract Templates" },
+  { key: "payment",    label: "Payment Schedule" },
+  { key: "allowances", label: "Allowances" },
+  { key: "merge",      label: "Merge Fields" },
 ];
 
 export default function TemplatesTab() {
@@ -31,10 +33,11 @@ export default function TemplatesTab() {
           </button>
         ))}
       </div>
-      {sub === "scope"    && <ScopeTemplatesTab />}
-      {sub === "contract" && <ContractTemplatesTab />}
-      {sub === "payment"  && <PaymentScheduleTemplatesTab />}
-      {sub === "merge"    && <MergeFieldsLibraryTab />}
+      {sub === "scope"      && <ScopeTemplatesTab />}
+      {sub === "contract"   && <ContractTemplatesTab />}
+      {sub === "payment"    && <PaymentScheduleTemplatesTab />}
+      {sub === "allowances" && <AllowancesTemplatesTab />}
+      {sub === "merge"      && <MergeFieldsLibraryTab />}
     </div>
   );
 }

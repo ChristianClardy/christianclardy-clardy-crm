@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { base44 } from "@/api/base44Client";
+import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Trash2, Save, TrendingUp } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Plus, Trash2, Save, TrendingUp, LayoutList } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // ─── Stock rows — the contract's own line items, pre-labeled so the form
 // starts matching the document instead of blank. Manufacturer/model/color/$
@@ -60,6 +63,9 @@ export default function PoolSelectionsPanel({ project }) {
   const [draws, setDraws] = useState([]);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
+  const [allowanceTemplateDialogOpen, setAllowanceTemplateDialogOpen] = useState(false);
+  const [allowanceTemplates, setAllowanceTemplates] = useState([]);
+  const [selectedAllowanceTemplateId, setSelectedAllowanceTemplateId] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,6 +110,23 @@ export default function PoolSelectionsPanel({ project }) {
   const allowancesTotal = form.allowances.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
   const paymentTotal = form.payment_schedule.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
   const contractValue = Number(project?.contract_value) || 0;
+
+  const openAllowanceTemplateDialog = async () => {
+    let q = supabase.from("allowances_templates").select("*").order("name");
+    if (project?.company_id) q = q.eq("company_id", project.company_id);
+    const { data } = await q;
+    setAllowanceTemplates(data || []);
+    setSelectedAllowanceTemplateId(null);
+    setAllowanceTemplateDialogOpen(true);
+  };
+
+  const applyAllowanceTemplate = () => {
+    const tmpl = allowanceTemplates.find((t) => t.id === selectedAllowanceTemplateId);
+    if (!tmpl?.items?.length) return;
+    const newRows = tmpl.items.map((it) => ({ id: rid(), item: it.item, amount: String(it.amount ?? "") }));
+    setForm((f) => ({ ...f, allowances: newRows }));
+    setAllowanceTemplateDialogOpen(false);
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -211,9 +234,14 @@ export default function PoolSelectionsPanel({ project }) {
       <div className="grid gap-5 lg:grid-cols-2">
         {/* Allowances */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Allowances</h3>
-            <span className="text-xs font-semibold text-slate-500">Total: {formatMoney(allowancesTotal)}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-500">Total: {formatMoney(allowancesTotal)}</span>
+              <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={openAllowanceTemplateDialog}>
+                <LayoutList className="h-3 w-3 mr-1" /> Template
+              </Button>
+            </div>
           </div>
           <div className="mt-3 divide-y divide-slate-100">
             {form.allowances.map((row) => (
@@ -279,6 +307,80 @@ export default function PoolSelectionsPanel({ project }) {
           </p>
         </div>
       </div>
+
+      {/* Allowances template dialog */}
+      <Dialog open={allowanceTemplateDialogOpen} onOpenChange={setAllowanceTemplateDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Apply Allowances Template</DialogTitle>
+          </DialogHeader>
+          {allowanceTemplates.length === 0 ? (
+            <div className="py-8 text-center text-slate-500">
+              <LayoutList className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+              <p className="font-medium">No templates found</p>
+              <p className="text-sm mt-1 text-slate-400">
+                Go to <strong>Settings → Templates → Allowances</strong> to create one.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-slate-500 mb-3">
+                Choose a template. It will replace the current allowances — you can edit them after applying.
+              </p>
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {allowanceTemplates.map((tmpl) => {
+                  const total = (tmpl.items || []).reduce((s, it) => s + (Number(it.amount) || 0), 0);
+                  const selected = selectedAllowanceTemplateId === tmpl.id;
+                  return (
+                    <label
+                      key={tmpl.id}
+                      className={cn(
+                        "flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors",
+                        selected ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-white hover:bg-slate-50"
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="allowance-template"
+                        checked={selected}
+                        onChange={() => setSelectedAllowanceTemplateId(tmpl.id)}
+                        className="mt-0.5 text-amber-500"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-slate-900">{tmpl.name}</p>
+                          {total > 0 && <span className="text-xs text-slate-500">{formatMoney(total)}</span>}
+                        </div>
+                        {tmpl.description && <p className="text-xs text-slate-500 mt-0.5">{tmpl.description}</p>}
+                        {tmpl.items?.length > 0 && (
+                          <div className="mt-1.5 space-y-0.5">
+                            {tmpl.items.map((item) => (
+                              <div key={item.id} className="flex justify-between text-xs text-slate-600">
+                                <span>{item.item}</span>
+                                <span className="font-medium">{item.amount > 0 ? formatMoney(item.amount) : "—"}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <Button variant="outline" onClick={() => setAllowanceTemplateDialogOpen(false)}>Cancel</Button>
+                <Button
+                  onClick={applyAllowanceTemplate}
+                  disabled={!selectedAllowanceTemplateId}
+                  className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
+                >
+                  Apply Template
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Water features / other improvements / notes */}
       <div className="grid gap-5 lg:grid-cols-3">
