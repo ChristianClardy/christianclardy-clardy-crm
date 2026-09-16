@@ -1,4 +1,4 @@
-import { base44, getCurrentOrgId } from "@/api/base44Client";
+import { base44 } from "@/api/base44Client";
 import { LEAD_STAGES, PROSPECT_THRESHOLD_STAGE, WON_STATUS } from "@/lib/leadStages";
 
 // Deal.stage key the Pipeline board (PipelineView.jsx) uses for a won deal.
@@ -78,7 +78,6 @@ async function createProjectFromLead(lead, client) {
     address: lead.property_address || "",
     notes: lead.notes || "",
     company_id: lead.company_id || null,
-    organization_id: getCurrentOrgId() || null,
   };
 
   try {
