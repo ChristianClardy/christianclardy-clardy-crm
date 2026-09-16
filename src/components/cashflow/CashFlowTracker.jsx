@@ -238,7 +238,11 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
   const totalRetainageHeld = draws.reduce((s, d) => s + (d.retainage_released ? 0 : (d.retainage_held || 0)), 0);
   const totalRetainageReleased = draws.reduce((s, d) => s + (d.retainage_released ? (d.retainage_held || 0) : 0), 0);
 
-  const fmt = (n) => `$${(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  const fmt = (n) => {
+    const v = Number(n) || 0;
+    const hasC = v % 1 !== 0;
+    return `$${v.toLocaleString(undefined, { minimumFractionDigits: hasC ? 2 : 0, maximumFractionDigits: 2 })}`;
+  };
 
   const linkedTaskName = (draw) => {
     if (!draw.linked_task_id) return null;
@@ -494,9 +498,9 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
                                   <span>{item.title}</span>
                                   <span className="font-medium text-slate-800">
                                     {item.invoice_amount_type === "percent_of_contract"
-                                      ? `${item.invoice_amount_value}%${amt != null ? ` — $${amt.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : ""}`
+                                      ? `${item.invoice_amount_value}%${amt != null ? ` — ${fmt(amt)}` : ""}`
                                       : item.invoice_amount_type === "fixed"
-                                      ? `$${Number(item.invoice_amount_value).toLocaleString()}`
+                                      ? fmt(item.invoice_amount_value)
                                       : "Remaining balance"}
                                   </span>
                                 </div>
@@ -599,7 +603,7 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
                   </div>
                   <div>
                     <div className="px-3 py-2 border border-slate-200 rounded-md bg-slate-50 text-sm font-medium text-slate-700">
-                      {form.amount ? `$${parseFloat(form.amount).toLocaleString()}` : contractValue > 0 ? "—" : "Set contract value first"}
+                      {form.amount ? fmt(parseFloat(form.amount)) : contractValue > 0 ? "—" : "Set contract value first"}
                     </div>
                     <p className="text-xs text-slate-400 mt-1">Calculated amount</p>
                   </div>
