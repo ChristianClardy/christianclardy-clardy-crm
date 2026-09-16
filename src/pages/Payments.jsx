@@ -347,7 +347,7 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
       </div>
 
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-        Need to add or edit payment draws? Open any <Link to={createPageUrl("Projects")} className="font-semibold underline">project</Link> and use its <span className="font-semibold">Cash Flow</span> tab.
+        Need to add or edit payment draws? Open any <Link to={createPageUrl("Projects")} className="font-semibold underline">project</Link> and use its <span className="font-semibold">Billing</span> tab.
       </div>
 
       <PaymentScheduleRules companyId={selectedCompanyScope !== "all" ? selectedCompanyScope : null} />
