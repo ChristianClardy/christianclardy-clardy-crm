@@ -237,11 +237,11 @@ export default function ProjectDetail() {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
+      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto max-w-full">
         <button
           onClick={() => setActiveTab("overview")}
           className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+            "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
             activeTab === "overview"
               ? "bg-white text-slate-900 shadow-sm"
               : "text-slate-500 hover:text-slate-700"
@@ -253,7 +253,7 @@ export default function ProjectDetail() {
         <button
           onClick={() => setActiveTab("permits")}
           className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+            "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
             activeTab === "permits"
               ? "bg-white text-slate-900 shadow-sm"
               : "text-slate-500 hover:text-slate-700"
@@ -265,7 +265,7 @@ export default function ProjectDetail() {
         <button
           onClick={() => setActiveTab("selections")}
           className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+            "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
             activeTab === "selections"
               ? "bg-white text-slate-900 shadow-sm"
               : "text-slate-500 hover:text-slate-700"
@@ -277,7 +277,7 @@ export default function ProjectDetail() {
         <button
           onClick={() => setActiveTab("sheet")}
           className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+            "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
             activeTab === "sheet"
               ? "bg-white text-slate-900 shadow-sm"
               : "text-slate-500 hover:text-slate-700"
@@ -289,7 +289,7 @@ export default function ProjectDetail() {
         <button
            onClick={() => setActiveTab("timeline")}
            className={cn(
-             "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+             "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
              activeTab === "timeline"
                ? "bg-white text-slate-900 shadow-sm"
                : "text-slate-500 hover:text-slate-700"
@@ -301,7 +301,7 @@ export default function ProjectDetail() {
          <button
            onClick={() => setActiveTab("appointments")}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+              "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
               activeTab === "appointments"
                 ? "bg-white text-slate-900 shadow-sm"
                 : "text-slate-500 hover:text-slate-700"
@@ -313,7 +313,7 @@ export default function ProjectDetail() {
           <button
             onClick={() => setActiveTab("photos")}
            className={cn(
-             "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+             "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
              activeTab === "photos"
                ? "bg-white text-slate-900 shadow-sm"
                : "text-slate-500 hover:text-slate-700"
@@ -325,7 +325,7 @@ export default function ProjectDetail() {
          <button
            onClick={() => setActiveTab("files")}
            className={cn(
-             "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+             "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
              activeTab === "files"
                ? "bg-white text-slate-900 shadow-sm"
                : "text-slate-500 hover:text-slate-700"
@@ -337,7 +337,7 @@ export default function ProjectDetail() {
          <button
            onClick={() => setActiveTab("collaboration")}
            className={cn(
-             "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+             "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
              activeTab === "collaboration"
                ? "bg-white text-slate-900 shadow-sm"
                : "text-slate-500 hover:text-slate-700"
@@ -349,7 +349,7 @@ export default function ProjectDetail() {
          <button
            onClick={() => setActiveTab("cashflow")}
            className={cn(
-             "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+             "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
              activeTab === "cashflow"
                ? "bg-white text-slate-900 shadow-sm"
                : "text-slate-500 hover:text-slate-700"
@@ -361,7 +361,7 @@ export default function ProjectDetail() {
          <button
            onClick={() => setActiveTab("financials")}
            className={cn(
-             "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+             "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
              activeTab === "financials"
                ? "bg-white text-slate-900 shadow-sm"
                : "text-slate-500 hover:text-slate-700"
@@ -373,7 +373,7 @@ export default function ProjectDetail() {
          <button
            onClick={() => setActiveTab("accounting")}
            className={cn(
-             "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+             "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
              activeTab === "accounting"
                ? "bg-white text-slate-900 shadow-sm"
                : "text-slate-500 hover:text-slate-700"
