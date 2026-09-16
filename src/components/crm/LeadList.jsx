@@ -847,13 +847,14 @@ export default function LeadList({ archived = false }) {
       setLeads((prev) =>
         prev.map((l) => l.id === lead.id ? { ...l, ...updated } : l)
       );
-    } catch {
+    } catch (err) {
       // Revert on failure
       setLeads((prev) =>
         prev.map((l) => l.id === lead.id
           ? { ...l, status: lead.status, lost_reason: lead.lost_reason, lost_reason_notes: lead.lost_reason_notes }
           : l)
       );
+      console.error('[moveLeadToColumn] failed:', err?.message || err, err);
     }
   };
 

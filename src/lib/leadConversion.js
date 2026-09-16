@@ -67,19 +67,26 @@ async function findExistingDealForLead(leadId) {
 
 // When a lead reaches WON_STATUS, auto-create a Project in the "planning"
 // stage so the job is immediately visible on the Projects board.
+// Uses the server-side API to avoid browser auth-token contention.
 async function createProjectFromLead(lead, client) {
-  const payload = {
-    name: client?.name || lead.full_name,
-    client_id: client?.id || null,
-    status: "planning",
-    contract_value: Number(lead.estimated_budget) || 0,
-    address: lead.property_address || "",
-    notes: lead.notes || "",
-    company_id: lead.company_id || null,
-    organization_id: getCurrentOrgId() || null,
-  };
-
-  return await base44.entities.Project.create(payload);
+  const res = await fetch('/api/create-project-from-lead', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: client?.name || lead.full_name,
+      client_id: client?.id || null,
+      contract_value: Number(lead.estimated_budget) || 0,
+      address: lead.property_address || "",
+      notes: lead.notes || "",
+      company_id: lead.company_id || null,
+      organization_id: getCurrentOrgId() || null,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(err);
+  }
+  return res.json();
 }
 
 // Reaching WON_STATUS pushes the lead's (and its contact-book Client's)
