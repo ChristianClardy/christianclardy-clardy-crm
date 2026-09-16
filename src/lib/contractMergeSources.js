@@ -63,6 +63,7 @@ export const MERGE_SOURCES = [
   { value: "selections.equipment_schedule",     label: "Selections — Equipment Schedule",        group: "Pool Selections", description: "Pump/filter/heater/etc. manufacturer, model, and warranty — one line per item, from the project's Pool Selections tab." },
   { value: "selections.finish_selections",      label: "Selections — Finish & Material Selections", group: "Pool Selections", description: "Interior finish, tile, coping, decking, etc. product and color — one line per item." },
   { value: "selections.allowances_schedule",    label: "Selections — Allowances Schedule",       group: "Pool Selections", description: "Tile/coping/interior finish/decking/landscaping allowances — one line per item, with amounts." },
+  { value: "selections.allowances_table",       label: "Selections — Allowances Table",          group: "Pool Selections", description: "Allowances as a formatted text table (Item | Amount) with a totals row — ready to paste into a contract." },
   { value: "selections.allowances_total",       label: "Selections — Allowances Total ($)",      group: "Pool Selections", description: "Sum of all allowance amounts." },
   { value: "selections.payment_schedule",       label: "Selections — Payment Schedule",          group: "Pool Selections", description: "The milestone payment schedule — one line per milestone, with amounts." },
   { value: "selections.payment_schedule_total", label: "Selections — Payment Schedule Total ($)", group: "Pool Selections", description: "Sum of all payment-schedule amounts." },
@@ -78,6 +79,7 @@ export const MERGE_SOURCES = [
   { value: "selections.notes",                  label: "Selections — Notes",                     group: "Pool Selections", description: "Free-text selection notes." },
 
   { value: "draws.payment_schedule",       label: "Draws — Payment Schedule",        group: "Draw Schedule", description: "The project's draw schedule — one line per draw with milestone name, percentage, and dollar amount. Managed on the project's Billing tab." },
+  { value: "draws.payment_schedule_table", label: "Draws — Payment Schedule Table",   group: "Draw Schedule", description: "Draw schedule as a formatted text table (Milestone | % | Amount) with a totals row — ready to paste into a contract." },
   { value: "draws.payment_schedule_total", label: "Draws — Payment Schedule Total ($)", group: "Draw Schedule", description: "Sum of all draw amounts on the project's Billing tab." },
 
   { value: "today",                label: "Today's Date",              group: "Other",    description: "Today's date, e.g. \"January 1, 2026\"." },
@@ -149,6 +151,45 @@ function sumAmounts(rows) {
   return (rows || []).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 }
 
+// Pipe-table helpers — produce a fixed-width text table that pastes cleanly
+// into Word / in-app contracts. Works for both 'file' anchor replacement and
+// 'text' mode inline rendering.
+function padR(str, len) { return String(str).padEnd(len, " "); }
+function padL(str, len) { return String(str).padStart(len, " "); }
+
+function buildTable(headers, rows) {
+  if (!rows.length) return "";
+  const widths = headers.map((h, i) => Math.max(h.length, ...rows.map((r) => String(r[i] ?? "").length)));
+  const sep = widths.map((w) => "-".repeat(w)).join("-+-");
+  const header = headers.map((h, i) => padR(h, widths[i])).join(" | ");
+  const body = rows.map((r) => r.map((cell, i) => (i === r.length - 1 ? padL(cell, widths[i]) : padR(cell, widths[i]))).join(" | "));
+  return [header, sep, ...body].join("\n");
+}
+
+function formatAllowancesTable(selections) {
+  const rows = (selections?.allowances || []).filter((r) => r.item);
+  if (!rows.length) return "";
+  const total = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const dataRows = rows.map((r) => [r.item, formatCurrency(r.amount)]);
+  const table = buildTable(["Item", "Amount"], dataRows);
+  return `${table}\n${"-".repeat(20)}\n${"Total".padEnd(dataRows.reduce((m, r) => Math.max(m, r[0].length), 4))} | ${formatCurrency(total)}`;
+}
+
+function formatAllowancesTableDraws(draws) {
+  // used when drawing the payment schedule as a table
+  const rows = (draws || []).filter((d) => d.title);
+  if (!rows.length) return "";
+  const total = rows.reduce((s, d) => s + (Number(d.amount) || 0), 0);
+  const dataRows = rows.map((d) => [
+    d.title,
+    d.percent_of_contract > 0 ? `${Number(d.percent_of_contract).toFixed(1)}%` : "—",
+    formatCurrency(d.amount),
+  ]);
+  const table = buildTable(["Milestone", "%", "Amount"], dataRows);
+  const pad = dataRows.reduce((m, r) => Math.max(m, r[0].length), 9);
+  return `${table}\n${"-".repeat(20)}\n${"Total".padEnd(pad)} |     | ${formatCurrency(total)}`;
+}
+
 export function resolveContractMergeValue(source, { deal, client, company, project, estimate, estimateVersion, selections, draws } = {}) {
   switch (source) {
     case "client.name":              return client?.name || "";
@@ -191,6 +232,7 @@ export function resolveContractMergeValue(source, { deal, client, company, proje
     case "selections.equipment_schedule":      return formatEquipmentSchedule(selections);
     case "selections.finish_selections":       return formatFinishSelections(selections);
     case "selections.allowances_schedule":     return formatAmountSchedule(selections?.allowances, "item");
+    case "selections.allowances_table":        return formatAllowancesTable(selections);
     case "selections.allowances_total":        return formatCurrency(sumAmounts(selections?.allowances));
     case "selections.payment_schedule": {
       // Prefer pool_selections JSONB data; fall back to the draw schedule if empty
@@ -215,6 +257,7 @@ export function resolveContractMergeValue(source, { deal, client, company, proje
     case "selections.notes":                   return selections?.notes || "";
 
     case "draws.payment_schedule":       return formatDrawSchedule(draws);
+    case "draws.payment_schedule_table": return formatAllowancesTableDraws(draws);
     case "draws.payment_schedule_total": return formatCurrency(sumAmounts(draws));
 
     case "today":                    return new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
@@ -303,7 +346,12 @@ export const SAMPLE_CONTEXT = {
   selections: {
     equipment: [{ equipment: "Pump", manufacturer: "Pentair", model: "IntelliFlo", warranty: "3 years" }],
     finishes: [{ item: "Interior Finish", manufacturer_product: "Diamond Brite", color_finish: "Blue Granite" }],
-    allowances: [{ item: "Tile Allowance", amount: 2000 }],
+    allowances: [
+      { item: "Tile",             amount: 2000 },
+      { item: "Coping",           amount: 1500 },
+      { item: "Interior Finish",  amount: 3000 },
+      { item: "Decking",          amount: 4000 },
+    ],
     payment_schedule: [],
     water_features: "Raised spa with waterfall.",
     other_improvements: "New paver decking.",
