@@ -69,12 +69,12 @@ async function findExistingDealForLead(leadId) {
 // stage so the job is immediately visible on the Projects board.
 // Retries once after 4s to recover from Supabase auth-lock contention that
 // can cause a "Failed to fetch" right after the lead status update commits.
-async function createProjectFromLead(lead, client) {
+async function createProjectFromLead(lead, client, contractValue) {
   const payload = {
     name: client?.name || lead.full_name,
     client_id: client?.id || null,
     status: "planning",
-    contract_value: Number(lead.estimated_budget) || 0,
+    contract_value: contractValue != null ? Number(contractValue) : (Number(lead.estimated_budget) || 0),
     address: lead.property_address || "",
     notes: lead.notes || "",
     company_id: lead.company_id || null,
@@ -115,7 +115,7 @@ async function pushWonLeadToPipeline(lead, client) {
  * flips the persistent is_prospect badge on — it never reverts automatically.
  * Reaching WON_STATUS also pushes the lead into the Pipeline board as a deal.
  */
-export async function setLeadStatus(lead, newStatus) {
+export async function setLeadStatus(lead, newStatus, { contractValue } = {}) {
   const shouldBeProspect = LEAD_STAGES.indexOf(newStatus) >= LEAD_STAGES.indexOf(PROSPECT_THRESHOLD_STAGE);
   const is_prospect = lead.is_prospect || shouldBeProspect;
   // Crossing the threshold needs a Client row to exist — Prospects.jsx is a
@@ -141,7 +141,7 @@ export async function setLeadStatus(lead, newStatus) {
       console.error("Failed to push won lead to Pipeline board:", err?.message || err);
     }
     try {
-      await createProjectFromLead(updatedLead, client);
+      await createProjectFromLead(updatedLead, client, contractValue);
     } catch (err) {
       console.error("Failed to auto-create project from won lead:", err?.message || err);
     }

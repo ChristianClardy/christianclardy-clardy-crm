@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import LeadFormDialog from "@/components/crm/LeadFormDialog";
 import LostReasonDialog from "@/components/crm/LostReasonDialog";
 import DesignerAssignmentDialog from "@/components/crm/DesignerAssignmentDialog";
+import ContractPriceDialog from "@/components/crm/ContractPriceDialog";
 import { cn } from "@/lib/utils";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 import { setLeadStatus, markLeadLost, reactivateLead, ensureContactForLead, assignDesignerAndSetInDesign, updateLeadDesigner } from "@/lib/leadConversion";
@@ -606,6 +607,8 @@ export default function LeadList({ archived = false }) {
   const [savingLostReason, setSavingLostReason] = useState(false);
   const [designerPrompt, setDesignerPrompt] = useState(null); // { lead, column } | null
   const [savingDesigner, setSavingDesigner] = useState(false);
+  const [contractPricePrompt, setContractPricePrompt] = useState(null); // { lead, column } | null
+  const [savingContractPrice, setSavingContractPrice] = useState(false);
   const [designerEditPrompt, setDesignerEditPrompt] = useState(null); // lead | null
   const [savingDesignerEdit, setSavingDesignerEdit] = useState(false);
   const [reasonFilter, setReasonFilter] = useState("all");
@@ -824,7 +827,7 @@ export default function LeadList({ archived = false }) {
 
   useEffect(() => stopEdgeScroll, []);
 
-  const moveLeadToColumn = async (lead, column) => {
+  const moveLeadToColumn = async (lead, column, { contractValue } = {}) => {
     // Dragging a lead out of Lost/No Decision into any other column is a
     // reactivation — clear the stale lost reason along with the status move,
     // same as the explicit Reactivate button.
@@ -840,7 +843,7 @@ export default function LeadList({ archived = false }) {
     try {
       const updated = leavingLost
         ? await reactivateLead(lead, column.defaultStatus)
-        : await setLeadStatus(lead, column.defaultStatus);
+        : await setLeadStatus(lead, column.defaultStatus, { contractValue });
       // Pick up status_changed_at (and anything else the DB trigger touched)
       // so "days in stage" reflects the move immediately instead of only
       // after the next full reload.
@@ -888,6 +891,12 @@ export default function LeadList({ archived = false }) {
     // here and ask who's designing it before committing the status change.
     if (column.key === "design") {
       setDesignerPrompt({ lead, column });
+      return;
+    }
+
+    // Moving into Won — ask for the signed contract price before creating the project.
+    if (column.key === "won") {
+      setContractPricePrompt({ lead, column });
       return;
     }
 
@@ -999,6 +1008,17 @@ export default function LeadList({ archived = false }) {
     const { lead, column } = designerPrompt;
     setDesignerPrompt(null);
     moveLeadToColumn(lead, column);
+  };
+
+  const handleCancelContractPrice = () => setContractPricePrompt(null);
+
+  const handleConfirmContractPrice = async (contractValue) => {
+    if (!contractPricePrompt) return;
+    const { lead, column } = contractPricePrompt;
+    setSavingContractPrice(true);
+    setContractPricePrompt(null);
+    await moveLeadToColumn(lead, column, { contractValue });
+    setSavingContractPrice(false);
   };
 
   const handleSaveDesigner = async (designer) => {
@@ -1240,6 +1260,15 @@ export default function LeadList({ archived = false }) {
           saving={savingDesigner}
           onSkip={handleSkipDesigner}
           onSave={handleSaveDesigner}
+        />
+      )}
+
+      {contractPricePrompt && (
+        <ContractPriceDialog
+          lead={contractPricePrompt.lead}
+          saving={savingContractPrice}
+          onConfirm={handleConfirmContractPrice}
+          onCancel={handleCancelContractPrice}
         />
       )}
 
