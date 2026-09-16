@@ -67,26 +67,27 @@ async function findExistingDealForLead(leadId) {
 
 // When a lead reaches WON_STATUS, auto-create a Project in the "planning"
 // stage so the job is immediately visible on the Projects board.
-// Uses the server-side API to avoid browser auth-token contention.
+// Retries once after 4s to recover from Supabase auth-lock contention that
+// can cause a "Failed to fetch" right after the lead status update commits.
 async function createProjectFromLead(lead, client) {
-  const res = await fetch('/api/create-project-from-lead', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: client?.name || lead.full_name,
-      client_id: client?.id || null,
-      contract_value: Number(lead.estimated_budget) || 0,
-      address: lead.property_address || "",
-      notes: lead.notes || "",
-      company_id: lead.company_id || null,
-      organization_id: getCurrentOrgId() || null,
-    }),
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(err);
+  const payload = {
+    name: client?.name || lead.full_name,
+    client_id: client?.id || null,
+    status: "planning",
+    contract_value: Number(lead.estimated_budget) || 0,
+    address: lead.property_address || "",
+    notes: lead.notes || "",
+    company_id: lead.company_id || null,
+    organization_id: getCurrentOrgId() || null,
+  };
+
+  try {
+    return await base44.entities.Project.create(payload);
+  } catch (firstErr) {
+    // Auth-lock contention — wait for the lock to clear and retry once
+    await new Promise((r) => setTimeout(r, 4000));
+    return await base44.entities.Project.create(payload);
   }
-  return res.json();
 }
 
 // Reaching WON_STATUS pushes the lead's (and its contact-book Client's)
