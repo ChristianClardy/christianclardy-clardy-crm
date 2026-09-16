@@ -1,0 +1,16 @@
+{
+  "name": "Clardy.io",
+  "short_name": "Clardy",
+  "description": "Clardy CRM — landscaping and construction project management",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    }
+  ]
+}
