@@ -52,8 +52,8 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
   const [inputMode, setInputMode] = useState("percent");
   const [actionLoading, setActionLoading] = useState(null); // draw id being actioned
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
-  const [templateRules, setTemplateRules] = useState([]);
-  const [selectedRuleIds, setSelectedRuleIds] = useState([]);
+  const [availableTemplates, setAvailableTemplates] = useState([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState(null);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
 
   useEffect(() => {
@@ -186,45 +186,42 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
 
   const openTemplateDialog = async () => {
     let query = supabase
-      .from("payment_schedule_rules")
+      .from("payment_schedule_templates")
       .select("*")
-      .order("sort_order", { ascending: true })
-      .order("created_at", { ascending: true });
+      .order("name");
     if (project?.company_id) {
       query = query.eq("company_id", project.company_id);
     }
     const { data } = await query;
-    const rules = data || [];
-    setTemplateRules(rules);
-    setSelectedRuleIds(rules.map((r) => r.id));
+    setAvailableTemplates(data || []);
+    setSelectedTemplateId(null);
     setTemplateDialogOpen(true);
   };
 
-  const calcRuleAmount = (rule) => {
-    if (rule.invoice_amount_type === "percent_of_contract") {
-      return contractValue > 0 ? (Number(rule.invoice_amount_value) / 100) * contractValue : null;
+  const calcItemAmount = (item) => {
+    if (item.invoice_amount_type === "percent_of_contract") {
+      return contractValue > 0 ? (Number(item.invoice_amount_value) / 100) * contractValue : null;
     }
-    if (rule.invoice_amount_type === "fixed") {
-      return Number(rule.invoice_amount_value) || 0;
+    if (item.invoice_amount_type === "fixed") {
+      return Number(item.invoice_amount_value) || 0;
     }
-    // remaining_balance — calculated later after other draws
-    return null;
+    return null; // remaining_balance
   };
 
   const handleApplyTemplate = async () => {
-    const toApply = templateRules.filter((r) => selectedRuleIds.includes(r.id));
-    if (!toApply.length) return;
+    const tmpl = availableTemplates.find((t) => t.id === selectedTemplateId);
+    if (!tmpl?.items?.length) return;
     setApplyingTemplate(true);
     const startDrawNumber = draws.length + 1;
-    for (let i = 0; i < toApply.length; i++) {
-      const rule = toApply[i];
-      const pct = rule.invoice_amount_type === "percent_of_contract" ? Number(rule.invoice_amount_value) : null;
-      const amt = calcRuleAmount(rule);
+    for (let i = 0; i < tmpl.items.length; i++) {
+      const item = tmpl.items[i];
+      const pct = item.invoice_amount_type === "percent_of_contract" ? Number(item.invoice_amount_value) : 0;
+      const amt = calcItemAmount(item) ?? 0;
       await base44.entities.Draw.create({
         project_id: projectId,
-        title: rule.rule_name,
-        percent_of_contract: pct ?? 0,
-        amount: amt ?? 0,
+        title: item.title,
+        percent_of_contract: pct,
+        amount: amt,
         status: "pending",
         draw_number: startDrawNumber + i,
       });
@@ -232,12 +229,6 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
     setApplyingTemplate(false);
     setTemplateDialogOpen(false);
     loadDraws();
-  };
-
-  const toggleRuleSelection = (id) => {
-    setSelectedRuleIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
   };
 
   const totalPercent = draws.reduce((s, d) => s + (d.percent_of_contract || 0), 0);
@@ -455,89 +446,80 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
       <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Load Payment Schedule Template</DialogTitle>
+            <DialogTitle>Apply Payment Schedule Template</DialogTitle>
           </DialogHeader>
-          {templateRules.length === 0 ? (
+          {availableTemplates.length === 0 ? (
             <div className="py-8 text-center text-slate-500">
               <LayoutList className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-              <p className="font-medium">No schedule templates found</p>
+              <p className="font-medium">No templates found</p>
               <p className="text-sm mt-1 text-slate-400">
-                Add global rules in Settings → Payments to create templates.
+                Go to <strong>Settings → Templates → Payment Schedule</strong> to create one.
               </p>
             </div>
           ) : (
             <>
-              <p className="text-sm text-slate-500">
-                Select the rules to add as draws. Dollar amounts are calculated from the project's contract value
-                {contractValue > 0 ? ` ($${contractValue.toLocaleString()})` : " (set contract value first)"}.
+              <p className="text-sm text-slate-500 mb-3">
+                Choose a template. Amounts are calculated from the contract value
+                {contractValue > 0 ? ` ($${contractValue.toLocaleString()})` : " — set the contract value first for accurate amounts"}.
               </p>
-              <div className="space-y-2 max-h-72 overflow-y-auto">
-                {templateRules.map((rule) => {
-                  const amt = calcRuleAmount(rule);
-                  const selected = selectedRuleIds.includes(rule.id);
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {availableTemplates.map((tmpl) => {
+                  const selected = selectedTemplateId === tmpl.id;
                   return (
                     <label
-                      key={rule.id}
+                      key={tmpl.id}
                       className={cn(
-                        "flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors",
-                        selected ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-white hover:bg-slate-50"
+                        "flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors",
+                        selected ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-white hover:bg-slate-50"
                       )}
                     >
                       <input
-                        type="checkbox"
+                        type="radio"
+                        name="template"
                         checked={selected}
-                        onChange={() => toggleRuleSelection(rule.id)}
-                        className="rounded border-slate-300 text-amber-500"
+                        onChange={() => setSelectedTemplateId(tmpl.id)}
+                        className="mt-0.5 text-amber-500"
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-900">{rule.rule_name}</p>
-                        <p className="text-xs text-slate-500">
-                          {rule.invoice_amount_type === "percent_of_contract"
-                            ? `${rule.invoice_amount_value}% of contract`
-                            : rule.invoice_amount_type === "fixed"
-                            ? `Fixed amount`
-                            : "Remaining balance"}
-                        </p>
-                      </div>
-                      <div className="text-right shrink-0">
-                        {amt != null ? (
-                          <span className="text-sm font-semibold text-slate-900">
-                            ${amt.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-slate-400">—</span>
+                        <p className="text-sm font-semibold text-slate-900">{tmpl.name}</p>
+                        {tmpl.description && (
+                          <p className="text-xs text-slate-500 mt-0.5">{tmpl.description}</p>
+                        )}
+                        {tmpl.items?.length > 0 && (
+                          <div className="mt-2 space-y-0.5">
+                            {tmpl.items.map((item) => {
+                              const amt = calcItemAmount(item);
+                              return (
+                                <div key={item.id} className="flex justify-between text-xs text-slate-600">
+                                  <span>{item.title}</span>
+                                  <span className="font-medium text-slate-800">
+                                    {item.invoice_amount_type === "percent_of_contract"
+                                      ? `${item.invoice_amount_value}%${amt != null ? ` — $${amt.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : ""}`
+                                      : item.invoice_amount_type === "fixed"
+                                      ? `$${Number(item.invoice_amount_value).toLocaleString()}`
+                                      : "Remaining balance"}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
                         )}
                       </div>
                     </label>
                   );
                 })}
               </div>
-              <div className="flex justify-between items-center pt-2">
-                <button
-                  type="button"
-                  className="text-xs text-slate-500 hover:text-slate-700 underline"
-                  onClick={() =>
-                    setSelectedRuleIds(
-                      selectedRuleIds.length === templateRules.length
-                        ? []
-                        : templateRules.map((r) => r.id)
-                    )
-                  }
+              <div className="flex justify-end gap-3 pt-2">
+                <Button variant="outline" onClick={() => setTemplateDialogOpen(false)} disabled={applyingTemplate}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleApplyTemplate}
+                  disabled={applyingTemplate || !selectedTemplateId}
+                  className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
                 >
-                  {selectedRuleIds.length === templateRules.length ? "Deselect all" : "Select all"}
-                </button>
-                <div className="flex gap-3">
-                  <Button variant="outline" onClick={() => setTemplateDialogOpen(false)} disabled={applyingTemplate}>
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={handleApplyTemplate}
-                    disabled={applyingTemplate || selectedRuleIds.length === 0}
-                    className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
-                  >
-                    {applyingTemplate ? "Adding…" : `Add ${selectedRuleIds.length} Draw${selectedRuleIds.length !== 1 ? "s" : ""}`}
-                  </Button>
-                </div>
+                  {applyingTemplate ? "Applying…" : "Apply Template"}
+                </Button>
               </div>
             </>
           )}

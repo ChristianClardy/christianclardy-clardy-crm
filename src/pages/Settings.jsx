@@ -5,7 +5,7 @@ import {
   Users, ShieldCheck, Plus, Edit2, Trash2, Search,
   Save, Check, X, CalendarDays, Copy, CheckCheck,
   Building2, UserPlus, Mail, Phone, Loader2, Palette, Moon, Sun,
-  FileSignature, Link as LinkIcon, Tag, FileText, DollarSign,
+  FileSignature, Link as LinkIcon, Tag, FileText,
 } from "lucide-react";
 import { useTheme } from "@/lib/ThemeContext";
 import { COLOR_SCHEMES } from "@/lib/colorSchemes";
@@ -25,8 +25,6 @@ import { DEFAULT_LEAD_SOURCE_OPTIONS, fetchCustomLeadSources, addCustomLeadSourc
 import { fetchDesigners, addDesigner, removeDesigner } from "@/lib/designers";
 import SubcontractorsTab from "@/components/settings/SubcontractorsTab";
 import QuickBooksTab from "@/components/settings/QuickBooksTab";
-import PaymentScheduleRules from "@/components/payments/PaymentScheduleRules";
-import { useCompanyScope } from "@/lib/companyScope";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -1119,15 +1117,6 @@ function TeamSubsTab() {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-function PaymentScheduleTab() {
-  const scope = useCompanyScope();
-  return (
-    <div className="max-w-3xl">
-      <PaymentScheduleRules companyId={scope !== "all" ? scope : null} />
-    </div>
-  );
-}
-
 const ALL_TABS = [
   { key: "organization", label: "Organization",        icon: Building2,      adminOnly: false },
   { key: "teamSubs",     label: "Team & Subcontractors", icon: Users,        adminOnly: false },
@@ -1140,7 +1129,6 @@ const ALL_TABS = [
   { key: "templates",    label: "Templates",           icon: FileText,       adminOnly: false },
   { key: "docusign",     label: "DocuSign",            icon: FileSignature,  adminOnly: false },
   { key: "quickbooks",   label: "QuickBooks",          icon: LinkIcon,       adminOnly: false },
-  { key: "paySchedule",  label: "Payment Schedule",    icon: DollarSign,     adminOnly: false },
 ];
 
 export default function Settings() {
@@ -1190,7 +1178,6 @@ export default function Settings() {
       {activeTab === "templates"   && <TemplatesTab />}
       {activeTab === "docusign"    && <DocuSignTab />}
       {activeTab === "quickbooks"  && <QuickBooksTab />}
-      {activeTab === "paySchedule" && <PaymentScheduleTab />}
     </div>
   );
 }

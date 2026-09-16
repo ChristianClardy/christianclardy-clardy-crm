@@ -3,10 +3,12 @@ import { cn } from "@/lib/utils";
 import ScopeTemplatesTab from "@/components/settings/ScopeTemplatesTab";
 import ContractTemplatesTab from "@/components/settings/ContractTemplatesTab";
 import MergeFieldsLibraryTab from "@/components/settings/MergeFieldsLibraryTab";
+import PaymentScheduleTemplatesTab from "@/components/settings/PaymentScheduleTemplatesTab";
 
 const SUB_TABS = [
   { key: "scope",    label: "Scope Templates" },
   { key: "contract", label: "Contract Templates" },
+  { key: "payment",  label: "Payment Schedule" },
   { key: "merge",    label: "Merge Fields" },
 ];
 
@@ -29,7 +31,10 @@ export default function TemplatesTab() {
           </button>
         ))}
       </div>
-      {sub === "scope" ? <ScopeTemplatesTab /> : sub === "contract" ? <ContractTemplatesTab /> : <MergeFieldsLibraryTab />}
+      {sub === "scope"    && <ScopeTemplatesTab />}
+      {sub === "contract" && <ContractTemplatesTab />}
+      {sub === "payment"  && <PaymentScheduleTemplatesTab />}
+      {sub === "merge"    && <MergeFieldsLibraryTab />}
     </div>
   );
 }
