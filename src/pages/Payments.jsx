@@ -185,10 +185,10 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
     setQbError(null);
     setQbResult(null);
     try {
-      const res = await fetch("/api/quickbooks-create-invoice", {
+      const res = await fetch("/api/quickbooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoice_id: invoice.id }),
+        body: JSON.stringify({ action: "create-invoice", invoice_id: invoice.id }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to push invoice to QuickBooks.");

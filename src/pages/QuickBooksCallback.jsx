@@ -39,10 +39,10 @@ export default function QuickBooksCallback() {
     try {
       const redirectUri = `${window.location.origin}/QuickBooksCallback`;
 
-      const res = await fetch("/api/quickbooks-callback", {
+      const res = await fetch("/api/quickbooks", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ code, realm_id: realmId, redirect_uri: redirectUri }),
+        body:    JSON.stringify({ action: "callback", code, realm_id: realmId, redirect_uri: redirectUri }),
       });
 
       const data = await res.json();
