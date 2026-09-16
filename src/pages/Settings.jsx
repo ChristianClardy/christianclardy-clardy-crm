@@ -499,7 +499,7 @@ function CalendarFeedTab() {
     });
   }, []);
 
-  const feedUrl = `${typeof window !== "undefined" ? window.location.origin : "https://clardy.io"}/api/calendar`;
+  const feedUrl = `${typeof window !== "undefined" ? window.location.origin : "https://clardy.io"}/api/cron?action=calendar`;
 
   const copy = () => {
     navigator.clipboard.writeText(feedUrl);

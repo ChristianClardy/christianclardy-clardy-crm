@@ -3,6 +3,6 @@
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "crons": [
-    { "path": "/api/check-lead-stage-alerts", "schedule": "0 13 * * *" }
+    { "path": "/api/cron?action=stage-alerts", "schedule": "0 13 * * *" }
   ]
 }
