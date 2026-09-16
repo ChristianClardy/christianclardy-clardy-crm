@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { Plus, Edit2, Trash2, DollarSign, TrendingUp, CheckCircle2, Clock, AlertCircle, Link2, ThumbsUp, ThumbsDown, Send } from "lucide-react";
+import { Plus, Edit2, Trash2, DollarSign, TrendingUp, CheckCircle2, Clock, AlertCircle, Link2, ThumbsUp, ThumbsDown, Send, LayoutList } from "lucide-react";
 import ProjectPaymentManager from "@/components/payments/ProjectPaymentManager";
 
 const statusConfig = {
@@ -50,6 +51,10 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
   const [form, setForm] = useState(emptyForm);
   const [inputMode, setInputMode] = useState("percent");
   const [actionLoading, setActionLoading] = useState(null); // draw id being actioned
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [templateRules, setTemplateRules] = useState([]);
+  const [selectedRuleIds, setSelectedRuleIds] = useState([]);
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
 
   useEffect(() => {
     loadDraws();
@@ -179,6 +184,62 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
     }
   };
 
+  const openTemplateDialog = async () => {
+    let query = supabase
+      .from("payment_schedule_rules")
+      .select("*")
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (project?.company_id) {
+      query = query.eq("company_id", project.company_id);
+    }
+    const { data } = await query;
+    const rules = data || [];
+    setTemplateRules(rules);
+    setSelectedRuleIds(rules.map((r) => r.id));
+    setTemplateDialogOpen(true);
+  };
+
+  const calcRuleAmount = (rule) => {
+    if (rule.invoice_amount_type === "percent_of_contract") {
+      return contractValue > 0 ? (Number(rule.invoice_amount_value) / 100) * contractValue : null;
+    }
+    if (rule.invoice_amount_type === "fixed") {
+      return Number(rule.invoice_amount_value) || 0;
+    }
+    // remaining_balance — calculated later after other draws
+    return null;
+  };
+
+  const handleApplyTemplate = async () => {
+    const toApply = templateRules.filter((r) => selectedRuleIds.includes(r.id));
+    if (!toApply.length) return;
+    setApplyingTemplate(true);
+    const startDrawNumber = draws.length + 1;
+    for (let i = 0; i < toApply.length; i++) {
+      const rule = toApply[i];
+      const pct = rule.invoice_amount_type === "percent_of_contract" ? Number(rule.invoice_amount_value) : null;
+      const amt = calcRuleAmount(rule);
+      await base44.entities.Draw.create({
+        project_id: projectId,
+        title: rule.rule_name,
+        percent_of_contract: pct ?? 0,
+        amount: amt ?? 0,
+        status: "pending",
+        draw_number: startDrawNumber + i,
+      });
+    }
+    setApplyingTemplate(false);
+    setTemplateDialogOpen(false);
+    loadDraws();
+  };
+
+  const toggleRuleSelection = (id) => {
+    setSelectedRuleIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
   const totalPercent = draws.reduce((s, d) => s + (d.percent_of_contract || 0), 0);
   const totalAmount = draws.reduce((s, d) => s + (d.amount || 0), 0);
   const paidAmount = draws.filter(d => d.status === "paid").reduce((s, d) => s + (d.amount || 0), 0);
@@ -255,9 +316,14 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
             <h3 className="font-semibold text-slate-900">Draw Schedule</h3>
             <p className="text-xs text-slate-400 mt-0.5">Click any row to edit · Change status to "Submitted" to notify the PM</p>
           </div>
-          <Button size="sm" onClick={() => openDialog()} className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white">
-            <Plus className="w-4 h-4 mr-1" /> Add Draw
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={openTemplateDialog}>
+              <LayoutList className="w-4 h-4 mr-1" /> Load Template
+            </Button>
+            <Button size="sm" onClick={() => openDialog()} className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white">
+              <Plus className="w-4 h-4 mr-1" /> Add Draw
+            </Button>
+          </div>
         </div>
 
         {draws.length === 0 ? (
@@ -384,6 +450,99 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
         client={client}
         company={company}
       />
+
+      {/* Load Template Dialog */}
+      <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Load Payment Schedule Template</DialogTitle>
+          </DialogHeader>
+          {templateRules.length === 0 ? (
+            <div className="py-8 text-center text-slate-500">
+              <LayoutList className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+              <p className="font-medium">No schedule templates found</p>
+              <p className="text-sm mt-1 text-slate-400">
+                Add global rules in Settings → Payments to create templates.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-slate-500">
+                Select the rules to add as draws. Dollar amounts are calculated from the project's contract value
+                {contractValue > 0 ? ` ($${contractValue.toLocaleString()})` : " (set contract value first)"}.
+              </p>
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {templateRules.map((rule) => {
+                  const amt = calcRuleAmount(rule);
+                  const selected = selectedRuleIds.includes(rule.id);
+                  return (
+                    <label
+                      key={rule.id}
+                      className={cn(
+                        "flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors",
+                        selected ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-white hover:bg-slate-50"
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => toggleRuleSelection(rule.id)}
+                        className="rounded border-slate-300 text-amber-500"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-900">{rule.rule_name}</p>
+                        <p className="text-xs text-slate-500">
+                          {rule.invoice_amount_type === "percent_of_contract"
+                            ? `${rule.invoice_amount_value}% of contract`
+                            : rule.invoice_amount_type === "fixed"
+                            ? `Fixed amount`
+                            : "Remaining balance"}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        {amt != null ? (
+                          <span className="text-sm font-semibold text-slate-900">
+                            ${amt.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="flex justify-between items-center pt-2">
+                <button
+                  type="button"
+                  className="text-xs text-slate-500 hover:text-slate-700 underline"
+                  onClick={() =>
+                    setSelectedRuleIds(
+                      selectedRuleIds.length === templateRules.length
+                        ? []
+                        : templateRules.map((r) => r.id)
+                    )
+                  }
+                >
+                  {selectedRuleIds.length === templateRules.length ? "Deselect all" : "Select all"}
+                </button>
+                <div className="flex gap-3">
+                  <Button variant="outline" onClick={() => setTemplateDialogOpen(false)} disabled={applyingTemplate}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleApplyTemplate}
+                    disabled={applyingTemplate || selectedRuleIds.length === 0}
+                    className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
+                  >
+                    {applyingTemplate ? "Adding…" : `Add ${selectedRuleIds.length} Draw${selectedRuleIds.length !== 1 ? "s" : ""}`}
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

@@ -129,9 +129,10 @@ export default function ProjectDetail() {
 
   const handleUpdateProject = async (e) => {
     e.preventDefault();
+    const newContractValue = parseFloat(formData.contract_value) || 0;
     await base44.entities.Project.update(projectId, {
       ...formData,
-      contract_value: parseFloat(formData.contract_value) || 0,
+      contract_value: newContractValue,
       costs_to_date: parseFloat(formData.costs_to_date) || 0,
       original_costs: parseFloat(formData.original_costs) || 0,
       amendment_costs: parseFloat(formData.amendment_costs) || 0,
@@ -139,6 +140,18 @@ export default function ProjectDetail() {
       percent_complete: formData.percent_complete || 0,
       sync_locked: true,
     });
+
+    // If contract value changed, recalculate % -based draw amounts
+    if (newContractValue !== (project?.contract_value || 0) && newContractValue > 0) {
+      const draws = await base44.entities.Draw.filter({ project_id: projectId });
+      for (const draw of draws) {
+        if (draw.percent_of_contract > 0) {
+          const newAmount = (draw.percent_of_contract / 100) * newContractValue;
+          await base44.entities.Draw.update(draw.id, { amount: newAmount });
+        }
+      }
+    }
+
     setIsEditDialogOpen(false);
     loadData();
   };
