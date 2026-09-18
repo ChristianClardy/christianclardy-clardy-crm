@@ -11,6 +11,7 @@ export const LEAD_STAGES = [
   "In Design",
   "Estimate In Progress",
   "Quote Delivered/Price Locked",
+  "In Financing",
   "Negotiating/Revising Scope",
   "Contract Signed/Deposit Collected (Won)",
   "Lost/No Decision",

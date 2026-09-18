@@ -45,6 +45,7 @@ const STAGE_COLORS = {
   "In Design":                                "bg-fuchsia-400",
   "Estimate In Progress":                     "bg-indigo-400",
   "Quote Delivered/Price Locked":              "bg-cyan-400",
+  "In Financing":                              "bg-teal-400",
   "Negotiating/Revising Scope":                "bg-yellow-400",
   [WON_STATUS]:                                "bg-emerald-400",
   [LOST_STATUS]:                               "bg-rose-400",

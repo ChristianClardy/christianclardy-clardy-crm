@@ -82,7 +82,7 @@ async function handleCalendar(req, res) {
 const LEAD_STAGES = [
   'New Lead', 'Contact Attempted', 'Contacted', 'Appointment Scheduled',
   'Site Visit Complete', 'Design Appointment Scheduled', 'In Design',
-  'Estimate In Progress', 'Quote Delivered/Price Locked', 'Negotiating/Revising Scope',
+  'Estimate In Progress', 'Quote Delivered/Price Locked', 'In Financing', 'Negotiating/Revising Scope',
   'Contract Signed/Deposit Collected (Won)', 'Lost/No Decision',
 ];
 const WON_STATUS = 'Contract Signed/Deposit Collected (Won)';

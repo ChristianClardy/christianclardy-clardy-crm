@@ -106,6 +106,15 @@ const COLUMNS = [
     dropBg: "bg-cyan-100",
   },
   {
+    key: "in_financing",
+    label: "In Financing",
+    match: ["In Financing"],
+    defaultStatus: "In Financing",
+    color: "bg-teal-400",
+    headerBg: "bg-teal-50",
+    dropBg: "bg-teal-100",
+  },
+  {
     key: "negotiating",
     label: "Negotiating/Revising Scope",
     match: ["Negotiating/Revising Scope"],
@@ -144,6 +153,7 @@ const statusStyles = {
   "In Design":                                "bg-fuchsia-100 text-fuchsia-700",
   "Estimate In Progress":                     "bg-indigo-100 text-indigo-700",
   "Quote Delivered/Price Locked":              "bg-cyan-100 text-cyan-700",
+  "In Financing":                              "bg-teal-100 text-teal-700",
   "Negotiating/Revising Scope":                "bg-yellow-100 text-yellow-700",
   "Contract Signed/Deposit Collected (Won)":   "bg-emerald-100 text-emerald-700",
   "Lost/No Decision":                          "bg-rose-100 text-rose-700",
@@ -737,7 +747,7 @@ export default function LeadList({ archived = false }) {
     { label: "Contacted",   count: visibleLeads.filter(l => ["Contact Attempted", "Contacted"].includes(l.status)).length },
     { label: "Appointment", count: visibleLeads.filter(l => ["Appointment Scheduled", "Site Visit Complete", "Design Appointment Scheduled"].includes(l.status)).length },
     { label: "In Design",   count: visibleLeads.filter(l => l.status === "In Design").length },
-    { label: "Estimate",    count: visibleLeads.filter(l => ["Estimate In Progress", "Quote Delivered/Price Locked", "Negotiating/Revising Scope"].includes(l.status)).length },
+    { label: "Estimate",    count: visibleLeads.filter(l => ["Estimate In Progress", "Quote Delivered/Price Locked", "In Financing", "Negotiating/Revising Scope"].includes(l.status)).length },
     { label: "Won",         count: visibleLeads.filter(l => l.status === "Contract Signed/Deposit Collected (Won)").length },
   ], [visibleLeads]);
 

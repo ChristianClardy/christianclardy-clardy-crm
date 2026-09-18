@@ -18,7 +18,7 @@ const FUNNEL_STAGES = [
   { key: "new",         label: "New",         match: ["New Lead", "Contact Attempted"] },
   { key: "contacted",   label: "Contacted",   match: ["Contacted"] },
   { key: "appointment", label: "Appointment", match: ["Appointment Scheduled", "Site Visit Complete", "Design Appointment Scheduled"] },
-  { key: "design",      label: "Design/Estimate", match: ["In Design", "Estimate In Progress", "Quote Delivered/Price Locked", "Negotiating/Revising Scope"] },
+  { key: "design",      label: "Design/Estimate", match: ["In Design", "Estimate In Progress", "Quote Delivered/Price Locked", "In Financing", "Negotiating/Revising Scope"] },
   { key: "won",         label: "Won",         match: ["Contract Signed/Deposit Collected (Won)"] },
 ];
 
@@ -32,6 +32,7 @@ const STATUS_COLORS = {
   "In Design":                                "bg-fuchsia-100 text-fuchsia-700",
   "Estimate In Progress":                     "bg-indigo-100 text-indigo-700",
   "Quote Delivered/Price Locked":              "bg-cyan-100 text-cyan-700",
+  "In Financing":                              "bg-teal-100 text-teal-700",
   "Negotiating/Revising Scope":                "bg-yellow-100 text-yellow-700",
   "Contract Signed/Deposit Collected (Won)":   "bg-emerald-100 text-emerald-700",
   "Lost/No Decision":                          "bg-rose-100 text-rose-700",
