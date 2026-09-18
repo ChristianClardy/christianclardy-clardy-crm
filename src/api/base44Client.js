@@ -127,7 +127,7 @@ function parseSortField(sortField) {
 let _currentOrgId = null;
 
 // Tables that are global / shared across all orgs (public lookup data).
-const GLOBAL_TABLES = new Set(['municipalities']);
+const GLOBAL_TABLES = new Set([]);
 
 // Only these tables actually have an organization_id column.
 // All original tables use USING(true) RLS policies and have no org column.
@@ -136,11 +136,13 @@ const ORG_SCOPED_TABLES = new Set(['deals', 'crm_companies', 'crm_activities']);
 // Tables scoped to one of Christian's business brands (company_profiles.id).
 // New records auto-tag with the active company-scope switcher selection.
 // Shared infrastructure (materials, cost_codes, assemblies, subcontractors,
-// employees, municipalities) is intentionally excluded — stays global.
+// employees) is intentionally excluded — stays global. Municipalities used
+// to be global too, but login credentials per city differ by company, so it
+// moved into this list (see 031_municipalities_company_scoping.sql).
 const COMPANY_SCOPED_TABLES = new Set([
   'leads', 'clients', 'estimates', 'invoices', 'payments', 'calendar_events',
   'tasks', 'change_orders', 'draws', 'sub_invoices',
-  'projects', 'documents',
+  'projects', 'documents', 'municipalities',
 ]);
 
 export function setCurrentOrgId(id) {

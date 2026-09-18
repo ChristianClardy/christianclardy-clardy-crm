@@ -4,6 +4,7 @@ import { Plus, Trash2, Save, Search, X, ClipboardPaste, GripVertical } from "luc
 import { cn } from "@/lib/utils";
 import SheetStyleToolbar, { DEFAULT_SHEET_STYLE } from "@/components/sheet/SheetStyleToolbar";
 import SheetFormattingBar from "@/components/sheet/SheetFormattingBar";
+import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 
 const DEFAULT_COLUMNS = [
   { key: "city",                        label: "City",                          width: 150 },
@@ -173,6 +174,7 @@ function MuniRow({ row, ri, columns, sheetStyle, isRowSelected, dragOverId, isCe
 }
 
 export default function Municipalities() {
+  const companyScope = useCompanyScope();
   const [rows, setRows] = useState([]);
   const [columns, setColumns] = useState(DEFAULT_COLUMNS);
   const [loading, setLoading] = useState(true);
@@ -283,9 +285,10 @@ export default function Municipalities() {
   const cleanDuplicates = async () => {
     if (!confirm("Merge duplicate rows with the same city name, keeping the most complete data?")) return;
     setSaving(true);
-    // Group rows by lowercase city name
+    // Group rows by lowercase city name (only within the active company scope —
+    // the same city can legitimately have separate rows per company now)
     const groups = {};
-    for (const r of rows) {
+    for (const r of scopedRows) {
       const key = (r.city || "").toLowerCase().trim() || r.id;
       if (!groups[key]) groups[key] = [];
       groups[key].push(r);
@@ -352,7 +355,9 @@ export default function Municipalities() {
     setDragOverId(null);
   };
 
-  const filtered = rows.filter(r =>
+  const scopedRows = scopeFilter(rows, companyScope);
+
+  const filtered = scopedRows.filter(r =>
     !search ||
     (r.city || "").toLowerCase().includes(search.toLowerCase()) ||
     (r.name_on_file || "").toLowerCase().includes(search.toLowerCase()) ||
@@ -410,7 +415,7 @@ export default function Municipalities() {
 
     setRows(prev => {
       const next = [...prev];
-      const filteredRows = next.filter(r =>
+      const filteredRows = scopeFilter(next, companyScope).filter(r =>
         !search ||
         (r.city || "").toLowerCase().includes(search.toLowerCase()) ||
         (r.name_on_file || "").toLowerCase().includes(search.toLowerCase()) ||
@@ -443,7 +448,7 @@ export default function Municipalities() {
     autosaveTimer.current = setTimeout(saveAll, 2000);
     setPasteFlash(true);
     setTimeout(() => setPasteFlash(false), 1000);
-  }, [selection, search, columns]);
+  }, [selection, search, columns, companyScope]);
 
   useEffect(() => {
     const handler = async (e) => {
@@ -471,7 +476,7 @@ export default function Municipalities() {
 
         setRows(prev => {
           const next = [...prev];
-          const filteredRows = next.filter(r =>
+          const filteredRows = scopeFilter(next, companyScope).filter(r =>
             !search ||
             (r.city || "").toLowerCase().includes(search.toLowerCase()) ||
             (r.name_on_file || "").toLowerCase().includes(search.toLowerCase()) ||
@@ -502,7 +507,7 @@ export default function Municipalities() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [selection, search, columns]);
+  }, [selection, search, columns, companyScope]);
 
   if (loading) {
     return (
