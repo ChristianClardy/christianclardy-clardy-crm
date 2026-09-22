@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import { syncClientContactToLeads } from "@/lib/leadConversion";
 import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
@@ -111,6 +112,7 @@ export default function ClientDetail() {
     e.preventDefault();
     const fullName = [formData.first_name, formData.last_name].filter(Boolean).join(" ").trim() || formData.name;
     await base44.entities.Client.update(clientId, { ...formData, name: fullName, sync_locked: true });
+    await syncClientContactToLeads(clientId, { ...formData, name: fullName });
     setIsEditDialogOpen(false);
     loadData();
   };

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
+import { syncClientContactToLeads } from "@/lib/leadConversion";
 import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
@@ -205,6 +206,7 @@ export default function Clients() {
     };
     if (editingClient) {
       await base44.entities.Client.update(editingClient.id, payload);
+      await syncClientContactToLeads(editingClient.id, payload);
     } else {
       // Auto-assign next customer number
       const maxNum = clients.reduce((max, c) => {

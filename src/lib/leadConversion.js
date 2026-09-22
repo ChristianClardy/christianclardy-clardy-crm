@@ -89,6 +89,28 @@ export async function syncLeadContactToClient(lead, patch) {
   }
 }
 
+/**
+ * The reverse of syncLeadContactToClient: copies a Client's contact info
+ * onto every Lead linked to it, so an edit made from the contact book
+ * reaches contracts (ContractsPanel reads the Lead first). Blank client
+ * values are skipped rather than wiping the lead's copy.
+ */
+export async function syncClientContactToLeads(clientId, client) {
+  if (!clientId || !client) return;
+  const leadPatch = {};
+  for (const [leadField, clientField] of Object.entries(LEAD_TO_CLIENT_FIELDS)) {
+    const value = typeof client[clientField] === "string" ? client[clientField].trim() : client[clientField];
+    if (value) leadPatch[leadField] = value;
+  }
+  if (Object.keys(leadPatch).length === 0) return;
+  try {
+    const leads = await base44.entities.Lead.filter({ linked_contact_id: clientId });
+    await Promise.all((leads || []).map((l) => base44.entities.Lead.update(l.id, leadPatch)));
+  } catch (err) {
+    console.error("Failed to sync client contact info to leads:", err?.message || err);
+  }
+}
+
 // Finds the Deal already pushed to the Pipeline board for this Lead, if any,
 // so winning a lead twice (or a stray re-render) updates it instead of
 // creating a duplicate.
