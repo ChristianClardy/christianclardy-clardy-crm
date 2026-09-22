@@ -57,6 +57,38 @@ export async function ensureContactForLead(lead) {
   return client;
 }
 
+// Lead field -> Client field for the contact info a Lead owns. The Lead is
+// the main contact; its linked Client is what contracts, projects and
+// estimates read from, so it has to follow edits made on the Lead.
+const LEAD_TO_CLIENT_FIELDS = {
+  full_name: "name",
+  email: "email",
+  phone: "phone",
+  property_address: "address",
+};
+
+/**
+ * Copies a Lead's contact-info edits (name/email/phone/property address)
+ * onto its linked Client record. `patch` is the set of lead fields just
+ * saved; fields not in it are left alone. No-op if the lead has no linked
+ * contact yet or the patch touches no contact fields.
+ */
+export async function syncLeadContactToClient(lead, patch) {
+  const clientId = patch?.linked_contact_id ?? lead?.linked_contact_id;
+  if (!clientId) return;
+  const clientPatch = {};
+  for (const [leadField, clientField] of Object.entries(LEAD_TO_CLIENT_FIELDS)) {
+    if (patch && leadField in patch) clientPatch[clientField] = patch[leadField] || "";
+  }
+  if (!clientPatch.name && "name" in clientPatch) delete clientPatch.name;
+  if (Object.keys(clientPatch).length === 0) return;
+  try {
+    await base44.entities.Client.update(clientId, clientPatch);
+  } catch (err) {
+    console.error("Failed to sync lead contact info to client:", err?.message || err);
+  }
+}
+
 // Finds the Deal already pushed to the Pipeline board for this Lead, if any,
 // so winning a lead twice (or a stray re-render) updates it instead of
 // creating a duplicate.

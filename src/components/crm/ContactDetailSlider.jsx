@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { promoteLeadToProspect } from "@/lib/leadConversion";
+import { promoteLeadToProspect, syncLeadContactToClient } from "@/lib/leadConversion";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -325,6 +325,7 @@ export default function ContactDetailSlider({ lead, onClose, onUpdate }) {
     if (!lead) return;
     try {
       await base44.entities.Lead.update(lead.id, { [field]: value });
+      await syncLeadContactToClient(lead, { [field]: value });
       onUpdate?.({ ...lead, [field]: value });
     } catch (err) {
       console.error("Failed to update:", err?.message);

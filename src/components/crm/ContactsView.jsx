@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { base44 } from "@/api/base44Client";
+import { syncLeadContactToClient } from "@/lib/leadConversion";
 import {
   Plus, Search, Phone, Mail, CalendarDays, UserRound,
   LayoutList, Columns3, Filter, ChevronDown,
@@ -234,6 +235,7 @@ export default function ContactsView() {
     setLeads(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
     if (selectedLead?.id === id) setSelectedLead(prev => ({ ...prev, ...patch }));
     await base44.entities.Lead.update(id, patch);
+    await syncLeadContactToClient(leads.find((l) => l.id === id), patch);
   };
 
   if (loading) return <div className="flex items-center justify-center py-20"><div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-amber-500" /></div>;

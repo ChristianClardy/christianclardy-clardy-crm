@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLeadSources } from "@/lib/leadSources";
-import { ensureContactForLead } from "@/lib/leadConversion";
+import { ensureContactForLead, syncLeadContactToClient } from "@/lib/leadConversion";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 
 const initialForm = {
@@ -114,6 +114,7 @@ export default function LeadFormDialog({ open, onOpenChange, onCreated, lead = n
     try {
       if (isEditing) {
         await base44.entities.Lead.update(lead.id, payload);
+        await syncLeadContactToClient(lead, payload);
       } else {
         const hasAppointment = scheduleAppointment && appointment.date && appointment.start_time;
         const createdLead = await base44.entities.Lead.create({

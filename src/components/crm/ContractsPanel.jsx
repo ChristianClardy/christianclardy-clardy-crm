@@ -17,9 +17,9 @@ import { generateContractPdf } from "@/lib/generateContractPdf";
 // a Deal first; api/_lib/dealAutomation.js creates/advances the Deal
 // automatically once the envelope comes back signed).
 //
-// Customer info is resolved via lead.linked_contact_id -> clients — a Lead
-// (or a Deal with no lead_id) with no linked contact simply has nothing to
-// merge from client.* sources. project.* and estimate.* sources merge from
+// Customer info is resolved via lead.linked_contact_id -> clients, with the
+// Lead's own name/email/phone/address layered on top (the Lead is the main
+// contact) — that also pre-fills the first signer. project.* and estimate.* sources merge from
 // the client's most recent project/estimate (estimate.* prefers whichever
 // estimate is checked below). selections.* sources merge from that same
 // project's Pool Selections record (src/components/projects/PoolSelectionsPanel.jsx),
@@ -78,7 +78,19 @@ export default function ContractsPanel({ lead, deal = null }) {
         : [null, []];
       if (cancelled) return;
       const resolvedCompany = (lead?.company_id && comps.find((c) => c.id === lead.company_id)) || comps[0] || null;
-      setClient(resolvedClient);
+      // The Lead is the main contact — its name/email/phone/address win over
+      // the linked Client's, so an edit made on the Lead (e.g. switching the
+      // signer to a spouse) shows up here even if the Client record lags.
+      const contactClient = lead
+        ? {
+            ...(resolvedClient || {}),
+            name: lead.full_name?.trim() || resolvedClient?.name || "",
+            email: lead.email?.trim() || resolvedClient?.email || "",
+            phone: lead.phone?.trim() || resolvedClient?.phone || "",
+            address: lead.property_address?.trim() || resolvedClient?.address || "",
+          }
+        : resolvedClient;
+      setClient(contactClient);
       setCompany(resolvedCompany);
       setProject(resolvedProject);
       setSelections(resolvedSelections);
@@ -86,11 +98,11 @@ export default function ContractsPanel({ lead, deal = null }) {
       setContractTemplates((templates || []).filter((t) => t.is_active !== false));
       setDocuments(docs || []);
       setEstimates(ests || []);
-      setSigners(resolvedClient?.email ? [{ name: resolvedClient.name || "", email: resolvedClient.email }] : [{ name: "", email: "" }]);
+      setSigners([{ name: contactClient?.name || "", email: contactClient?.email || "" }]);
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [deal?.id, lead?.id]);
+  }, [deal?.id, lead?.id, lead?.full_name, lead?.email, lead?.phone, lead?.property_address]);
 
   // Merge fields for estimate.* sources use whichever estimate is checked in
   // the picker below, falling back to the client's most recent estimate.
