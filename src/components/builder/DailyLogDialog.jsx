@@ -18,11 +18,11 @@ import {
 
 const today = () => new Date().toLocaleDateString("en-CA");
 
-const emptyLog = (projectId, user) => ({
+const emptyLog = (projectId, user, subIds = []) => ({
   project_id: projectId || "",
   log_date: today(),
   site_supervisor: user?.full_name || "",
-  subcontractor_ids: [],
+  subcontractor_ids: subIds,
   crew_notes: "",
   checklist: {},
   permanent_inspection: false,
@@ -45,7 +45,7 @@ const STATE_BUTTONS = [
   { value: "na", icon: Minus, label: "N/A", active: "bg-slate-500 text-white border-slate-500" },
 ];
 
-export default function DailyLogDialog({ open, onOpenChange, log, projects, subcontractors, user, defaultProjectId, onSaved }) {
+export default function DailyLogDialog({ open, onOpenChange, log, projects, subcontractors, user, defaultProjectId, defaultSubIds, onSaved }) {
   const [form, setForm] = useState(emptyLog(defaultProjectId, user));
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -53,7 +53,7 @@ export default function DailyLogDialog({ open, onOpenChange, log, projects, subc
 
   useEffect(() => {
     if (!open) return;
-    setForm(log ? { ...emptyLog(null, user), ...log, checklist: log.checklist || {}, photos: log.photos || [], subcontractor_ids: log.subcontractor_ids || [] } : emptyLog(defaultProjectId, user));
+    setForm(log ? { ...emptyLog(null, user), ...log, checklist: log.checklist || {}, photos: log.photos || [], subcontractor_ids: log.subcontractor_ids || [] } : emptyLog(defaultProjectId, user, defaultSubIds || []));
   }, [open, log, defaultProjectId, user]);
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));

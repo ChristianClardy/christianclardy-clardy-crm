@@ -32,6 +32,9 @@ import MaterialLibraryPage from './pages/MaterialLibrary';
 import DocuSignCallback from './pages/DocuSignCallback';
 import DocuSignSenderReturn from './pages/DocuSignSenderReturn';
 import QuickBooksCallback from './pages/QuickBooksCallback';
+import BuilderPortal from './pages/BuilderPortal';
+import SubPortalLayout from './components/app/SubPortalLayout';
+import { usePortalUser } from '@/lib/portalUser';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -52,14 +55,15 @@ const isInviteFlow = (() => {
 })();
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, user } = useAuth();
   const { loading: tenantLoading, needsOnboarding } = useTenant();
+  const { loading: portalLoading, portalUser, isStaff } = usePortalUser(isAuthenticated ? user?.id : null);
 
   // Invite link clicked — show password-set screen regardless of auth state
   if (isInviteFlow) return <SetPassword />;
 
   // Show loading spinner while checking auth or tenant
-  if (isLoadingPublicSettings || isLoadingAuth || (isAuthenticated && tenantLoading)) {
+  if (isLoadingPublicSettings || isLoadingAuth || (isAuthenticated && (tenantLoading || portalLoading))) {
     return (
       <div className="fixed inset-0 flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
@@ -76,6 +80,19 @@ const AuthenticatedApp = () => {
       </Routes>
     );
   }
+
+  // Subcontractor login — portal only, no CRM. Checked before onboarding
+  // since subs never belong to an organization.
+  if (portalUser) {
+    return (
+      <Routes>
+        <Route path="*" element={<SubPortalApp portalUser={portalUser} />} />
+      </Routes>
+    );
+  }
+
+  // Signed up on their own instead of being invited — no access to anything.
+  if (!isStaff) return <NoAccess />;
 
   // Authenticated but no org — show onboarding
   if (needsOnboarding) {
@@ -128,6 +145,32 @@ const AuthenticatedApp = () => {
   );
 };
 
+const NoAccess = () => {
+  const { user, logout } = useAuth();
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: "#f5f0eb", fontFamily: "'Georgia', serif" }}>
+      <div className="max-w-sm text-center space-y-4">
+        <h1 className="text-xl font-bold" style={{ color: "#3d3530" }}>No access yet</h1>
+        <p className="text-sm" style={{ color: "#7a6e66" }}>
+          {user?.email} isn't set up in Clardy. Ask your Principle Outdoor Living admin to send you an invite, then sign in with the link in that email.
+        </p>
+        <button onClick={() => logout()} className="text-sm font-semibold hover:underline" style={{ color: "#b5965a" }}>Sign out</button>
+      </div>
+    </div>
+  );
+};
+
+const SubPortalApp = ({ portalUser }) => (
+  <SubPortalLayout subcontractorName={portalUser.full_name}>
+    {portalUser.active && portalUser.subcontractor_id ? (
+      <BuilderPortal portal={portalUser} />
+    ) : (
+      <div className="max-w-md mx-auto p-8 text-center text-sm" style={{ color: "#7a6e66" }}>
+        Your Builder Portal access has been turned off. Contact your Principle Outdoor Living project manager if you think this is a mistake.
+      </div>
+    )}
+  </SubPortalLayout>
+);
 
 function App() {
 

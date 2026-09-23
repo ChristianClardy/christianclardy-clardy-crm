@@ -21,6 +21,7 @@ import CompanyManager from "@/components/company/CompanyManager";
 import OrganizationTab from "@/components/settings/OrganizationTab";
 import TemplatesTab from "@/components/settings/TemplatesTab";
 import { useAuth } from "@/lib/AuthContext";
+import { sendInvite } from "@/lib/sendInvite";
 import { DEFAULT_LEAD_SOURCE_OPTIONS, fetchCustomLeadSources, addCustomLeadSource, removeCustomLeadSource } from "@/lib/leadSources";
 import { fetchDesigners, addDesigner, removeDesigner } from "@/lib/designers";
 import SubcontractorsTab from "@/components/settings/SubcontractorsTab";
@@ -393,13 +394,7 @@ function InviteTab() {
     setError("");
     setSuccess(false);
     try {
-      const res = await fetch("/api/invite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: inviteEmail, full_name: inviteFullName }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Invite failed.");
+      await sendInvite({ email: inviteEmail, fullName: inviteFullName });
       if (createEmployee) {
         const existing = await base44.entities.Employee.filter({ email: inviteEmail });
         if (existing.length === 0) {

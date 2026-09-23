@@ -11,28 +11,31 @@ import { SUB_REQUIREMENTS, ACKNOWLEDGMENT_TEXT } from "@/lib/barrierChecklist";
 
 const NO_PROJECT = "__none__";
 
-const emptyAck = (subId, user) => ({
+const emptyAck = (subId, user, portalMode) => ({
   subcontractor_id: subId || "",
   project_id: "",
   project_manager: "",
   authorized_representative: "",
   signature_name: "",
   signed_date: new Date().toLocaleDateString("en-CA"),
-  principle_representative: user?.full_name || "",
+  authorized_representative: portalMode ? user?.full_name || "" : "",
+  principle_representative: portalMode ? "" : user?.full_name || "",
   principle_signature_name: "",
   document_url: "",
   notes: "",
 });
 
-export default function SubAcknowledgmentDialog({ open, onOpenChange, ack, defaultSubId, subcontractors, projects, user, onSaved }) {
+// portalMode: a subcontractor is signing for themselves. The sub is fixed and
+// the Principle countersignature fields are hidden (staff fill those in).
+export default function SubAcknowledgmentDialog({ open, onOpenChange, ack, defaultSubId, subcontractors, projects, user, portalMode = false, onSaved }) {
   const [form, setForm] = useState(emptyAck(defaultSubId, user));
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef();
 
   useEffect(() => {
-    if (open) setForm(ack ? { ...emptyAck(null, user), ...ack } : emptyAck(defaultSubId, user));
-  }, [open, ack, defaultSubId, user]);
+    if (open) setForm(ack ? { ...emptyAck(null, user, portalMode), ...ack } : emptyAck(defaultSubId, user, portalMode));
+  }, [open, ack, defaultSubId, user, portalMode]);
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
 
@@ -81,7 +84,7 @@ export default function SubAcknowledgmentDialog({ open, onOpenChange, ack, defau
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <Label>Subcontractor</Label>
-            <Select value={form.subcontractor_id || ""} onValueChange={(v) => set({ subcontractor_id: v })}>
+            <Select value={form.subcontractor_id || ""} onValueChange={(v) => set({ subcontractor_id: v })} disabled={portalMode}>
               <SelectTrigger><SelectValue placeholder="Select subcontractor" /></SelectTrigger>
               <SelectContent>
                 {subcontractors.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
@@ -128,14 +131,18 @@ export default function SubAcknowledgmentDialog({ open, onOpenChange, ack, defau
             <Label>Subcontractor signature (typed)</Label>
             <Input className="font-serif italic" value={form.signature_name || ""} onChange={(e) => set({ signature_name: e.target.value })} />
           </div>
-          <div>
-            <Label>Principle representative</Label>
-            <Input value={form.principle_representative || ""} onChange={(e) => set({ principle_representative: e.target.value })} />
-          </div>
-          <div>
-            <Label>Principle signature (typed)</Label>
-            <Input className="font-serif italic" value={form.principle_signature_name || ""} onChange={(e) => set({ principle_signature_name: e.target.value })} />
-          </div>
+          {!portalMode && (
+            <>
+              <div>
+                <Label>Principle representative</Label>
+                <Input value={form.principle_representative || ""} onChange={(e) => set({ principle_representative: e.target.value })} />
+              </div>
+              <div>
+                <Label>Principle signature (typed)</Label>
+                <Input className="font-serif italic" value={form.principle_signature_name || ""} onChange={(e) => set({ principle_signature_name: e.target.value })} />
+              </div>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -154,10 +161,12 @@ export default function SubAcknowledgmentDialog({ open, onOpenChange, ack, defau
 
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving || uploading} style={{ backgroundColor: "#b5965a", color: "#f5f0eb" }}>
-            {saving && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
-            Save acknowledgment
-          </Button>
+          {!(portalMode && ack?.id) && (
+            <Button onClick={handleSave} disabled={saving || uploading} style={{ backgroundColor: "#b5965a", color: "#f5f0eb" }}>
+              {saving && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
+              {portalMode ? "Sign and submit" : "Save acknowledgment"}
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

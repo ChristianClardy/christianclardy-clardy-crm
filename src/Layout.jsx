@@ -30,6 +30,7 @@ import { useState } from "react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import OverdueAppointmentGate from "@/components/scheduling/OverdueAppointmentGate";
 import CompanyScopeSwitcher from "@/components/company/CompanyScopeSwitcher";
+import InstallAppButton from "@/components/app/InstallAppButton";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/ThemeContext";
 import { useTenant } from "@/lib/TenantContext";
@@ -185,6 +186,10 @@ export default function Layout({ children, currentPageName }) {
 
       {/* Footer */}
       <div className="p-4" style={{ borderTop: "1px solid var(--brand-sidebar-border)" }}>
+        <InstallAppButton
+          className="w-full mb-2 flex items-center justify-center gap-2 px-3 py-2 rounded text-xs tracking-wide transition-colors"
+          style={{ border: "1px solid var(--brand-sidebar-border)", color: "var(--brand-gold-light)" }}
+        />
         <div className="px-4 py-2 flex items-center justify-between rounded" style={{ backgroundColor: "var(--brand-sidebar-footer)" }}>
           <div>
             <p className="text-xs tracking-widest uppercase" style={{ color: "var(--brand-gold)", letterSpacing: "0.12em" }}>Clardy.io</p>
@@ -259,6 +264,7 @@ export default function Layout({ children, currentPageName }) {
             <span className="font-bold tracking-widest uppercase text-sm" style={{ color: "#f5f0eb" }}>Clardy.io</span>
           </div>
           <div className="flex items-center gap-2">
+            <InstallAppButton label="" className="p-1.5 rounded" style={{ color: "var(--brand-gold-light)" }} />
             <button
               onClick={toggleTheme}
               className="p-1.5 rounded"

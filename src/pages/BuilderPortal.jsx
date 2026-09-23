@@ -1,19 +1,28 @@
 import { useEffect, useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { HardHat, Plus, Camera, AlertTriangle, CheckCircle2, Clock, FileSignature, ImageIcon, X } from "lucide-react";
+import { HardHat, Plus, Camera, AlertTriangle, CheckCircle2, Clock, FileSignature, ImageIcon, X, Smartphone } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
-import { logStatus, STATUS_STYLES } from "@/lib/barrierChecklist";
+import { logStatus, STATUS_STYLES, SUB_REQUIREMENTS } from "@/lib/barrierChecklist";
 import DailyLogDialog from "@/components/builder/DailyLogDialog";
 import SubAcknowledgmentDialog from "@/components/builder/SubAcknowledgmentDialog";
+import SubAccessDialog from "@/components/builder/SubAccessDialog";
 
-const TABS = [
+const STAFF_TABS = [
   { key: "today", label: "Today" },
   { key: "logs", label: "Daily Logs" },
   { key: "photos", label: "Progress Photos" },
   { key: "subs", label: "Subcontractor Compliance" },
+];
+
+const PORTAL_TABS = [
+  { key: "today", label: "Today" },
+  { key: "logs", label: "Daily Logs" },
+  { key: "photos", label: "Photos" },
+  { key: "policy", label: "Barrier Policy" },
 ];
 
 const ALL = "__all__";
@@ -31,8 +40,14 @@ function StatusBadge({ log }) {
   );
 }
 
-export default function BuilderPortal() {
-  const scope = useCompanyScope();
+// `portal` is the subcontractor_portal_users row when a subcontractor is signed
+// in (see App.jsx); staff get the full view with no prop. In portal mode the
+// database policies already limit every query to the sub's assigned jobs.
+export default function BuilderPortal({ portal = null }) {
+  const isPortal = !!portal;
+  const TABS = isPortal ? PORTAL_TABS : STAFF_TABS;
+  const companyScope = useCompanyScope();
+  const scope = isPortal ? "all" : companyScope;
   const [tab, setTab] = useState("today");
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
@@ -40,24 +55,35 @@ export default function BuilderPortal() {
   const [subcontractors, setSubcontractors] = useState([]);
   const [logs, setLogs] = useState([]);
   const [acks, setAcks] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [portalUsers, setPortalUsers] = useState([]);
+  const [accessDialogSub, setAccessDialogSub] = useState(null);
   const [projectFilter, setProjectFilter] = useState(ALL);
   const [logDialog, setLogDialog] = useState({ open: false, log: null, projectId: null });
   const [ackDialog, setAckDialog] = useState({ open: false, ack: null, subId: null });
   const [lightbox, setLightbox] = useState(null);
 
   const load = async () => {
-    const [me, p, s, l, a] = await Promise.all([
+    const [me, p, s, l, a, asg, pu] = await Promise.all([
       base44.auth.me().catch(() => null),
-      base44.entities.Project.list("-created_date", 1000).catch(() => []),
-      base44.entities.Subcontractor.list("name", 1000).catch(() => []),
+      isPortal
+        ? supabase.rpc("sub_portal_projects").then(({ data }) => data || [])
+        : base44.entities.Project.list("-created_date", 1000).catch(() => []),
+      isPortal
+        ? base44.entities.Subcontractor.filter({ id: portal.subcontractor_id }).catch(() => [])
+        : base44.entities.Subcontractor.list("name", 1000).catch(() => []),
       base44.entities.BarrierDailyLog.list("-log_date", 2000).catch(() => []),
       base44.entities.SubBarrierAck.list("-signed_date", 1000).catch(() => []),
+      isPortal ? [] : base44.entities.ProjectSubcontractor.list().catch(() => []),
+      isPortal ? [] : base44.entities.SubcontractorPortalUser.list("email").catch(() => []),
     ]);
     setUser(me);
     setProjects(p);
-    setSubcontractors(s.filter((x) => x.status !== "inactive"));
+    setSubcontractors(isPortal ? s : s.filter((x) => x.status !== "inactive"));
     setLogs(l);
     setAcks(a);
+    setAssignments(asg);
+    setPortalUsers(pu);
     setLoading(false);
   };
 
@@ -115,7 +141,9 @@ export default function BuilderPortal() {
           <h1 className="text-2xl lg:text-3xl font-bold flex items-center gap-2" style={{ color: "#3d3530" }}>
             <HardHat className="w-7 h-7" style={{ color: "#b5965a" }} /> Builder Portal
           </h1>
-          <p className="text-sm mt-1" style={{ color: "#7a6e66" }}>Daily progress photos & Pool Barrier Safety compliance</p>
+          <p className="text-sm mt-1" style={{ color: "#7a6e66" }}>
+            {isPortal ? `${subcontractors[0]?.name || "Subcontractor"} · daily logs, photos & barrier policy` : "Daily progress photos & Pool Barrier Safety compliance"}
+          </p>
         </div>
         <Button onClick={() => openLog(null, projectFilter !== ALL ? projectFilter : null)} className="gap-2" style={{ backgroundColor: "#b5965a", color: "#f5f0eb" }}>
           <Plus className="w-4 h-4" /> New daily log
@@ -127,7 +155,11 @@ export default function BuilderPortal() {
         <Tile icon={Clock} label="Active jobs logged today" value={`${new Set(todaysLogs.map((l) => l.project_id)).size} / ${activeProjects.length}`} />
         <Tile icon={AlertTriangle} label="Open deficiencies" value={openDeficiencies.length} alert={openDeficiencies.length > 0} onClick={() => setTab("logs")} />
         <Tile icon={Camera} label="Photos today" value={todaysLogs.reduce((n, l) => n + (l.photos?.length || 0), 0)} />
-        <Tile icon={FileSignature} label="Subs without signed policy" value={subcontractors.filter((s) => !latestAckBySub[s.id]).length} alert={unsignedOnSiteToday.length > 0} onClick={() => setTab("subs")} />
+        {isPortal ? (
+          <Tile icon={FileSignature} label="Barrier policy" value={latestAckBySub[portal.subcontractor_id] ? "Signed" : "Not signed"} alert={!latestAckBySub[portal.subcontractor_id]} onClick={() => setTab("policy")} />
+        ) : (
+          <Tile icon={FileSignature} label="Subs without signed policy" value={subcontractors.filter((s) => !latestAckBySub[s.id]).length} alert={unsignedOnSiteToday.length > 0} onClick={() => setTab("subs")} />
+        )}
       </div>
 
       {/* Tabs */}
@@ -142,13 +174,21 @@ export default function BuilderPortal() {
 
       {tab === "today" && (
         <div className="space-y-3">
-          {unsignedOnSiteToday.length > 0 && (
+          {!isPortal && unsignedOnSiteToday.length > 0 && (
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
               <span>On site today without a signed barrier policy acknowledgment: <strong>{unsignedOnSiteToday.map((id) => subById[id]?.name || "Unknown").join(", ")}</strong></span>
             </div>
           )}
-          {activeProjects.length === 0 && <Empty text="No active projects (planning / in progress / on hold) in this company scope." />}
+          {isPortal && !latestAckBySub[portal.subcontractor_id] && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center justify-between gap-3">
+              <span className="flex items-start gap-2"><AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />Sign the Pool Barrier Safety policy before working on a Principle pool or spa job.</span>
+              <Button size="sm" onClick={() => setAckDialog({ open: true, ack: null, subId: portal.subcontractor_id })} className="shrink-0" style={{ backgroundColor: "#b5965a", color: "#f5f0eb" }}>Sign now</Button>
+            </div>
+          )}
+          {activeProjects.length === 0 && (
+            <Empty text={isPortal ? "You haven't been assigned to any active jobs yet. Your Principle project manager assigns jobs." : "No active projects (planning / in progress / on hold) in this company scope."} />
+          )}
           {activeProjects.map((p) => {
             const log = todaysLogs.find((l) => l.project_id === p.id);
             return (
@@ -210,7 +250,7 @@ export default function BuilderPortal() {
                   {(l.photos || []).slice(0, 3).map((ph) => <img key={ph.url} src={ph.url} alt="" className="w-9 h-9 rounded object-cover" />)}
                   {(l.photos?.length || 0) > 3 && <span className="text-xs text-slate-500">+{l.photos.length - 3}</span>}
                   <StatusBadge log={l} />
-                  <button onClick={(e) => { e.stopPropagation(); deleteLog(l); }} className="text-xs text-slate-400 hover:text-red-600 px-1">Delete</button>
+                  {!isPortal && <button onClick={(e) => { e.stopPropagation(); deleteLog(l); }} className="text-xs text-slate-400 hover:text-red-600 px-1">Delete</button>}
                 </div>
               </li>
             ))}
@@ -251,6 +291,8 @@ export default function BuilderPortal() {
             <ul className="divide-y divide-slate-100">
               {subcontractors.map((s) => {
                 const ack = latestAckBySub[s.id];
+                const jobCount = assignments.filter((a) => a.subcontractor_id === s.id).length;
+                const loginCount = portalUsers.filter((u) => u.subcontractor_id === s.id && u.active).length;
                 const lastOnSite = scopedLogs.find((l) => (l.subcontractor_ids || []).includes(s.id));
                 return (
                   <li key={s.id} className="flex flex-col sm:flex-row sm:items-center gap-2 px-4 py-3">
@@ -260,6 +302,7 @@ export default function BuilderPortal() {
                         {ack ? `Signed ${fmtDate(ack.signed_date)}${ack.authorized_representative ? ` by ${ack.authorized_representative}` : ""}${ack.project_id ? ` · ${projectById[ack.project_id]?.name || "project"}` : " · all projects"}` : "No signed acknowledgment on file"}
                         {lastOnSite && ` · Last on site ${fmtDate(lastOnSite.log_date)}`}
                       </p>
+                      <p className="text-xs text-slate-500">{jobCount} job{jobCount !== 1 ? "s" : ""} assigned · {loginCount} app login{loginCount !== 1 ? "s" : ""}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       {ack ? (
@@ -271,6 +314,9 @@ export default function BuilderPortal() {
                       <Button size="sm" variant="outline" onClick={() => setAckDialog({ open: true, ack: ack || null, subId: s.id })}>
                         {ack ? "View" : "Record"}
                       </Button>
+                      <Button size="sm" variant="outline" onClick={() => setAccessDialogSub(s)}>
+                        <Smartphone className="w-4 h-4 mr-1" /> Jobs & app
+                      </Button>
                     </div>
                   </li>
                 );
@@ -280,6 +326,30 @@ export default function BuilderPortal() {
         </div>
       )}
 
+      {tab === "policy" && isPortal && (() => {
+        const ack = latestAckBySub[portal.subcontractor_id];
+        return (
+          <div className="space-y-4">
+            <div className={cn("rounded-xl border px-4 py-3 flex items-center justify-between gap-3", ack ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50")}>
+              <p className={cn("text-sm", ack ? "text-emerald-700" : "text-red-700")}>
+                {ack ? `Signed ${fmtDate(ack.signed_date)}${ack.authorized_representative ? ` by ${ack.authorized_representative}` : ""}.` : "Not signed yet."}
+              </p>
+              {!ack && (
+                <Button size="sm" onClick={() => setAckDialog({ open: true, ack: null, subId: portal.subcontractor_id })} style={{ backgroundColor: "#b5965a", color: "#f5f0eb" }}>Sign policy</Button>
+              )}
+            </div>
+            <div className="rounded-xl border bg-white p-4 space-y-3" style={{ borderColor: "#ddd5c8" }}>
+              <h3 className="font-semibold text-slate-900">Mandatory Subcontractor Requirements: Pool Construction Barrier Safety</h3>
+              <ol className="space-y-2 list-decimal list-inside">
+                {SUB_REQUIREMENTS.map(([title, body]) => (
+                  <li key={title} className="text-sm text-slate-600"><span className="font-medium text-slate-800">{title}.</span> {body}</li>
+                ))}
+              </ol>
+            </div>
+          </div>
+        );
+      })()}
+
       <DailyLogDialog
         open={logDialog.open}
         onOpenChange={(open) => setLogDialog((d) => ({ ...d, open }))}
@@ -287,6 +357,7 @@ export default function BuilderPortal() {
         defaultProjectId={logDialog.projectId}
         projects={scopedProjects}
         subcontractors={subcontractors}
+        defaultSubIds={isPortal ? [portal.subcontractor_id] : []}
         user={user}
         onSaved={onLogSaved}
       />
@@ -298,8 +369,20 @@ export default function BuilderPortal() {
         subcontractors={subcontractors}
         projects={scopedProjects}
         user={user}
+        portalMode={isPortal}
         onSaved={onAckSaved}
       />
+      {!isPortal && (
+        <SubAccessDialog
+          sub={accessDialogSub}
+          onOpenChange={(open) => { if (!open) setAccessDialogSub(null); }}
+          projects={scopedProjects}
+          assignments={assignments}
+          portalUsers={portalUsers}
+          onAssignmentsChange={setAssignments}
+          onPortalUsersChange={setPortalUsers}
+        />
+      )}
 
       {lightbox && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>

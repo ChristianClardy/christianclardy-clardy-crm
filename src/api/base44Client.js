@@ -59,6 +59,8 @@ const TABLE_MAP = {
   CRMActivity:            'crm_activities',
   BarrierDailyLog:        'barrier_daily_logs',
   SubBarrierAck:          'subcontractor_barrier_acknowledgments',
+  SubcontractorPortalUser: 'subcontractor_portal_users',
+  ProjectSubcontractor:   'project_subcontractors',
 };
 
 // ─── Field name compatibility ────────────────────────────────────────────────
@@ -440,4 +442,6 @@ export const {
   CRMActivity,
   BarrierDailyLog,
   SubBarrierAck,
+  SubcontractorPortalUser,
+  ProjectSubcontractor,
 } = entities;

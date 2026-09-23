@@ -1,16 +1,17 @@
 {
+  "id": "/",
   "name": "Clardy.io",
   "short_name": "Clardy",
-  "description": "Clardy CRM — landscaping and construction project management",
-  "start_url": "/",
+  "description": "Clardy CRM and Builder Portal: daily jobsite logs, progress photos, and pool barrier compliance",
+  "start_url": "/BuilderPortal?source=app",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#0f172a",
+  "orientation": "any",
+  "background_color": "#3d3530",
+  "theme_color": "#3d3530",
   "icons": [
-    {
-      "src": "/favicon.svg",
-      "type": "image/svg+xml",
-      "sizes": "any"
-    }
+    { "src": "/icons/icon-192.png", "type": "image/png", "sizes": "192x192", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" }
   ]
 }
