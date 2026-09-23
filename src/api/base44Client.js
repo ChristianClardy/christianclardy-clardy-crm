@@ -57,6 +57,8 @@ const TABLE_MAP = {
   Deal:                   'deals',
   CRMCompany:             'crm_companies',
   CRMActivity:            'crm_activities',
+  BarrierDailyLog:        'barrier_daily_logs',
+  SubBarrierAck:          'subcontractor_barrier_acknowledgments',
 };
 
 // ─── Field name compatibility ────────────────────────────────────────────────
@@ -143,6 +145,7 @@ const COMPANY_SCOPED_TABLES = new Set([
   'leads', 'clients', 'estimates', 'invoices', 'payments', 'calendar_events',
   'tasks', 'change_orders', 'draws', 'sub_invoices',
   'projects', 'documents', 'municipalities',
+  'barrier_daily_logs', 'subcontractor_barrier_acknowledgments',
 ]);
 
 export function setCurrentOrgId(id) {
@@ -435,4 +438,6 @@ export const {
   Deal,
   CRMCompany,
   CRMActivity,
+  BarrierDailyLog,
+  SubBarrierAck,
 } = entities;

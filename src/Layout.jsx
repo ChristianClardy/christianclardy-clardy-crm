@@ -47,6 +47,7 @@ export default function Layout({ children, currentPageName }) {
     { name: "Dashboard", href: createPageUrl("Dashboard"), icon: LayoutDashboard },
     { name: "Sales Dashboard", href: createPageUrl("SalesDashboard"), icon: CheckSquare },
     { name: "Projects", href: createPageUrl("Projects"), icon: FolderKanban },
+    { name: "Builder Portal", href: createPageUrl("BuilderPortal"), icon: HardHat },
     {
       name: "CRM",
       href: createPageUrl("CRM"),
