@@ -59,19 +59,26 @@ export default function PhotoGallery({ projectId }) {
     e.preventDefault();
     if (!selectedFile) return;
     setUploading(true);
-    const { file_url } = await base44.integrations.Core.UploadFile({ file: selectedFile });
-    await base44.entities.ProjectPhoto.create({
-      project_id: projectId,
-      url: file_url,
-      category: formData.category,
-      caption: formData.caption,
-    });
-    setIsDialogOpen(false);
-    setSelectedFile(null);
-    setPreviewUrl(null);
-    setFormData({ category: "during", caption: "" });
-    loadPhotos();
-    setUploading(false);
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file: selectedFile });
+      // project_photos stores the before/during/after category in its `phase` column.
+      await base44.entities.ProjectPhoto.create({
+        project_id: projectId,
+        url: file_url,
+        filename: selectedFile.name,
+        phase: formData.category,
+        caption: formData.caption,
+      });
+      setIsDialogOpen(false);
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      setFormData({ category: "during", caption: "" });
+      loadPhotos();
+    } catch (err) {
+      console.error("Photo upload failed", err);
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleDelete = async (id) => {
@@ -88,9 +95,9 @@ export default function PhotoGallery({ projectId }) {
     setIsDialogOpen(true);
   };
 
-  const filtered = activeCategory === "all" ? photos : photos.filter((p) => p.category === activeCategory);
+  const filtered = activeCategory === "all" ? photos : photos.filter((p) => p.phase === activeCategory);
 
-  const countByCategory = (cat) => photos.filter((p) => p.category === cat).length;
+  const countByCategory = (cat) => photos.filter((p) => p.phase === cat).length;
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-6">
@@ -143,7 +150,7 @@ export default function PhotoGallery({ projectId }) {
       ) : filtered.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
           {filtered.map((photo) => {
-            const cat = CATEGORIES.find((c) => c.value === photo.category);
+            const cat = CATEGORIES.find((c) => c.value === photo.phase);
             return (
               <div
                 key={photo.id}
@@ -271,7 +278,7 @@ export default function PhotoGallery({ projectId }) {
             />
             <div className="flex items-center gap-3">
               {(() => {
-                const cat = CATEGORIES.find((c) => c.value === lightboxPhoto.category);
+                const cat = CATEGORIES.find((c) => c.value === lightboxPhoto.phase);
                 return cat ? (
                   <span className={cn("text-sm px-3 py-1 rounded-full font-medium", cat.color)}>{cat.label}</span>
                 ) : null;
