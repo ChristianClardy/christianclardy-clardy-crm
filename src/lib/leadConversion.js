@@ -83,9 +83,40 @@ export async function syncLeadContactToClient(lead, patch) {
   if (!clientPatch.name && "name" in clientPatch) delete clientPatch.name;
   if (Object.keys(clientPatch).length === 0) return;
   try {
+    const before = clientPatch.name
+      ? firstMatch(await base44.entities.Client.filter({ id: clientId }))
+      : null;
     await base44.entities.Client.update(clientId, clientPatch);
+    if (before) await renameProjectsForClient(clientId, before.name, clientPatch.name);
   } catch (err) {
     console.error("Failed to sync lead contact info to client:", err?.message || err);
+  }
+}
+
+/**
+ * Projects and Pipeline deals are named after the client when created
+ * (createProjectFromLead / pushWonLeadToPipeline), and that name is a stored
+ * copy. When the client's name changes, rename any of their projects and
+ * deals still carrying the old name — one given its own custom name is left
+ * alone.
+ */
+export async function renameProjectsForClient(clientId, oldName, newName) {
+  const from = (oldName || "").trim();
+  const to = (newName || "").trim();
+  if (!clientId || !from || !to || from.toLowerCase() === to.toLowerCase()) return;
+  try {
+    const isStale = (name) => (name || "").trim().toLowerCase() === from.toLowerCase();
+    const [projects, leads] = await Promise.all([
+      base44.entities.Project.filter({ client_id: clientId }),
+      base44.entities.Lead.filter({ linked_contact_id: clientId }),
+    ]);
+    const deals = (await Promise.all((leads || []).map((l) => base44.entities.Deal.filter({ lead_id: l.id })))).flat();
+    await Promise.all([
+      ...(projects || []).filter((p) => isStale(p.name)).map((p) => base44.entities.Project.update(p.id, { name: to })),
+      ...deals.filter((d) => isStale(d.title)).map((d) => base44.entities.Deal.update(d.id, { title: to })),
+    ]);
+  } catch (err) {
+    console.error("Failed to rename client's projects/deals:", err?.message || err);
   }
 }
 
@@ -95,8 +126,9 @@ export async function syncLeadContactToClient(lead, patch) {
  * reaches contracts (ContractsPanel reads the Lead first). Blank client
  * values are skipped rather than wiping the lead's copy.
  */
-export async function syncClientContactToLeads(clientId, client) {
+export async function syncClientContactToLeads(clientId, client, previousName) {
   if (!clientId || !client) return;
+  await renameProjectsForClient(clientId, previousName, client.name);
   const leadPatch = {};
   for (const [leadField, clientField] of Object.entries(LEAD_TO_CLIENT_FIELDS)) {
     const value = typeof client[clientField] === "string" ? client[clientField].trim() : client[clientField];

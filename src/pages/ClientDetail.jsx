@@ -112,7 +112,7 @@ export default function ClientDetail() {
     e.preventDefault();
     const fullName = [formData.first_name, formData.last_name].filter(Boolean).join(" ").trim() || formData.name;
     await base44.entities.Client.update(clientId, { ...formData, name: fullName, sync_locked: true });
-    await syncClientContactToLeads(clientId, { ...formData, name: fullName });
+    await syncClientContactToLeads(clientId, { ...formData, name: fullName }, client?.name);
     setIsEditDialogOpen(false);
     loadData();
   };

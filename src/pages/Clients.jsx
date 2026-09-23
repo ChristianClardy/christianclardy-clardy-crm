@@ -206,7 +206,7 @@ export default function Clients() {
     };
     if (editingClient) {
       await base44.entities.Client.update(editingClient.id, payload);
-      await syncClientContactToLeads(editingClient.id, payload);
+      await syncClientContactToLeads(editingClient.id, payload, editingClient.name);
     } else {
       // Auto-assign next customer number
       const maxNum = clients.reduce((max, c) => {
