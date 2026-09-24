@@ -91,25 +91,42 @@ export const SUB_REQUIREMENTS = [
 
 export const ITEM_STATES = ["pass", "fail", "na"];
 
+// Each photo on a daily log is either job progress or fence/barrier
+// compliance documentation (the checklist's "Photographic Documentation").
+// Photos saved before this split have no `kind` and count as progress.
+export const FENCE_CHECKPOINTS = [
+  { value: "start", label: "Start of day" },
+  { value: "end", label: "End of day" },
+  { value: "other", label: "Other / repair" },
+];
+
+export const photoKind = (photo) => (photo?.kind === "fence" ? "fence" : "progress");
+export const progressPhotos = (log) => (log?.photos || []).filter((p) => photoKind(p) === "progress");
+export const fencePhotos = (log) => (log?.photos || []).filter((p) => photoKind(p) === "fence");
+
 export function applicableSections(log) {
   return CHECKLIST_SECTIONS.filter((s) => !s.optional || log?.permanent_inspection);
 }
 
-// Summarize a log into a compliance status for badges and the dashboard.
-//   compliant  — every applicable item answered with no open failures, and certified
+// Summarize a log's daily fence compliance for badges and the dashboard.
+//   compliant  — every applicable item answered with no open failures, at
+//                least one fence photo, and certified
 //   deficiency — a failed item or reported deficiency not yet marked corrected
-//   incomplete — anything else (unanswered items or not certified)
+//   incomplete — anything else (unanswered items, no fence photo, not certified)
+// The fence photo counts as one required item in answered/total.
 export function logStatus(log) {
   const checklist = log?.checklist || {};
   const items = applicableSections(log).flatMap((s) => s.items.map(([k]) => k));
-  const answered = items.filter((k) => checklist[k]).length;
+  const hasFencePhoto = fencePhotos(log).length > 0;
+  const answered = items.filter((k) => checklist[k]).length + (hasFencePhoto ? 1 : 0);
+  const total = items.length + 1;
   const failed = items.filter((k) => checklist[k] === "fail").length;
   const corrected = !!log?.corrected_at;
   const openDeficiency = (failed > 0 || log?.deficiency_found) && !corrected;
   let status = "incomplete";
   if (openDeficiency) status = "deficiency";
-  else if (answered === items.length && log?.certified) status = "compliant";
-  return { status, answered, total: items.length, failed };
+  else if (answered === total && log?.certified) status = "compliant";
+  return { status, answered, total, failed, hasFencePhoto };
 }
 
 export const STATUS_STYLES = {

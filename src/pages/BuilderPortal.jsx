@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { HardHat, Plus, Camera, AlertTriangle, CheckCircle2, Clock, FileSignature, ImageIcon, X, Smartphone } from "lucide-react";
+import { HardHat, Plus, Camera, AlertTriangle, CheckCircle2, FileSignature, ImageIcon, X, Smartphone, Fence } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
-import { logStatus, STATUS_STYLES, SUB_REQUIREMENTS } from "@/lib/barrierChecklist";
+import { logStatus, STATUS_STYLES, SUB_REQUIREMENTS, FENCE_CHECKPOINTS, photoKind, progressPhotos, fencePhotos } from "@/lib/barrierChecklist";
 import DailyLogDialog from "@/components/builder/DailyLogDialog";
 import SubAcknowledgmentDialog from "@/components/builder/SubAcknowledgmentDialog";
 import SubAccessDialog from "@/components/builder/SubAccessDialog";
@@ -14,7 +14,7 @@ import SubAccessDialog from "@/components/builder/SubAccessDialog";
 const STAFF_TABS = [
   { key: "today", label: "Today" },
   { key: "logs", label: "Daily Logs" },
-  { key: "photos", label: "Progress Photos" },
+  { key: "photos", label: "Photos" },
   { key: "subs", label: "Subcontractor Compliance" },
 ];
 
@@ -26,6 +26,18 @@ const PORTAL_TABS = [
 ];
 
 const ALL = "__all__";
+
+const PHOTO_FILTERS = [
+  { key: "all", label: "All photos" },
+  { key: "progress", label: "Progress" },
+  { key: "fence", label: "Fence compliance" },
+];
+
+function photoLabel(ph) {
+  if (photoKind(ph) !== "fence") return "Progress";
+  const cp = FENCE_CHECKPOINTS.find((c) => c.value === ph.checkpoint);
+  return `Fence${cp ? ` · ${cp.label}` : ""}`;
+}
 const ACTIVE_STATUSES = new Set(["planning", "in_progress", "on_hold"]);
 const todayStr = () => new Date().toLocaleDateString("en-CA");
 const fmtDate = (d) => (d ? new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" }) : "");
@@ -62,6 +74,7 @@ export default function BuilderPortal({ portal = null }) {
   const [logDialog, setLogDialog] = useState({ open: false, log: null, projectId: null });
   const [ackDialog, setAckDialog] = useState({ open: false, ack: null, subId: null });
   const [lightbox, setLightbox] = useState(null);
+  const [photoFilter, setPhotoFilter] = useState("all");
 
   const load = async () => {
     const [me, p, s, l, a, asg, pu] = await Promise.all([
@@ -102,9 +115,12 @@ export default function BuilderPortal({ portal = null }) {
   const todaysLogs = scopedLogs.filter((l) => l.log_date === today);
 
   const photos = useMemo(
-    () => filteredLogs.flatMap((l) => (l.photos || []).map((ph) => ({ ...ph, log: l }))),
-    [filteredLogs]
+    () => filteredLogs
+      .flatMap((l) => (l.photos || []).map((ph) => ({ ...ph, log: l })))
+      .filter((ph) => photoFilter === "all" || photoKind(ph) === photoFilter),
+    [filteredLogs, photoFilter]
   );
+  const compliantToday = new Set(todaysLogs.filter((l) => logStatus(l).status === "compliant").map((l) => l.project_id));
 
   // Latest acknowledgment per subcontractor. Project-less acks cover all projects.
   const latestAckBySub = useMemo(() => {
@@ -142,7 +158,7 @@ export default function BuilderPortal({ portal = null }) {
             <HardHat className="w-7 h-7" style={{ color: "#b5965a" }} /> Builder Portal
           </h1>
           <p className="text-sm mt-1" style={{ color: "#7a6e66" }}>
-            {isPortal ? `${subcontractors[0]?.name || "Subcontractor"} · daily logs, photos & barrier policy` : "Daily progress photos & Pool Barrier Safety compliance"}
+            {isPortal ? `${subcontractors[0]?.name || "Subcontractor"} · daily progress, fence compliance & barrier policy` : "Daily progress photos & daily fence (pool barrier) compliance"}
           </p>
         </div>
         <Button onClick={() => openLog(null, projectFilter !== ALL ? projectFilter : null)} className="gap-2" style={{ backgroundColor: "#b5965a", color: "#f5f0eb" }}>
@@ -152,9 +168,9 @@ export default function BuilderPortal({ portal = null }) {
 
       {/* Summary tiles */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Tile icon={Clock} label="Active jobs logged today" value={`${new Set(todaysLogs.map((l) => l.project_id)).size} / ${activeProjects.length}`} />
+        <Tile icon={Fence} label="Fence compliant today" value={`${activeProjects.filter((p) => compliantToday.has(p.id)).length} / ${activeProjects.length}`} onClick={() => setTab("today")} />
         <Tile icon={AlertTriangle} label="Open deficiencies" value={openDeficiencies.length} alert={openDeficiencies.length > 0} onClick={() => setTab("logs")} />
-        <Tile icon={Camera} label="Photos today" value={todaysLogs.reduce((n, l) => n + (l.photos?.length || 0), 0)} />
+        <Tile icon={Camera} label="Progress photos today" value={todaysLogs.reduce((n, l) => n + progressPhotos(l).length, 0)} onClick={() => { setPhotoFilter("progress"); setTab("photos"); }} />
         {isPortal ? (
           <Tile icon={FileSignature} label="Barrier policy" value={latestAckBySub[portal.subcontractor_id] ? "Signed" : "Not signed"} alert={!latestAckBySub[portal.subcontractor_id]} onClick={() => setTab("policy")} />
         ) : (
@@ -200,8 +216,13 @@ export default function BuilderPortal({ portal = null }) {
                 <div className="flex items-center gap-2 shrink-0">
                   {log ? (
                     <>
+                      <span className="text-xs text-slate-500 flex items-center gap-1" title="Progress photos today">
+                        <Camera className="w-3.5 h-3.5" />{progressPhotos(log).length}
+                      </span>
+                      <span className={cn("text-xs flex items-center gap-1", fencePhotos(log).length ? "text-emerald-700" : "text-amber-700")} title="Fence compliance photos today">
+                        <Fence className="w-3.5 h-3.5" />{fencePhotos(log).length}
+                      </span>
                       <StatusBadge log={log} />
-                      {log.photos?.length > 0 && <span className="text-xs text-slate-500 flex items-center gap-1"><Camera className="w-3.5 h-3.5" />{log.photos.length}</span>}
                       <Button size="sm" variant="outline" onClick={() => openLog(log)}>Open</Button>
                     </>
                   ) : (
@@ -259,7 +280,19 @@ export default function BuilderPortal({ portal = null }) {
       )}
 
       {tab === "photos" && (
-        photos.length === 0 ? <Empty text="No progress photos yet. Add them from a daily log." icon={ImageIcon} /> : (
+        <div className="flex gap-2 flex-wrap">
+          {PHOTO_FILTERS.map((f) => (
+            <button key={f.key} onClick={() => setPhotoFilter(f.key)}
+              className={cn("px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                photoFilter === f.key ? "bg-slate-800 text-white" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50")}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {tab === "photos" && (
+        photos.length === 0 ? <Empty text="No photos here yet. Add them from a daily log." icon={ImageIcon} /> : (
           <div className="space-y-6">
             {groupBy(photos, (ph) => ph.log.log_date).map(([date, items]) => (
               <div key={date}>
@@ -267,7 +300,13 @@ export default function BuilderPortal({ portal = null }) {
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                   {items.map((ph) => (
                     <button key={ph.url} onClick={() => setLightbox(ph)} className="text-left">
-                      <img src={ph.url} alt={ph.caption || ""} className="w-full h-32 object-cover rounded-lg" />
+                      <div className="relative">
+                        <img src={ph.url} alt={ph.caption || ""} className="w-full h-32 object-cover rounded-lg" />
+                        <span className={cn("absolute top-1 left-1 text-[10px] font-semibold px-1.5 py-0.5 rounded",
+                          photoKind(ph) === "fence" ? "bg-emerald-600 text-white" : "bg-amber-500 text-white")}>
+                          {photoLabel(ph)}
+                        </span>
+                      </div>
                       <p className="text-xs text-slate-600 mt-1 truncate">{ph.caption || projectById[ph.log.project_id]?.name}</p>
                     </button>
                   ))}
@@ -390,7 +429,7 @@ export default function BuilderPortal({ portal = null }) {
           <div className="max-w-4xl w-full" onClick={(e) => e.stopPropagation()}>
             <img src={lightbox.url} alt={lightbox.caption || ""} className="max-h-[80vh] mx-auto rounded-lg" />
             <p className="text-white text-sm mt-2 text-center">
-              {projectById[lightbox.log.project_id]?.name} · {fmtDate(lightbox.log.log_date)}{lightbox.caption ? ` — ${lightbox.caption}` : ""}
+              {projectById[lightbox.log.project_id]?.name} · {fmtDate(lightbox.log.log_date)} · {photoLabel(lightbox)}{lightbox.caption ? ` — ${lightbox.caption}` : ""}
             </p>
           </div>
         </div>

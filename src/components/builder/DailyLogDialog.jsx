@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { Camera, Check, X, Minus, Loader2, Trash2, AlertTriangle, ShieldCheck } from "lucide-react";
+import { Camera, Check, X, Minus, Loader2, Trash2, AlertTriangle, ShieldCheck, Fence, Hammer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,8 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import {
   CERTIFICATION_TEXT,
+  FENCE_CHECKPOINTS,
   applicableSections,
   logStatus,
+  photoKind,
   STATUS_STYLES,
 } from "@/lib/barrierChecklist";
 
@@ -39,6 +41,9 @@ const emptyLog = (projectId, user, subIds = []) => ({
   notes: "",
 });
 
+// Before noon a new fence photo defaults to the start-of-day check, after to end-of-day.
+const defaultCheckpoint = () => (new Date().getHours() < 12 ? "start" : "end");
+
 const STATE_BUTTONS = [
   { value: "pass", icon: Check, label: "Pass", active: "bg-emerald-500 text-white border-emerald-500" },
   { value: "fail", icon: X, label: "Fail", active: "bg-red-500 text-white border-red-500" },
@@ -48,8 +53,7 @@ const STATE_BUTTONS = [
 export default function DailyLogDialog({ open, onOpenChange, log, projects, subcontractors, user, defaultProjectId, defaultSubIds, onSaved }) {
   const [form, setForm] = useState(emptyLog(defaultProjectId, user));
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef();
+  const [uploading, setUploading] = useState(null); // "progress" | "fence" | null
 
   useEffect(() => {
     if (!open) return;
@@ -75,29 +79,36 @@ export default function DailyLogDialog({ open, onOpenChange, log, projects, subc
   const toggleSub = (id) =>
     set({ subcontractor_ids: form.subcontractor_ids.includes(id) ? form.subcontractor_ids.filter((s) => s !== id) : [...form.subcontractor_ids, id] });
 
-  const handlePhotos = async (e) => {
-    const files = Array.from(e.target.files || []);
-    e.target.value = "";
+  const handlePhotos = async (kind, fileList) => {
+    const files = Array.from(fileList || []);
     if (!files.length) return;
-    setUploading(true);
+    setUploading(kind);
     try {
       const uploaded = [];
       for (const file of files) {
         const { file_url } = await base44.integrations.Core.UploadFile({ file });
-        uploaded.push({ url: file_url, filename: file.name, caption: "", uploaded_at: new Date().toISOString(), uploaded_by: user?.full_name || "" });
+        uploaded.push({
+          url: file_url,
+          filename: file.name,
+          caption: "",
+          kind,
+          ...(kind === "fence" ? { checkpoint: defaultCheckpoint() } : {}),
+          uploaded_at: new Date().toISOString(),
+          uploaded_by: user?.full_name || "",
+        });
       }
       setForm((f) => ({ ...f, photos: [...f.photos, ...uploaded] }));
     } catch (err) {
       alert(`Photo upload failed: ${err.message}`);
     } finally {
-      setUploading(false);
+      setUploading(null);
     }
   };
 
-  const setPhotoCaption = (i, caption) =>
-    setForm((f) => ({ ...f, photos: f.photos.map((p, idx) => (idx === i ? { ...p, caption } : p)) }));
+  const updatePhoto = (url, patch) =>
+    setForm((f) => ({ ...f, photos: f.photos.map((p) => (p.url === url ? { ...p, ...patch } : p)) }));
 
-  const removePhoto = (i) => setForm((f) => ({ ...f, photos: f.photos.filter((_, idx) => idx !== i) }));
+  const removePhoto = (url) => setForm((f) => ({ ...f, photos: f.photos.filter((p) => p.url !== url) }));
 
   const handleSave = async () => {
     if (!form.project_id) { alert("Select a project."); return; }
@@ -123,7 +134,8 @@ export default function DailyLogDialog({ open, onOpenChange, log, projects, subc
     }
   };
 
-  const { status, answered, total, failed } = logStatus(form);
+  const { status, answered, total, failed, hasFencePhoto } = logStatus(form);
+  const photoProps = { photos: form.photos, uploading, onUpload: handlePhotos, onUpdate: updatePhoto, onRemove: removePhoto };
   const statusStyle = STATUS_STYLES[status];
 
   return (
@@ -131,9 +143,9 @@ export default function DailyLogDialog({ open, onOpenChange, log, projects, subc
       <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 flex-wrap">
-            Daily Pool Barrier Jobsite Checklist
+            Daily Log
             <span className={cn("text-xs font-medium px-2 py-0.5 rounded-full", statusStyle.className)}>{statusStyle.label}</span>
-            <span className="text-xs font-normal text-slate-500">{answered}/{total} items</span>
+            <span className="text-xs font-normal text-slate-500">Fence compliance {answered}/{total}</span>
           </DialogTitle>
         </DialogHeader>
 
@@ -181,33 +193,31 @@ export default function DailyLogDialog({ open, onOpenChange, log, projects, subc
           </div>
         </div>
 
-        {/* Progress photos */}
+        {/* ── Part 1: Daily progress ── */}
         <section className="rounded-xl border border-slate-200 p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-slate-800">Daily Progress Photos</h3>
-            <Button type="button" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-              {uploading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Camera className="w-4 h-4 mr-1" />}
-              {uploading ? "Uploading…" : "Add photos"}
-            </Button>
-            <input ref={fileInputRef} type="file" accept="image/*" multiple capture="environment" className="hidden" onChange={handlePhotos} />
+          <div>
+            <h3 className="font-semibold text-slate-900 flex items-center gap-1.5"><Hammer className="w-4 h-4 text-amber-600" /> Daily Progress</h3>
+            <p className="text-xs text-slate-500">Photos of the work done on the job today.</p>
           </div>
-          {form.photos.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {form.photos.map((p, i) => (
-                <div key={p.url} className="space-y-1">
-                  <div className="relative group">
-                    <img src={p.url} alt={p.caption || p.filename} className="w-full h-28 object-cover rounded-lg" />
-                    <button type="button" onClick={() => removePhoto(i)}
-                      className="absolute top-1 right-1 p-1 rounded bg-black/60 text-white opacity-0 group-hover:opacity-100">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <Input className="h-8 text-xs" placeholder="Caption" value={p.caption || ""} onChange={(e) => setPhotoCaption(i, e.target.value)} />
-                </div>
-              ))}
-            </div>
-          )}
+          <PhotoSection kind="progress" {...photoProps} />
           <Textarea rows={2} placeholder="Work completed today / progress notes" value={form.progress_notes || ""} onChange={(e) => set({ progress_notes: e.target.value })} />
+        </section>
+
+        {/* ── Part 2: Daily fence compliance ── */}
+        <div className="pt-2">
+          <h3 className="font-semibold text-slate-900 flex items-center gap-1.5"><Fence className="w-4 h-4 text-emerald-700" /> Daily Fence Compliance</h3>
+          <p className="text-xs text-slate-500">Pool Barrier Safety checklist. Needs every item answered, at least one fence photo, and the supervisor's certification.</p>
+        </div>
+
+        <section className={cn("rounded-xl border p-4 space-y-3", hasFencePhoto ? "border-emerald-200" : "border-amber-300 bg-amber-50/40")}>
+          <div>
+            <h3 className="font-semibold text-slate-800 text-sm">Fence photos <span className="text-red-600">*</span></h3>
+            <p className="text-xs text-slate-500">
+              Photograph the full barrier and gates, at least once a day. Take one at start of day and one at end of day, and photograph any repair.
+            </p>
+          </div>
+          <PhotoSection kind="fence" {...photoProps} />
+          {!hasFencePhoto && <p className="text-xs text-amber-700">No fence photo yet. The day can't be marked compliant without one.</p>}
         </section>
 
         {/* Checklist sections A–D */}
@@ -305,7 +315,7 @@ export default function DailyLogDialog({ open, onOpenChange, log, projects, subc
           {form.certified_at && <p className="text-xs text-slate-500">Certified {new Date(form.certified_at).toLocaleString()}</p>}
         </section>
 
-        {/* G. Notes (photo documentation is the photo section above) */}
+        {/* Notes (the checklist's photo documentation is the Fence photos section above) */}
         <div>
           <Label>Additional notes</Label>
           <Textarea rows={2} value={form.notes || ""} onChange={(e) => set({ notes: e.target.value })} />
@@ -313,7 +323,7 @@ export default function DailyLogDialog({ open, onOpenChange, log, projects, subc
 
         <div className="flex justify-end gap-2 pt-2 sticky bottom-0 bg-white pb-1">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving || uploading} style={{ backgroundColor: "#b5965a", color: "#f5f0eb" }}>
+          <Button onClick={handleSave} disabled={saving || !!uploading} style={{ backgroundColor: "#b5965a", color: "#f5f0eb" }}>
             {saving && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
             Save daily log
           </Button>
@@ -327,4 +337,53 @@ function toLocalInput(iso) {
   const d = new Date(iso);
   const pad = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Upload + grid for one kind of photo. Fence photos also get a checkpoint tag.
+function PhotoSection({ kind, photos, uploading, onUpload, onUpdate, onRemove }) {
+  const inputRef = useRef();
+  const mine = photos.filter((p) => photoKind(p) === kind);
+  const busy = uploading === kind;
+  return (
+    <div className="space-y-3">
+      <Button type="button" size="sm" variant="outline" onClick={() => inputRef.current?.click()} disabled={!!uploading}>
+        {busy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Camera className="w-4 h-4 mr-1" />}
+        {busy ? "Uploading…" : kind === "fence" ? "Add fence photos" : "Add progress photos"}
+      </Button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        capture="environment"
+        className="hidden"
+        onChange={(e) => { const files = e.target.files; onUpload(kind, files); e.target.value = ""; }}
+      />
+      {mine.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {mine.map((p) => (
+            <div key={p.url} className="space-y-1">
+              <div className="relative group">
+                <img src={p.url} alt={p.caption || p.filename} className="w-full h-28 object-cover rounded-lg" />
+                <button type="button" onClick={() => onRemove(p.url)}
+                  className="absolute top-1 right-1 p-1 rounded bg-black/60 text-white sm:opacity-0 sm:group-hover:opacity-100">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              {kind === "fence" && (
+                <select
+                  value={p.checkpoint || "other"}
+                  onChange={(e) => onUpdate(p.url, { checkpoint: e.target.value })}
+                  className="w-full h-8 text-xs rounded-md border border-slate-200 bg-white px-2"
+                >
+                  {FENCE_CHECKPOINTS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+              )}
+              <Input className="h-8 text-xs" placeholder="Caption" value={p.caption || ""} onChange={(e) => onUpdate(p.url, { caption: e.target.value })} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
