@@ -39,8 +39,8 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ error: `DB insert failed: ${err}` });
     }
 
-    const [record] = await insertRes.json();
-    return res.status(200).json({ attachment: record });
+    const [saved] = await insertRes.json();
+    return res.status(200).json({ attachment: saved });
   } catch (err) {
     console.error('upload-record error:', err);
     return res.status(500).json({ error: err.message });
