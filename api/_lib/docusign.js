@@ -83,39 +83,49 @@ function envelopeApi(docusign, envelopeId, suffix = '') {
   return `${docusign.base_uri}/restapi/v2.1/accounts/${docusign.account_id}/envelopes/${encodeURIComponent(envelopeId)}${suffix}`;
 }
 
-// Works out every CRM record the signed contract should be filed under:
-// the record it was sent from, the client, and the project when known.
-async function filingTargets(row) {
-  const targets = [];
-  const add = (type, id) => { if (id && !targets.some((t) => t.type === type && t.id === id)) targets.push({ type, id }); };
-  const { entity_type: type, entity_id: id } = row;
-  if (!type || !id) return targets;
-  add(type, id);
+const OPEN_PROJECT_STATUSES = new Set(['planning', 'in_progress', 'on_hold']);
 
-  if (type === 'lead') {
-    const lead = await sbGetById('leads', id, 'linked_contact_id');
-    add('client', lead?.linked_contact_id);
-  } else if (type === 'deal') {
-    const deal = await sbGetById('deals', id, 'lead_id');
-    if (deal?.lead_id) {
-      add('lead', deal.lead_id);
-      const lead = await sbGetById('leads', deal.lead_id, 'linked_contact_id');
-      add('client', lead?.linked_contact_id);
-    }
-  } else if (type === 'estimate') {
+// Where a signed contract package is filed: ONE place, the project's Files tab
+// (Contracts). Resolved from the project it was sent for, the estimate's
+// project, or the client's single open project. When there's no project yet
+// (or the client has several open ones), it's held on the client instead —
+// ProjectFiles.jsx shows client-held contracts, so it appears on the project
+// as soon as one exists.
+async function filingTarget(row) {
+  const { entity_type: type, entity_id: id } = row;
+  if (!type || !id) return null;
+
+  let clientId = null;
+  if (type === 'project') return { type: 'project', id };
+  if (type === 'estimate') {
     const est = await sbGetById('estimates', id, 'client_id,project_id');
-    add('client', est?.client_id);
-    add('project', est?.project_id);
-  } else if (type === 'project') {
-    const project = await sbGetById('projects', id, 'client_id');
-    add('client', project?.client_id);
+    if (est?.project_id) return { type: 'project', id: est.project_id };
+    clientId = est?.client_id;
+  } else if (type === 'lead' || type === 'deal') {
+    let leadId = id;
+    if (type === 'deal') leadId = (await sbGetById('deals', id, 'lead_id'))?.lead_id;
+    if (leadId) clientId = (await sbGetById('leads', leadId, 'linked_contact_id'))?.linked_contact_id;
   }
-  return targets;
+  if (!clientId) return null;
+
+  const projects = await sbList('projects', { select: 'id,status', filters: { client_id: `eq.${clientId}` } });
+  const open = projects.filter((p) => OPEN_PROJECT_STATUSES.has(p.status));
+  if (open.length === 1) return { type: 'project', id: open[0].id };
+  return { type: 'client', id: clientId };
+}
+
+// "Signed Contract - Lezlee Burt - 2026-09-14.pdf"
+function signedFilename(row, completedAt) {
+  const who = row.signers?.[0]?.name
+    || (row.subject || '').replace(/^Contract package:\s*/i, '').trim()
+    || 'Client';
+  const date = (completedAt || new Date().toISOString()).slice(0, 10);
+  return `Signed Contract - ${who} - ${date}.pdf`.replace(/[\\/:*?"<>|]/g, '-');
 }
 
 // Downloads the fully signed PDF (all documents + DocuSign's certificate of
-// completion), stores it, and files it under each related CRM record.
-async function saveSignedContract(row, docusign) {
+// completion), stores it, and files it in the project's Files tab.
+async function saveSignedContract(row, docusign, completedAt) {
   const pdfRes = await fetch(envelopeApi(docusign, row.envelope_id, '/documents/combined?certificate=true'), {
     headers: { Authorization: `Bearer ${docusign.access_token}` },
   });
@@ -136,26 +146,26 @@ async function saveSignedContract(row, docusign) {
   if (!upRes.ok) throw new Error(`Signed PDF upload failed: ${upRes.status} ${await upRes.text()}`);
   const url = `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${path}`;
 
-  const baseName = (row.document_name || 'Contract').replace(/\.pdf$/i, '');
-  const filename = `SIGNED - ${baseName}.pdf`;
-  for (const target of await filingTargets(row)) {
+  const target = await filingTarget(row);
+  if (target) {
     const existing = await sbList('attachments', {
       select: 'id',
       filters: { entity_type: `eq.${target.type}`, entity_id: `eq.${target.id}`, url: `eq.${url}` },
       limit: 1,
     });
-    if (existing.length) continue;
-    await sbInsert('attachments', {
-      entity_type: target.type,
-      entity_id: target.id,
-      filename,
-      url,
-      file_type: 'application/pdf',
-      file_size: pdf.length,
-      uploaded_by: 'DocuSign (auto-saved)',
-      category: 'contract',
-      ...(row.organization_id ? { organization_id: row.organization_id } : {}),
-    });
+    if (!existing.length) {
+      await sbInsert('attachments', {
+        entity_type: target.type,
+        entity_id: target.id,
+        filename: signedFilename(row, completedAt),
+        url,
+        file_type: 'application/pdf',
+        file_size: pdf.length,
+        uploaded_by: 'DocuSign (auto-saved)',
+        category: 'contract',
+        ...(row.organization_id ? { organization_id: row.organization_id } : {}),
+      });
+    }
   }
 
   await sbFetch(`docusign_envelopes?id=eq.${row.id}`, {
@@ -197,7 +207,7 @@ async function syncEnvelope(row) {
 
   let signedUrl = row.signed_document_url || null;
   if (status === 'completed' && !signedUrl) {
-    signedUrl = await saveSignedContract(row, docusign);
+    signedUrl = await saveSignedContract(row, docusign, dsData.completedDateTime || row.completed_at);
   }
   return { status, signed_document_url: signedUrl };
 }

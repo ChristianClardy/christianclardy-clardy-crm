@@ -12,9 +12,23 @@ const STATUS_CONFIG = {
   created:   { label: "Draft",     icon: AlertCircle,  color: "text-slate-500 bg-slate-50 border-slate-200" },
 };
 
-// Envelopes that may still change, or were signed before the signed copy was saved.
-const needsSync = (env) =>
-  !["completed", "voided", "declined"].includes(env.status?.toLowerCase()) || !env.signed_document_url;
+// Only envelopes that actually went out are listed: out for signature, or
+// fully signed. Drafts, voided, and declined envelopes stay in the database
+// but are hidden here.
+const VISIBLE_STATUSES = new Set(["sent", "delivered", "completed"]);
+const DRAFT_SYNC_WINDOW_MS = 14 * 86400000;
+
+// Envelopes worth re-checking with DocuSign: anything out for signature, a
+// signed one whose copy isn't saved yet, and recent drafts (a draft becomes
+// "sent" once it's sent from DocuSign's review screen, and only shows up here
+// after this check).
+const needsSync = (env) => {
+  const status = env.status?.toLowerCase();
+  if (status === "completed") return !env.signed_document_url;
+  if (status === "sent" || status === "delivered") return true;
+  if (status === "created") return Date.now() - new Date(env.created_at || env.sent_at).getTime() < DRAFT_SYNC_WINDOW_MS;
+  return false;
+};
 
 function StatusBadge({ status }) {
   const cfg = STATUS_CONFIG[status?.toLowerCase()] || STATUS_CONFIG.sent;
@@ -61,12 +75,13 @@ export default function DocuSignEnvelopes({ entityType, entityId, className }) {
       .catch(() => setLoading(false));
   }, [entityType, entityId]);
 
-  if (loading || envelopes.length === 0) return null;
+  const visible = envelopes.filter((e) => VISIBLE_STATUSES.has(e.status?.toLowerCase()));
+  if (loading || visible.length === 0) return null;
 
   return (
     <div className={cn("space-y-2", className)}>
       <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Signature Requests</p>
-      {envelopes.map(env => (
+      {visible.map(env => (
         <div key={env.id} className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl px-3 py-2.5">
           <Send className="w-4 h-4 text-slate-400 shrink-0" />
           <div className="flex-1 min-w-0">

@@ -65,8 +65,8 @@ export default function ProjectFiles({ projectId }) {
       base44.entities.Attachment.filter({ entity_type: "project", entity_id: projectId }, "-created_date"),
       base44.entities.Project.get(projectId).catch(() => null),
     ]);
-    // Signed DocuSign contracts are filed on the client (api/_lib/docusign.js),
-    // often before this project existed, so show the client's contracts here too.
+    // Signed DocuSign contracts are held on the client when there was no single
+    // open project to file them in (api/_lib/docusign.js), so show those here too.
     const clientContracts = project?.client_id
       ? await base44.entities.Attachment.filter({ entity_type: "client", entity_id: project.client_id, category: "contract" }, "-created_date").catch(() => [])
       : [];
