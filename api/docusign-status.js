@@ -1,79 +1,23 @@
 // GET /api/docusign-status?envelope_id=...
-// Fetches current envelope status from DocuSign and syncs it to the DB.
+// Fetches current envelope status from DocuSign, syncs it to the DB, and saves
+// the signed contract into the CRM once the envelope is completed.
 
-const { handleEnvelopeCompleted } = require('./_lib/dealAutomation.js');
-
-const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
-const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const { syncEnvelope, getEnvelopeRow } = require('./_lib/docusign.js');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).send('Method Not Allowed');
-  if (!SERVICE_KEY) return res.status(500).json({ error: 'Missing service key.' });
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return res.status(500).json({ error: 'Missing service key.' });
 
   const envelope_id = req.query?.envelope_id;
   if (!envelope_id) return res.status(400).json({ error: 'envelope_id is required.' });
 
   try {
-    // Load envelope from DB
-    const dbRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/docusign_envelopes?envelope_id=eq.${encodeURIComponent(envelope_id)}&select=*&limit=1`,
-      { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
-    );
-    const rows = await dbRes.json();
-    const row = rows[0];
+    const row = await getEnvelopeRow(envelope_id);
     if (!row) return res.status(404).json({ error: 'Envelope not found.' });
-
-    // Load company profile (org-scoped; falls back to any profile with
-    // DocuSign connected, since multiple company_profiles rows can exist
-    // with only one actually carrying a connected DocuSign account).
-    async function fetchProfiles(filter) {
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/company_profiles?select=id,settings${filter}`,
-        { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
-      );
-      return res.json();
-    }
-    let docusign;
-    if (row.organization_id) {
-      const scoped = await fetchProfiles(`&organization_id=eq.${encodeURIComponent(row.organization_id)}`);
-      docusign = scoped.find((p) => p.settings?.docusign)?.settings?.docusign;
-    }
-    if (!docusign) {
-      const all = await fetchProfiles('');
-      docusign = all.find((p) => p.settings?.docusign)?.settings?.docusign;
-    }
-    if (!docusign?.access_token) return res.status(400).json({ error: 'DocuSign not connected.' });
-
-    // Fetch status from DocuSign
-    const dsRes = await fetch(
-      `${docusign.base_uri}/restapi/v2.1/accounts/${docusign.account_id}/envelopes/${envelope_id}`,
-      { headers: { Authorization: `Bearer ${docusign.access_token}` } }
-    );
-    const dsData = await dsRes.json();
-    if (!dsRes.ok) return res.status(dsRes.status).json({ error: dsData.message || 'DocuSign API error.' });
-
-    const newStatus = dsData.status;
-
-    // Sync status to DB if changed
-    if (newStatus && newStatus !== row.status) {
-      const patch = { status: newStatus };
-      if (newStatus === 'completed') patch.completed_at = new Date().toISOString();
-      if (newStatus === 'voided')    patch.voided_at    = new Date().toISOString();
-      if (newStatus === 'declined')  patch.declined_at  = new Date().toISOString();
-      await fetch(`${SUPABASE_URL}/rest/v1/docusign_envelopes?id=eq.${row.id}`, {
-        method: 'PATCH',
-        headers: {
-          apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`,
-          'Content-Type': 'application/json', Prefer: 'return=minimal',
-        },
-        body: JSON.stringify(patch),
-      });
-      if (newStatus === 'completed') await handleEnvelopeCompleted(row.entity_type, row.entity_id);
-    }
-
-    return res.status(200).json({ status: newStatus, envelope_id });
+    const { status, signed_document_url } = await syncEnvelope(row);
+    return res.status(200).json({ status, envelope_id, signed_document_url });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

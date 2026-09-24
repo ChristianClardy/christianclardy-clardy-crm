@@ -1,48 +1,23 @@
 // POST /api/docusign-webhook
-// Receives DocuSign Connect push notifications and updates envelope status in DB.
-// Configure this URL in DocuSign Connect: https://yourdomain.com/api/docusign-webhook
+// Receives DocuSign Connect notifications (set per envelope via
+// eventNotification in api/docusign-send.js, or account-level Connect).
+// The payload is only used for the envelope id: the real status is re-read
+// from DocuSign by syncEnvelope(), so a forged request can't mark anything
+// signed. On completion the signed contract is saved into the CRM.
 
-const { handleEnvelopeCompleted } = require('./_lib/dealAutomation.js');
-
-const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
-const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const { syncEnvelope, getEnvelopeRow } = require('./_lib/docusign.js');
 
 module.exports = async function handler(req, res) {
-  // Always respond 200 so DocuSign doesn't retry
+  // Always respond 200 so DocuSign doesn't retry forever
   if (req.method !== 'POST') return res.status(200).end();
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+    const envelopeId = body.envelopeId || body.data?.envelopeId || body.data?.envelopeSummary?.envelopeId;
+    if (!envelopeId || !process.env.SUPABASE_SERVICE_ROLE_KEY) return res.status(200).json({ received: true });
 
-    // DocuSign JSON Connect payload
-    const envelopeId = body.envelopeId || body.data?.envelopeSummary?.envelopeId;
-    const rawStatus  = body.status     || body.data?.envelopeSummary?.status || '';
-    const status     = rawStatus.toLowerCase();
-
-    if (!envelopeId || !status || !SERVICE_KEY) return res.status(200).json({ received: true });
-
-    const patch = { status };
-    if (status === 'completed') patch.completed_at = new Date().toISOString();
-    if (status === 'voided')    patch.voided_at    = new Date().toISOString();
-    if (status === 'declined')  patch.declined_at  = new Date().toISOString();
-
-    const patchRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/docusign_envelopes?envelope_id=eq.${encodeURIComponent(envelopeId)}`,
-      {
-        method: 'PATCH',
-        headers: {
-          apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`,
-          'Content-Type': 'application/json', Prefer: 'return=representation',
-        },
-        body: JSON.stringify(patch),
-      }
-    );
-
-    if (status === 'completed') {
-      const updated = await patchRes.json().catch(() => []);
-      const envelope = updated[0];
-      if (envelope) await handleEnvelopeCompleted(envelope.entity_type, envelope.entity_id);
-    }
+    const row = await getEnvelopeRow(envelopeId);
+    if (row) await syncEnvelope(row);
 
     return res.status(200).json({ received: true });
   } catch (err) {

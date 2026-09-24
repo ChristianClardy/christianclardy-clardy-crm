@@ -61,11 +61,17 @@ export default function ProjectFiles({ projectId }) {
   }, [projectId]);
 
   const loadAttachments = async () => {
-    const data = await base44.entities.Attachment.filter(
-      { entity_type: "project", entity_id: projectId },
-      "-created_date"
-    );
-    setAttachments(data);
+    const [data, project] = await Promise.all([
+      base44.entities.Attachment.filter({ entity_type: "project", entity_id: projectId }, "-created_date"),
+      base44.entities.Project.get(projectId).catch(() => null),
+    ]);
+    // Signed DocuSign contracts are filed on the client (api/_lib/docusign.js),
+    // often before this project existed, so show the client's contracts here too.
+    const clientContracts = project?.client_id
+      ? await base44.entities.Attachment.filter({ entity_type: "client", entity_id: project.client_id, category: "contract" }, "-created_date").catch(() => [])
+      : [];
+    const seen = new Set(data.map((a) => a.url));
+    setAttachments([...data, ...clientContracts.filter((a) => !seen.has(a.url))]);
   };
 
   const uploadFiles = useCallback(async (files, category) => {

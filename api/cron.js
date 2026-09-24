@@ -4,6 +4,10 @@
 // Routes:
 //   GET  /api/cron?action=calendar       → iCal feed
 //   GET  /api/cron?action=stage-alerts   → lead stage alert cron
+//   GET  /api/cron?action=docusign-sync  → daily backstop: sync open DocuSign
+//                                          envelopes and save any signed contracts
+
+const { syncEnvelope } = require('./_lib/docusign.js');
 
 const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -143,6 +147,35 @@ async function handleStageAlerts(req, res) {
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
+// Catches anything the DocuSign webhook missed (webhook not allowed on the
+// plan, a failed delivery, or envelopes sent before webhooks were added):
+// every envelope from the last 120 days that is still open, or signed but
+// without a saved copy.
+async function handleDocusignSync(req, res) {
+  if (process.env.CRON_SECRET && req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const since = new Date(Date.now() - 120 * 86400000).toISOString();
+  const rows = await supabaseFetch(
+    `docusign_envelopes?select=*&created_at=gte.${since}` +
+    `&or=(status.not.in.(completed,voided,declined),and(status.eq.completed,signed_document_url.is.null))`
+  );
+
+  let checked = 0, saved = 0;
+  const errors = [];
+  for (const row of rows || []) {
+    try {
+      const result = await syncEnvelope(row);
+      checked++;
+      if (result.signed_document_url && !row.signed_document_url) saved++;
+    } catch (err) {
+      errors.push(`${row.envelope_id}: ${err.message}`);
+    }
+  }
+  return res.status(200).json({ checked, saved, errors });
+}
+
 module.exports = async function handler(req, res) {
   if (!SERVICE_KEY) return res.status(500).json({ error: 'Missing SUPABASE_SERVICE_ROLE_KEY' });
 
@@ -151,7 +184,8 @@ module.exports = async function handler(req, res) {
   try {
     if (action === 'calendar') return await handleCalendar(req, res);
     if (action === 'stage-alerts') return await handleStageAlerts(req, res);
-    return res.status(400).json({ error: 'action query param required: calendar or stage-alerts' });
+    if (action === 'docusign-sync') return await handleDocusignSync(req, res);
+    return res.status(400).json({ error: 'action query param required: calendar, stage-alerts, or docusign-sync' });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

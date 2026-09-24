@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Send, RefreshCw, CheckCircle, Clock, XCircle, AlertCircle } from "lucide-react";
+import { Send, RefreshCw, CheckCircle, Clock, XCircle, AlertCircle, FileCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STATUS_CONFIG = {
@@ -11,6 +11,10 @@ const STATUS_CONFIG = {
   declined:  { label: "Declined",  icon: XCircle,      color: "text-rose-600 bg-rose-50 border-rose-200" },
   created:   { label: "Draft",     icon: AlertCircle,  color: "text-slate-500 bg-slate-50 border-slate-200" },
 };
+
+// Envelopes that may still change, or were signed before the signed copy was saved.
+const needsSync = (env) =>
+  !["completed", "voided", "declined"].includes(env.status?.toLowerCase()) || !env.signed_document_url;
 
 function StatusBadge({ status }) {
   const cfg = STATUS_CONFIG[status?.toLowerCase()] || STATUS_CONFIG.sent;
@@ -28,26 +32,34 @@ export default function DocuSignEnvelopes({ entityType, entityId, className }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(null);
 
-  useEffect(() => {
-    if (!entityType || !entityId) { setLoading(false); return; }
-    base44.entities.DocuSignEnvelope
-      .filter({ entity_type: entityType, entity_id: entityId }, "-sent_at")
-      .then(rows => { setEnvelopes(rows); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [entityType, entityId]);
-
-  const refresh = async (envelope) => {
-    setRefreshing(envelope.id);
+  const refresh = async (envelope, { quiet = false } = {}) => {
+    if (!quiet) setRefreshing(envelope.id);
     try {
       const res = await fetch(`/api/docusign-status?envelope_id=${encodeURIComponent(envelope.envelope_id)}`);
       if (res.ok) {
         const data = await res.json();
-        setEnvelopes(prev => prev.map(e => e.id === envelope.id ? { ...e, status: data.status } : e));
+        setEnvelopes(prev => prev.map(e => e.id === envelope.id
+          ? { ...e, status: data.status, signed_document_url: data.signed_document_url || e.signed_document_url }
+          : e));
       }
     } finally {
-      setRefreshing(null);
+      if (!quiet) setRefreshing(null);
     }
   };
+
+  useEffect(() => {
+    if (!entityType || !entityId) { setLoading(false); return; }
+    base44.entities.DocuSignEnvelope
+      .filter({ entity_type: entityType, entity_id: entityId }, "-sent_at")
+      .then(async rows => {
+        setEnvelopes(rows);
+        setLoading(false);
+        // Quietly check anything still open so a signed contract shows up
+        // (and gets saved) without anyone pressing refresh.
+        for (const env of rows.filter(needsSync)) await refresh(env, { quiet: true }).catch(() => {});
+      })
+      .catch(() => setLoading(false));
+  }, [entityType, entityId]);
 
   if (loading || envelopes.length === 0) return null;
 
@@ -64,6 +76,17 @@ export default function DocuSignEnvelopes({ entityType, entityId, className }) {
               {env.signers?.length > 0 && ` · ${env.signers.map(s => s.name || s.email).join(", ")}`}
             </p>
           </div>
+          {env.signed_document_url && (
+            <a
+              href={env.signed_document_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:underline shrink-0"
+              title="Fully signed contract, saved automatically"
+            >
+              <FileCheck className="w-3.5 h-3.5" /> Signed copy
+            </a>
+          )}
           <StatusBadge status={env.status} />
           <button
             onClick={() => refresh(env)}

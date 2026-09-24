@@ -8,86 +8,23 @@
 // ([{ anchor, value }]) — rendered as locked DocuSign anchor-string text tabs
 // so customer/deal info is merged into the document text at send time.
 
+const { getDocusign } = require('./_lib/docusign.js');
+
 const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-async function fetchProfiles(filter) {
-  const url = `${SUPABASE_URL}/rest/v1/company_profiles?select=id,settings${filter}`;
-  const res = await fetch(url, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } });
-  return res.json();
-}
-
-// Multiple company_profiles rows can exist (e.g. one per legacy org record)
-// with only one actually carrying a connected DocuSign account, so picking
-// "any" row via limit=1 can land on one without settings.docusign. Prefer an
-// org-scoped row that has DocuSign connected, then any org-scoped row, then
-// fall back to searching all profiles for one with DocuSign connected.
-async function loadProfile(organization_id) {
-  if (organization_id) {
-    const scoped = await fetchProfiles(`&organization_id=eq.${encodeURIComponent(organization_id)}`);
-    const scopedWithDocusign = scoped.find((p) => p.settings?.docusign);
-    if (scopedWithDocusign) return scopedWithDocusign;
-    if (scoped.length) return scoped[0];
-  }
-  const all = await fetchProfiles('');
-  return all.find((p) => p.settings?.docusign) || all[0] || null;
-}
-
-async function loadDocusignCredentials() {
-  const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/docusign_credentials?select=*&limit=1`,
-    { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
-  );
-  const rows = await res.json();
-  return rows[0] || null;
-}
-
-async function refreshTokenIfNeeded(docusign, profileId) {
-  const expiresAt = docusign.expires_at ? new Date(docusign.expires_at) : null;
-  const needsRefresh = !expiresAt || (expiresAt.getTime() - Date.now() < 5 * 60 * 1000);
-  if (!needsRefresh || !docusign.refresh_token) return docusign;
-
-  const creds = await loadDocusignCredentials();
-  if (!creds?.client_id || !creds?.client_secret) return docusign;
-
-  const DOCUSIGN_BASE_URL = creds.environment === 'production'
-    ? 'https://account.docusign.com'
-    : 'https://account-d.docusign.com';
-
-  const credentials = Buffer.from(`${creds.client_id}:${creds.client_secret}`).toString('base64');
-  const tokenRes = await fetch(`${DOCUSIGN_BASE_URL}/oauth/token`, {
-    method: 'POST',
-    headers: { Authorization: `Basic ${credentials}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: docusign.refresh_token }),
-  });
-  if (!tokenRes.ok) return docusign;
-
-  const tokenData = await tokenRes.json();
-  const updated = {
-    ...docusign,
-    access_token:  tokenData.access_token,
-    refresh_token: tokenData.refresh_token || docusign.refresh_token,
-    expires_at:    new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
-  };
-
-  // Persist updated tokens
-  const profileRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/company_profiles?id=eq.${profileId}&select=settings&limit=1`,
-    { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
-  );
-  const profiles = await profileRes.json();
-  const currentSettings = profiles[0]?.settings || {};
-  await fetch(`${SUPABASE_URL}/rest/v1/company_profiles?id=eq.${profileId}`, {
-    method: 'PATCH',
-    headers: {
-      apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`,
-      'Content-Type': 'application/json', Prefer: 'return=minimal',
-    },
-    body: JSON.stringify({ settings: { ...currentSettings, docusign: updated } }),
-  });
-
-  return updated;
-}
+// DocuSign calls this when the envelope is sent, signed, declined, or voided,
+// so signed contracts are saved into the CRM automatically (see
+// api/docusign-webhook.js). Always production: it shares the same database.
+const WEBHOOK_URL = 'https://clardy.io/api/docusign-webhook';
+const EVENT_NOTIFICATION = {
+  url: WEBHOOK_URL,
+  requireAcknowledgment: 'true',
+  loggingEnabled: 'true',
+  deliveryMode: 'SIM',
+  events: ['envelope-sent', 'envelope-delivered', 'envelope-completed', 'envelope-declined', 'envelope-voided'],
+  eventData: { version: 'restv2.1', format: 'json' },
+};
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -125,12 +62,11 @@ module.exports = async function handler(req, res) {
 
   try {
     // Load profile (org-scoped; falls back to any profile with DocuSign connected)
-    let profile = await loadProfile(organization_id);
-    if (!profile?.settings?.docusign?.access_token) {
+    const auth = await getDocusign(organization_id);
+    if (!auth) {
       return res.status(400).json({ error: 'DocuSign account is not connected. Configure it in Settings.' });
     }
-
-    let docusign = await refreshTokenIfNeeded(profile.settings.docusign, profile.id);
+    const { docusign } = auth;
 
     // Download + base64-encode every document, each becoming its own entry
     // in the envelope so DocuSign presents them as one signing session.
@@ -204,15 +140,26 @@ module.exports = async function handler(req, res) {
         })),
       },
       status: review ? 'created' : 'sent',
+      eventNotification: EVENT_NOTIFICATION,
     };
 
     const apiBase = `${docusign.base_uri}/restapi/v2.1/accounts/${docusign.account_id}/envelopes`;
-    const envelopeRes = await fetch(apiBase, {
+    const createEnvelope = (payload) => fetch(apiBase, {
       method: 'POST',
       headers: { Authorization: `Bearer ${docusign.access_token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(envelopeBody),
+      body: JSON.stringify(payload),
     });
-    const envelopeData = await envelopeRes.json();
+    let envelopeRes = await createEnvelope(envelopeBody);
+    let envelopeData = await envelopeRes.json();
+    // Some DocuSign plans don't allow per-envelope webhooks. Never let that
+    // block sending: retry without it (the status refresh and daily sync
+    // still pick up the signed contract).
+    if (!envelopeRes.ok && /connect|event.?notification|permission/i.test(`${envelopeData.errorCode} ${envelopeData.message}`)) {
+      console.warn('docusign-send: eventNotification rejected, retrying without it:', envelopeData.errorCode, envelopeData.message);
+      delete envelopeBody.eventNotification;
+      envelopeRes = await createEnvelope(envelopeBody);
+      envelopeData = await envelopeRes.json();
+    }
     if (!envelopeRes.ok) {
       return res.status(envelopeRes.status).json({
         error: envelopeData.message || envelopeData.errorCode || 'Failed to create DocuSign envelope.',
