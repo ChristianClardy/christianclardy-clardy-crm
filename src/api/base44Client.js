@@ -150,6 +150,9 @@ const COMPANY_SCOPED_TABLES = new Set([
   'barrier_daily_logs', 'subcontractor_barrier_acknowledgments',
 ]);
 
+// Foreign keys that tie a record to a specific job; see create().
+const JOB_PARENT_KEYS = ['project_id', 'estimate_id', 'invoice_id'];
+
 export function setCurrentOrgId(id) {
   _currentOrgId = id;
 }
@@ -226,8 +229,13 @@ function createEntity(tableName) {
       if (needsOrg() && !payload.organization_id) {
         payload.organization_id = _currentOrgId;
       }
-      // Auto-tag with the active company scope so new records aren't orphaned
-      if (COMPANY_SCOPED_TABLES.has(tableName) && !payload.company_id) {
+      // Auto-tag with the active company scope so new records aren't orphaned —
+      // unless the record belongs to a job (project/estimate/invoice): then the
+      // database's inherit_company_id trigger gives it that job's company, so
+      // it can't land in the wrong company because of the sidebar switcher
+      // (see 037_company_separation.sql).
+      const hasJobParent = JOB_PARENT_KEYS.some((k) => payload[k]);
+      if (COMPANY_SCOPED_TABLES.has(tableName) && !payload.company_id && !hasJobParent) {
         const scope = getSelectedCompanyScope();
         if (scope !== 'all') payload.company_id = scope;
       }

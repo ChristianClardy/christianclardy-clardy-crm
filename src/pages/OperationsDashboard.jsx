@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import MetricCard from "@/components/dashboard/MetricCard";
+import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 
 export default function OperationsDashboard() {
-  const [projects, setProjects] = useState([]);
-  const [visits, setVisits] = useState([]);
+  const scope = useCompanyScope();
+  const [allProjects, setProjects] = useState([]);
+  const [allVisits, setVisits] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -28,6 +30,14 @@ export default function OperationsDashboard() {
       unsubVisits();
     };
   }, []);
+
+  // Site visits have no company of their own; they follow their project.
+  const projects = useMemo(() => scopeFilter(allProjects, scope), [allProjects, scope]);
+  const visits = useMemo(() => {
+    if (scope === "all") return allVisits;
+    const ids = new Set(projects.map((p) => p.id));
+    return allVisits.filter((v) => ids.has(v.project_id));
+  }, [allVisits, projects, scope]);
 
   const jobsByStatus = useMemo(() => projects.reduce((acc, project) => {
     acc[project.status] = (acc[project.status] || 0) + 1;

@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 
 const formatCurrency = (value) => {
   if (value === undefined || value === null) return "$0";
@@ -52,8 +53,17 @@ const formatCurrency = (value) => {
 
 export default function WIPReport() {
   const navigate = useNavigate();
-  const [projects, setProjects] = useState([]);
-  const [clients, setClients] = useState([]);
+  const scope = useCompanyScope();
+  const [allProjects, setProjects] = useState([]);
+  const [allClients, setClients] = useState([]);
+  const projects = useMemo(() => scopeFilter(allProjects, scope), [allProjects, scope]);
+  // Keep a client tagged to another company if they have a job in this one
+  // (one client can hire more than one company).
+  const clients = useMemo(() => {
+    if (scope === "all") return allClients;
+    const withJobs = new Set(projects.map((p) => p.client_id));
+    return allClients.filter((c) => c.company_id === scope || withJobs.has(c.id));
+  }, [allClients, projects, scope]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("active");
   const [expandedClients, setExpandedClients] = useState(new Set());

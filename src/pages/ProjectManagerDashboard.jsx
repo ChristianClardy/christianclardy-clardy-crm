@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import MetricCard from "@/components/dashboard/MetricCard";
+import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 
 export default function ProjectManagerDashboard() {
-  const [projects, setProjects] = useState([]);
-  const [tasks, setTasks] = useState([]);
-  const [changeOrders, setChangeOrders] = useState([]);
-  const [selections, setSelections] = useState([]);
+  const scope = useCompanyScope();
+  const [allProjects, setProjects] = useState([]);
+  const [allTasks, setTasks] = useState([]);
+  const [allChangeOrders, setChangeOrders] = useState([]);
+  const [allSelections, setSelections] = useState([]);
   const [me, setMe] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -41,6 +43,13 @@ export default function ProjectManagerDashboard() {
       unsubSelections();
     };
   }, []);
+
+  // Selections have no company of their own; they follow their project.
+  const projects = scopeFilter(allProjects, scope);
+  const tasks = scopeFilter(allTasks, scope);
+  const changeOrders = scopeFilter(allChangeOrders, scope);
+  const scopedProjectIds = new Set(projects.map((p) => p.id));
+  const selections = scope === "all" ? allSelections : allSelections.filter((s) => scopedProjectIds.has(s.project_id));
 
   const today = new Date().toISOString().slice(0, 10);
   const myJobs = projects.filter((project) => [project.project_manager, project.superintendent].includes(me?.full_name));
