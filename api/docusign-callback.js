@@ -3,6 +3,7 @@
 // exposed to the browser) rather than from a Vercel env var — it's entered
 // once in Settings > DocuSign and stored there.
 
+const { requireStaff } = require('./_lib/staffAuth.js');
 const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -16,6 +17,8 @@ async function loadCredentials() {
 }
 
 module.exports = async function handler(req, res) {
+  // Staff only: this endpoint uses the service role key.
+  if (req.method !== 'OPTIONS' && !(await requireStaff(req, res))) return;
   if (req.method !== 'POST') {
     res.status(405).send('Method Not Allowed');
     return;

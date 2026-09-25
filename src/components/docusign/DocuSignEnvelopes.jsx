@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Send, RefreshCw, CheckCircle, Clock, XCircle, AlertCircle, FileCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/apiFetch";
 
 const STATUS_CONFIG = {
   sent:      { label: "Sent",      icon: Clock,        color: "text-blue-600 bg-blue-50 border-blue-200" },
@@ -49,7 +50,7 @@ export default function DocuSignEnvelopes({ entityType, entityId, className }) {
   const refresh = async (envelope, { quiet = false } = {}) => {
     if (!quiet) setRefreshing(envelope.id);
     try {
-      const res = await fetch(`/api/docusign-status?envelope_id=${encodeURIComponent(envelope.envelope_id)}`);
+      const res = await apiFetch(`/api/docusign-status?envelope_id=${encodeURIComponent(envelope.envelope_id)}`);
       if (res.ok) {
         const data = await res.json();
         setEnvelopes(prev => prev.map(e => e.id === envelope.id

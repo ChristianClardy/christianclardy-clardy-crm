@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Save, Link, Building2, Unlink } from "lucide-react";
+import { apiFetch } from "@/lib/apiFetch";
 
 // ─── QuickBooks Online settings tab ──────────────────────────────────────────
 
@@ -36,7 +37,7 @@ export default function QuickBooksTab() {
 
   const loadAppConfig = async () => {
     try {
-      const res = await fetch("/api/quickbooks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "config-get" }) });
+      const res = await apiFetch("/api/quickbooks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "config-get" }) });
       const data = await res.json();
       setAppConfig(data);
       if (data?.configured) setForm((f) => ({ ...f, client_id: data.client_id, environment: data.environment }));
@@ -51,7 +52,7 @@ export default function QuickBooksTab() {
     if (!form.client_secret.trim()) return setAppError("Client Secret is required.");
     setSavingApp(true);
     try {
-      const res = await fetch("/api/quickbooks", {
+      const res = await apiFetch("/api/quickbooks", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ action: "config-save", ...form }),
@@ -71,7 +72,7 @@ export default function QuickBooksTab() {
   const handleConnect = async () => {
     try {
       const redirectUri = `${window.location.origin}/QuickBooksCallback`;
-      const res = await fetch("/api/quickbooks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "auth-url", redirect_uri: redirectUri }) });
+      const res = await apiFetch("/api/quickbooks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "auth-url", redirect_uri: redirectUri }) });
       const data = await res.json();
       if (!res.ok || !data.auth_url) throw new Error(data.error || "Failed to start QuickBooks authorization.");
       window.location.href = data.auth_url;

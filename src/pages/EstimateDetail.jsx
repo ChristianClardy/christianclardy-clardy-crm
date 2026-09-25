@@ -22,6 +22,7 @@ import { useAuth } from "@/lib/AuthContext";
 import DocuSignEnvelopes from "@/components/docusign/DocuSignEnvelopes";
 import { PROJECT_TYPES } from "@/components/settings/ScopeTemplatesTab";
 import { renderScopeTemplate } from "@/lib/scopeTemplateEngine";
+import { apiFetch } from "@/lib/apiFetch";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -2106,7 +2107,7 @@ export default function EstimateDetail() {
       setSendStatus("sending");
 
       // Send via DocuSign
-      const res = await fetch("/api/docusign-send", {
+      const res = await apiFetch("/api/docusign-send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

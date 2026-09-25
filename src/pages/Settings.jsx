@@ -27,6 +27,7 @@ import { fetchDesigners, addDesigner, removeDesigner } from "@/lib/designers";
 import SubcontractorsTab from "@/components/settings/SubcontractorsTab";
 import JobAssignmentsTab from "@/components/settings/JobAssignmentsTab";
 import QuickBooksTab from "@/components/settings/QuickBooksTab";
+import { apiFetch } from "@/lib/apiFetch";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -636,7 +637,7 @@ function DocuSignTab() {
 
   const loadAppConfig = async () => {
     try {
-      const res = await fetch("/api/docusign-config");
+      const res = await apiFetch("/api/docusign-config");
       const data = await res.json();
       setAppConfig(data);
       if (data?.configured) setForm((f) => ({ ...f, client_id: data.client_id, environment: data.environment }));
@@ -651,7 +652,7 @@ function DocuSignTab() {
     if (!form.client_secret.trim()) return setAppError("Client Secret is required.");
     setSavingApp(true);
     try {
-      const res = await fetch("/api/docusign-config", {
+      const res = await apiFetch("/api/docusign-config", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify(form),

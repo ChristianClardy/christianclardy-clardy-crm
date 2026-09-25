@@ -2,9 +2,12 @@
 // Fetches current envelope status from DocuSign, syncs it to the DB, and saves
 // the signed contract into the CRM once the envelope is completed.
 
+const { requireStaff } = require('./_lib/staffAuth.js');
 const { syncEnvelope, getEnvelopeRow } = require('./_lib/docusign.js');
 
 module.exports = async function handler(req, res) {
+  // Staff only: this endpoint uses the service role key.
+  if (req.method !== 'OPTIONS' && !(await requireStaff(req, res))) return;
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).send('Method Not Allowed');

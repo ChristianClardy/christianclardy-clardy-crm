@@ -13,6 +13,7 @@ import { getInvoiceBranding } from "@/components/payments/invoiceBrandingUtils";
 import { DollarSign, Search, CheckCircle2, Clock, AlertCircle, RefreshCw, Plus, Palette, Cloud, ExternalLink, X } from "lucide-react";
 import { getSelectedCompanyScope, subscribeToCompanyScope } from "@/lib/companyScope";
 import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/apiFetch";
 
 const statusStyles = {
   pending: "bg-slate-100 text-slate-600",
@@ -185,7 +186,7 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
     setQbError(null);
     setQbResult(null);
     try {
-      const res = await fetch("/api/quickbooks", {
+      const res = await apiFetch("/api/quickbooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "create-invoice", invoice_id: invoice.id }),

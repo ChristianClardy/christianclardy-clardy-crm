@@ -5,6 +5,7 @@
 // environment, so the Settings page can show "configured" state without the
 // secret ever round-tripping back out.
 
+const { requireStaff } = require('./_lib/staffAuth.js');
 const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -18,6 +19,8 @@ async function loadCredentials() {
 }
 
 module.exports = async function handler(req, res) {
+  // Staff only: this endpoint uses the service role key.
+  if (req.method !== 'OPTIONS' && !(await requireStaff(req, res))) return;
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');

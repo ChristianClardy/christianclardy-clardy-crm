@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { getCurrentOrgId } from "@/api/base44Client";
 import DocuSignEnvelopes from "@/components/docusign/DocuSignEnvelopes";
+import { apiFetch } from "@/lib/apiFetch";
 
 export const DOC_TYPES = [
   "Contract",
@@ -98,7 +99,7 @@ function SendModal({ doc, docusignConnected, onClose }) {
     e.preventDefault();
     setSending(true);
     try {
-      const res = await fetch("/api/docusign-send", {
+      const res = await apiFetch("/api/docusign-send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

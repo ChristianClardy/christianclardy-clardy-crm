@@ -10,6 +10,7 @@
 //   POST /api/quickbooks  { action: "create-invoice", invoice_id } → push invoice to QB
 //   POST /api/quickbooks  { action: "send-invoice", qb_invoice_id, realm_id } → email invoice
 
+const { requireStaff } = require('./_lib/staffAuth.js');
 const SUPABASE_URL  = 'https://fneasddxtejasvsojgcu.supabase.co';
 const SERVICE_KEY   = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const QB_AUTH_URL   = 'https://appcenter.intuit.com/connect/oauth2';
@@ -268,6 +269,8 @@ async function handleSendInvoice(body) {
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
 module.exports = async function handler(req, res) {
+  // Staff only: this endpoint uses the service role key.
+  if (req.method !== 'OPTIONS' && !(await requireStaff(req, res))) return;
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');

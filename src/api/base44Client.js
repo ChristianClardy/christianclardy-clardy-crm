@@ -9,6 +9,7 @@
 
 import { supabase } from '@/lib/supabase';
 import { getSelectedCompanyScope } from '@/lib/companyScope';
+import { apiFetch } from '@/lib/apiFetch';
 
 // ─── Entity → table name map ────────────────────────────────────────────────
 const TABLE_MAP = {
@@ -366,7 +367,7 @@ const integrations = {
 
       // Step 2: Save the attachment record via server (service role bypasses RLS)
       if (entity_type && entity_id) {
-        const res = await fetch('/api/upload-record', {
+        const res = await apiFetch('/api/upload-record', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

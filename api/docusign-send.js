@@ -8,6 +8,7 @@
 // ([{ anchor, value }]) — rendered as locked DocuSign anchor-string text tabs
 // so customer/deal info is merged into the document text at send time.
 
+const { requireStaff } = require('./_lib/staffAuth.js');
 const { getDocusign } = require('./_lib/docusign.js');
 
 const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
@@ -27,6 +28,8 @@ const EVENT_NOTIFICATION = {
 };
 
 module.exports = async function handler(req, res) {
+  // Staff only: this endpoint uses the service role key.
+  if (req.method !== 'OPTIONS' && !(await requireStaff(req, res))) return;
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');

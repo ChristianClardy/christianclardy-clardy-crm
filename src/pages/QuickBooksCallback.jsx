@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
+import { apiFetch } from "@/lib/apiFetch";
 
 /**
  * OAuth 2.0 callback page for QuickBooks.
@@ -39,7 +40,7 @@ export default function QuickBooksCallback() {
     try {
       const redirectUri = `${window.location.origin}/QuickBooksCallback`;
 
-      const res = await fetch("/api/quickbooks", {
+      const res = await apiFetch("/api/quickbooks", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ action: "callback", code, realm_id: realmId, redirect_uri: redirectUri }),

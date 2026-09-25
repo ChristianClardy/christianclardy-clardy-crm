@@ -16,6 +16,7 @@
 // only ever works for an active subcontractor login, never staff.
 
 const crypto = require('crypto');
+const { getStaffCaller } = require('./_lib/staffAuth.js');
 
 const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -49,21 +50,6 @@ async function insertRow(table, row) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.message || res.statusText);
   }
-}
-
-// Returns the calling user if the database says they're staff, else null.
-async function getStaffCaller(req) {
-  const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-  if (!token) return null;
-  const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${token}` },
-  });
-  if (!userRes.ok) return null;
-  const user = await userRes.json();
-  if (!user?.id) return null;
-  // Evaluate is_staff() as the caller, not as the service role.
-  const isStaff = await rpc('is_staff', {}, { apikey: SERVICE_KEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' });
-  return isStaff === true ? user : null;
 }
 
 async function grantStaff(userId, email) {

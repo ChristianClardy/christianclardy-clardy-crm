@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
+import { apiFetch } from "@/lib/apiFetch";
 
 /**
  * OAuth 2.0 callback page for DocuSign.
@@ -38,7 +39,7 @@ export default function DocuSignCallback() {
     try {
       const redirectUri = `${window.location.origin}/DocuSignCallback`;
 
-      const res = await fetch("/api/docusign-callback", {
+      const res = await apiFetch("/api/docusign-callback", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ code, redirect_uri: redirectUri }),

@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/AuthContext";
 import DocuSignEnvelopes from "@/components/docusign/DocuSignEnvelopes";
 import { resolveContractMergeValue, renderContractTemplate } from "@/lib/contractMergeSources";
 import { generateContractPdf } from "@/lib/generateContractPdf";
+import { apiFetch } from "@/lib/apiFetch";
 
 // ─── Contracts Panel ────────────────────────────────────────────────────────
 // Bundles any number of Contract Templates (merge-field mapped) + selected
@@ -193,7 +194,7 @@ export default function ContractsPanel({ lead, deal = null }) {
       const validSigners = signers.filter((s) => s.name.trim() && s.email.trim());
       if (validSigners.length === 0) throw new Error("Add at least one signer with a name and email.");
 
-      const res = await fetch("/api/docusign-send", {
+      const res = await apiFetch("/api/docusign-send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

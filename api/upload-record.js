@@ -1,10 +1,13 @@
 // Saves an attachment record to the DB using service role key (bypasses RLS)
 // POST /api/upload-record  (application/json)
 
+const { requireStaff } = require('./_lib/staffAuth.js');
 const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 module.exports = async function handler(req, res) {
+  // Staff only: this endpoint uses the service role key.
+  if (req.method !== 'OPTIONS' && !(await requireStaff(req, res))) return;
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
