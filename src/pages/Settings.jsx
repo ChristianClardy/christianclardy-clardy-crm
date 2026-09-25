@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 import {
   Users, ShieldCheck, Plus, Edit2, Trash2, Search,
   Save, Check, X, CalendarDays, Copy, CheckCheck,
-  Building2, UserPlus, Mail, Phone, Loader2, Palette, Moon, Sun,
+  Building2, UserPlus, Mail, Loader2, Palette, Moon, Sun,
   FileSignature, Link as LinkIcon, Tag, FileText, HardHat,
 } from "lucide-react";
 import { useTheme } from "@/lib/ThemeContext";
@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 import CompanyManager from "@/components/company/CompanyManager";
 import OrganizationTab from "@/components/settings/OrganizationTab";
 import TemplatesTab from "@/components/settings/TemplatesTab";
-import { useAuth } from "@/lib/AuthContext";
+import { goToSettingsTab } from "@/lib/settingsNav";
 import { sendInvite } from "@/lib/sendInvite";
 import { DEFAULT_LEAD_SOURCE_OPTIONS, fetchCustomLeadSources, addCustomLeadSource, removeCustomLeadSource } from "@/lib/leadSources";
 import { fetchDesigners, addDesigner, removeDesigner } from "@/lib/designers";
@@ -383,7 +383,6 @@ function PermissionsTab() {
 function InviteTab() {
   const [inviteEmail, setInviteEmail]               = useState("");
   const [inviteFullName, setInviteFullName]         = useState("");
-  const [inviteRole, setInviteRole]                 = useState("user");
   const [inviteEmployeeRole, setInviteEmployeeRole] = useState("laborer");
   const [createEmployee, setCreateEmployee]         = useState(true);
   const [inviting, setInviting]                     = useState(false);
@@ -425,8 +424,8 @@ function InviteTab() {
             <ShieldCheck className="w-4 h-4 text-white" />
           </div>
           <div>
-            <p className="font-semibold text-slate-900">Invite to App</p>
-            <p className="text-xs text-slate-500">Send a login invitation by email</p>
+            <p className="font-semibold text-slate-900">Invite a team member</p>
+            <p className="text-xs text-slate-500">Emails them a link to set a password and use the full CRM.</p>
           </div>
         </div>
         <form onSubmit={handleInvite} className="space-y-4">
@@ -438,20 +437,12 @@ function InviteTab() {
             <Label className="text-xs uppercase tracking-wide text-slate-500 mb-1.5 block">Email Address</Label>
             <Input type="email" required value={inviteEmail} onChange={e => { setInviteEmail(e.target.value); setSuccess(false); setError(""); }} placeholder="colleague@example.com" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label className="text-xs uppercase tracking-wide text-slate-500 mb-1.5 block">App Role</Label>
-              <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} className="w-full h-9 text-sm border border-slate-200 rounded-md px-2 outline-none focus:ring-1 focus:ring-amber-400">
-                <option value="user">User</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-            <div>
-              <Label className="text-xs uppercase tracking-wide text-slate-500 mb-1.5 block">Employee Role</Label>
-              <select value={inviteEmployeeRole} onChange={e => setInviteEmployeeRole(e.target.value)} className="w-full h-9 text-sm border border-slate-200 rounded-md px-2 outline-none focus:ring-1 focus:ring-amber-400">
-                {ROLES.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
-              </select>
-            </div>
+          <div>
+            <Label className="text-xs uppercase tracking-wide text-slate-500 mb-1.5 block">Role</Label>
+            <select value={inviteEmployeeRole} onChange={e => setInviteEmployeeRole(e.target.value)} className="w-full h-9 text-sm border border-slate-200 rounded-md px-2 outline-none focus:ring-1 focus:ring-amber-400">
+              {ROLES.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
+            </select>
+            <p className="text-xs text-slate-400 mt-1">Controls what they can open, per Roles &amp; Permissions.</p>
           </div>
           <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 cursor-pointer">
             <input type="checkbox" checked={createEmployee} onChange={e => setCreateEmployee(e.target.checked)} />
@@ -474,10 +465,17 @@ function InviteTab() {
         </form>
       </div>
 
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
-        <p className="font-semibold mb-1">Tip</p>
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800 space-y-2">
+        <p className="font-semibold">Inviting a subcontractor?</p>
         <p className="text-xs leading-relaxed">
-          You can also invite users directly in <strong>Supabase → Authentication → Users → Invite User</strong>. After they sign in, add them as an employee here to assign them to projects.
+          Don't use this form. It gives full CRM access. Go to{" "}
+          <button type="button" onClick={() => goToSettingsTab("teamSubs", { people: "subcontractors" })} className="font-semibold underline">
+            Team &amp; Subcontractors → Subcontractors
+          </button>{" "}
+          and click <strong>Invite</strong> on their row. They'll get the Builder Portal only, by text or email.
+        </p>
+        <p className="text-xs leading-relaxed">
+          Only invite people from here. Accounts created any other way, such as the Supabase dashboard, don't get access.
         </p>
       </div>
     </div>
@@ -1084,7 +1082,16 @@ const PEOPLE_CATEGORIES = [
 ];
 
 function TeamSubsTab() {
-  const [category, setCategory] = useState("employees");
+  const [category, setCategory] = useState(() => {
+    const p = new URLSearchParams(window.location.search).get("people");
+    return PEOPLE_CATEGORIES.some((c) => c.key === p) ? p : "employees";
+  });
+  const pick = (key) => {
+    setCategory(key);
+    const url = new URL(window.location.href);
+    url.searchParams.set("people", key);
+    window.history.replaceState(null, "", url);
+  };
 
   return (
     <div className="space-y-4">
@@ -1092,7 +1099,7 @@ function TeamSubsTab() {
         {PEOPLE_CATEGORIES.map(({ key, label }) => (
           <button
             key={key}
-            onClick={() => setCategory(key)}
+            onClick={() => pick(key)}
             className={cn(
               "rounded-lg px-3.5 py-2 text-sm font-medium transition-all",
               category === key
@@ -1114,69 +1121,146 @@ function TeamSubsTab() {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-const ALL_TABS = [
-  { key: "organization", label: "Organization",        icon: Building2,      adminOnly: false },
-  { key: "teamSubs",     label: "Team & Subcontractors", icon: Users,        adminOnly: false },
-  { key: "jobAssignments", label: "Job Assignments",   icon: HardHat,        adminOnly: false },
-  { key: "permissions",  label: "Roles & Permissions", icon: ShieldCheck,    adminOnly: false },
-  { key: "companies",    label: "Companies",           icon: Building2,      adminOnly: false },
-  { key: "leadSources",  label: "Lead Sources",        icon: Tag,            adminOnly: false },
-  { key: "invite",       label: "Invite & Logins",     icon: UserPlus,       adminOnly: false },
-  { key: "calendar",     label: "Calendar Feed",       icon: CalendarDays,   adminOnly: false },
-  { key: "appearance",   label: "Appearance",          icon: Palette,        adminOnly: false },
-  { key: "templates",    label: "Templates",           icon: FileText,       adminOnly: false },
-  { key: "docusign",     label: "DocuSign",            icon: FileSignature,  adminOnly: false },
-  { key: "quickbooks",   label: "QuickBooks",          icon: LinkIcon,       adminOnly: false },
+const TAB_GROUPS = [
+  {
+    label: "People & access",
+    tabs: [
+      { key: "teamSubs",       label: "Team & Subcontractors", icon: Users,        description: "Employees, subcontractors and their paperwork, and designers." },
+      { key: "jobAssignments", label: "Job Assignments",       icon: HardHat,      description: "Which jobs each subcontractor can see in the Builder Portal app." },
+      { key: "invite",         label: "Invite Team Members",   icon: UserPlus,     description: "Give an employee a login to the full CRM." },
+      { key: "permissions",    label: "Roles & Permissions",   icon: ShieldCheck,  description: "Which parts of the CRM each employee role can open." },
+    ],
+  },
+  {
+    label: "Company",
+    tabs: [
+      { key: "organization", label: "Organization", icon: Building2, description: "Organization details, members, and pending invitations." },
+      { key: "companies",    label: "Companies",    icon: Building2, description: "The companies you run work under, used by the sidebar company switcher." },
+      { key: "appearance",   label: "Appearance",   icon: Palette,   description: "Color scheme and light / dark mode." },
+    ],
+  },
+  {
+    label: "Sales & documents",
+    tabs: [
+      { key: "leadSources", label: "Lead Sources", icon: Tag,      description: "Your own options for the Lead Source dropdown on leads." },
+      { key: "templates",   label: "Templates",    icon: FileText, description: "Contract, scope, payment schedule, and allowance templates." },
+    ],
+  },
+  {
+    label: "Integrations",
+    tabs: [
+      { key: "docusign",   label: "DocuSign",      icon: FileSignature, description: "Connect DocuSign to send contracts for signature." },
+      { key: "quickbooks", label: "QuickBooks",    icon: LinkIcon,      description: "Connect QuickBooks to push invoices." },
+      { key: "calendar",   label: "Calendar Feed", icon: CalendarDays,  description: "Subscribe to your Clardy calendar from Google, Apple, or Outlook." },
+    ],
+  },
 ];
 
-export default function Settings() {
-  const { user }        = useAuth();
-  const isAdmin         = user?.role === "admin";
-  const [activeTab, setActiveTab] = useState(
-    () => new URLSearchParams(window.location.search).get("tab") || "teamSubs"
-  );
+const ALL_TABS = TAB_GROUPS.flatMap((g) => g.tabs);
+const DEFAULT_TAB = "teamSubs";
 
-  const visibleTabs = ALL_TABS.filter((t) => !t.adminOnly || isAdmin);
+const tabFromUrl = () => {
+  const t = new URLSearchParams(window.location.search).get("tab");
+  return ALL_TABS.some((x) => x.key === t) ? t : DEFAULT_TAB;
+};
+
+const TAB_CONTENT = {
+  organization:   OrganizationTab,
+  teamSubs:       TeamSubsTab,
+  jobAssignments: JobAssignmentsTab,
+  permissions:    PermissionsTab,
+  companies:      CompanyManager,
+  leadSources:    LeadSourcesTab,
+  invite:         InviteTab,
+  calendar:       CalendarFeedTab,
+  appearance:     AppearanceTab,
+  templates:      TemplatesTab,
+  docusign:       DocuSignTab,
+  quickbooks:     QuickBooksTab,
+};
+
+export default function Settings() {
+  const [activeTab, setActiveTab] = useState(tabFromUrl);
+  // Bumped on every navigation so a tab re-reads its own URL params (e.g.
+  // "?people=subcontractors") when a link jumps to it again.
+  const [navKey, setNavKey] = useState(0);
+
+  useEffect(() => {
+    const onPop = () => { setActiveTab(tabFromUrl()); setNavKey((n) => n + 1); };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  const select = (key) => {
+    if (key === activeTab) return;
+    const url = new URL(window.location.origin + "/Settings");
+    url.searchParams.set("tab", key);
+    window.history.pushState(null, "", url);
+    setActiveTab(key);
+    window.scrollTo({ top: 0 });
+  };
+
+  const current = ALL_TABS.find((t) => t.key === activeTab);
+  const Content = TAB_CONTENT[activeTab];
 
   return (
-    <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">Settings</p>
-          <h1 className="mt-1 text-3xl font-bold text-slate-900">Settings</h1>
-          <p className="mt-1 text-sm text-slate-500">Manage your team, companies, roles, and app access.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {visibleTabs.map(({ key, label, icon: Icon }) => (
-            <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-all",
-                activeTab === key
-                  ? "border-slate-900 bg-slate-900 text-white shadow-sm"
-                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-            </button>
-          ))}
-        </div>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
+      <div className="mb-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">Settings</p>
+        <h1 className="mt-1 text-2xl sm:text-3xl font-bold text-slate-900">Settings</h1>
       </div>
 
-      {activeTab === "organization" && <OrganizationTab />}
-      {activeTab === "teamSubs"    && <TeamSubsTab />}
-      {activeTab === "jobAssignments" && <JobAssignmentsTab />}
-      {activeTab === "permissions" && <PermissionsTab />}
-      {activeTab === "companies"   && <CompanyManager />}
-      {activeTab === "leadSources" && <LeadSourcesTab />}
-      {activeTab === "invite"      && <InviteTab />}
-      {activeTab === "calendar"    && <CalendarFeedTab />}
-      {activeTab === "appearance"  && <AppearanceTab />}
-      {activeTab === "templates"   && <TemplatesTab />}
-      {activeTab === "docusign"    && <DocuSignTab />}
-      {activeTab === "quickbooks"  && <QuickBooksTab />}
+      {/* Phones / tablets: one dropdown instead of a wall of buttons. */}
+      <div className="lg:hidden mb-4">
+        <select
+          value={activeTab}
+          onChange={(e) => select(e.target.value)}
+          className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800"
+        >
+          {TAB_GROUPS.map((g) => (
+            <optgroup key={g.label} label={g.label}>
+              {g.tabs.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+            </optgroup>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex gap-6">
+        <nav className="hidden lg:block w-56 shrink-0">
+          <div className="sticky top-6 space-y-5">
+            {TAB_GROUPS.map((g) => (
+              <div key={g.label}>
+                <p className="px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{g.label}</p>
+                <div className="space-y-0.5">
+                  {g.tabs.map(({ key, label, icon: Icon }) => (
+                    <button
+                      key={key}
+                      onClick={() => select(key)}
+                      className={cn(
+                        "w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-left transition-colors",
+                        activeTab === key
+                          ? "bg-slate-900 text-white font-medium"
+                          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                      )}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </nav>
+
+        <main className="flex-1 min-w-0 space-y-5">
+          <div className="border-b border-slate-200 pb-4">
+            <h2 className="text-xl font-semibold text-slate-900">{current.label}</h2>
+            <p className="mt-0.5 text-sm text-slate-500">{current.description}</p>
+          </div>
+          <Content key={`${activeTab}-${navKey}`} />
+        </main>
+      </div>
     </div>
   );
 }

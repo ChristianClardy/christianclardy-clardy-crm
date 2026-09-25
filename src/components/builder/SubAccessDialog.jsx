@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { sendInvite, createTextInviteLink } from "@/lib/sendInvite";
+import { goToSettingsTab } from "@/lib/settingsNav";
 import { Textarea } from "@/components/ui/textarea";
 
 // Staff-only: who from a subcontractor has an app login, and inviting more.
@@ -84,7 +85,16 @@ export default function SubAccessDialog({ sub, onOpenChange, assignments, portal
           <p className="text-sm text-slate-700">
             {subAssignments.length} job{subAssignments.length !== 1 ? "s" : ""} assigned
           </p>
-          <a href="/Settings?tab=jobAssignments" className="text-sm font-medium text-amber-700 hover:underline shrink-0">
+          <a
+            href={`/Settings?tab=jobAssignments&sub=${sub.id}`}
+            onClick={(e) => {
+              // Already in Settings: switch tabs in place instead of reloading.
+              if (window.location.pathname !== "/Settings") return;
+              e.preventDefault();
+              onOpenChange(false);
+              goToSettingsTab("jobAssignments", { sub: sub.id });
+            }}
+            className="text-sm font-medium text-amber-700 hover:underline shrink-0">
             Manage in Settings → Job Assignments
           </a>
         </section>

@@ -26,7 +26,11 @@ export default function JobAssignmentsTab() {
   const [activeOnly, setActiveOnly] = useState(true);
   const [jobSearch, setJobSearch] = useState("");
   const [subSearch, setSubSearch] = useState("");
-  const [selectedSubs, setSelectedSubs] = useState(new Set());
+  // "Assign jobs" on a subcontractor links here with ?sub=<id> preselected.
+  const [selectedSubs, setSelectedSubs] = useState(() => {
+    const id = new URLSearchParams(window.location.search).get("sub");
+    return new Set(id ? [id] : []);
+  });
   const [selectedJobs, setSelectedJobs] = useState(new Set());
   const [busy, setBusy] = useState(null); // "assign" | "unassign" | assignment id
   const [message, setMessage] = useState(null);

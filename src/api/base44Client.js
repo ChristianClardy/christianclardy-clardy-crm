@@ -94,7 +94,7 @@ const TABLE_OPTIONAL_FIELDS = {
   sub_invoices: new Set([]),
   todo_items: new Set(['created_by','assigned_to','notes']),
   materials: new Set(['is_active','item_code','manufacturer','manufacturer_part','cost_method','standard_cost','average_cost','last_purchase_price','waste_factor','lead_time_days','min_stock_qty','reorder_point','on_hand_qty','location_code','weight_per_unit','weight_unit','vendor_prices','gl_account','tax_category','taxable','cost_center','price_history','cost_code_id']),
-  subcontractors: new Set(['trade_type','vendor_type']),
+  subcontractors: new Set(['license_exp','workers_comp_exp','coi_url','w9_on_file','hourly_rate','payment_terms']),
   company_profiles: new Set(['invoice_company_name','invoice_logo_url','invoice_header_title','invoice_accent_color','invoice_intro_text','invoice_footer_text','invoice_scope_label','color']),
   clients: new Set(['first_name','last_name','customer_number']),
   deals: new Set(['won_at','lost_at','lost_reason','company_id','lead_id','probability','close_date']),

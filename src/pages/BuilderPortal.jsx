@@ -326,7 +326,7 @@ export default function BuilderPortal({ portal = null }) {
             </Button>
           </div>
           <div className="rounded-xl border bg-white overflow-hidden" style={{ borderColor: "#ddd5c8" }}>
-            {subcontractors.length === 0 && <Empty text="No subcontractors yet. Add them in Settings → Subcontractors." />}
+            {subcontractors.length === 0 && <Empty text="No subcontractors yet. Add them in Settings → Team & Subcontractors → Subcontractors." />}
             <ul className="divide-y divide-slate-100">
               {subcontractors.map((s) => {
                 const ack = latestAckBySub[s.id];
