@@ -5,44 +5,22 @@ import { Loader2, Send, UserX, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { sendInvite } from "@/lib/sendInvite";
 
-const ACTIVE_STATUSES = new Set(["planning", "in_progress", "on_hold"]);
-
-// Staff-only: which jobs a subcontractor can see in the app, and who from that
-// sub has an app login. Portal logins are never deleted through the app (the
-// database blocks it, see 034_subcontractor_portal.sql), only turned off.
-export default function SubAccessDialog({ sub, onOpenChange, projects, assignments, portalUsers, onAssignmentsChange, onPortalUsersChange }) {
-  const [busyProject, setBusyProject] = useState(null);
+// Staff-only: who from a subcontractor has an app login, and inviting more.
+// Job assignments live in Settings → Job Assignments. Portal logins are never
+// deleted through the app (the database blocks it, see
+// 034_subcontractor_portal.sql), only turned off.
+export default function SubAccessDialog({ sub, onOpenChange, assignments, portalUsers, onPortalUsersChange }) {
   const [invite, setInvite] = useState({ full_name: "", email: "" });
   const [inviting, setInviting] = useState(false);
   const [inviteMsg, setInviteMsg] = useState(null);
-  const [showAllJobs, setShowAllJobs] = useState(false);
 
   if (!sub) return null;
 
   const subAssignments = assignments.filter((a) => a.subcontractor_id === sub.id);
-  const assignedIds = new Set(subAssignments.map((a) => a.project_id));
   const logins = portalUsers.filter((u) => u.subcontractor_id === sub.id);
-  const visibleProjects = projects.filter((p) => showAllJobs || ACTIVE_STATUSES.has(p.status) || assignedIds.has(p.id));
-
-  const toggleProject = async (projectId) => {
-    setBusyProject(projectId);
-    try {
-      const existing = subAssignments.find((a) => a.project_id === projectId);
-      if (existing) {
-        await base44.entities.ProjectSubcontractor.delete(existing.id);
-        onAssignmentsChange(assignments.filter((a) => a.id !== existing.id));
-      } else {
-        const created = await base44.entities.ProjectSubcontractor.create({ project_id: projectId, subcontractor_id: sub.id });
-        onAssignmentsChange([...assignments, created]);
-      }
-    } finally {
-      setBusyProject(null);
-    }
-  };
 
   const handleInvite = async (e) => {
     e.preventDefault();
@@ -77,29 +55,13 @@ export default function SubAccessDialog({ sub, onOpenChange, projects, assignmen
           <DialogTitle>{sub.name}: jobs & app access</DialogTitle>
         </DialogHeader>
 
-        <section className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-800">Jobs they can see in the app</h3>
-            <label className="text-xs text-slate-500 flex items-center gap-1.5">
-              <Checkbox checked={showAllJobs} onCheckedChange={(v) => setShowAllJobs(!!v)} /> Show completed jobs
-            </label>
-          </div>
-          <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 max-h-60 overflow-y-auto">
-            {visibleProjects.length === 0 && <p className="text-sm text-slate-400 p-3">No active projects.</p>}
-            {visibleProjects.map((p) => (
-              <label key={p.id} className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-slate-50">
-                {busyProject === p.id ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
-                ) : (
-                  <Checkbox checked={assignedIds.has(p.id)} onCheckedChange={() => toggleProject(p.id)} disabled={!!busyProject} />
-                )}
-                <span className="min-w-0">
-                  <span className="block text-sm text-slate-800 truncate">{p.name}</span>
-                  {p.address && <span className="block text-xs text-slate-500 truncate">{p.address}</span>}
-                </span>
-              </label>
-            ))}
-          </div>
+        <section className="rounded-xl bg-slate-50 px-3 py-2.5 flex items-center justify-between gap-3">
+          <p className="text-sm text-slate-700">
+            {subAssignments.length} job{subAssignments.length !== 1 ? "s" : ""} assigned
+          </p>
+          <a href="/Settings?tab=jobAssignments" className="text-sm font-medium text-amber-700 hover:underline shrink-0">
+            Manage in Settings → Job Assignments
+          </a>
         </section>
 
         <section className="space-y-2">

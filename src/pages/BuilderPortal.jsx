@@ -415,10 +415,8 @@ export default function BuilderPortal({ portal = null }) {
         <SubAccessDialog
           sub={accessDialogSub}
           onOpenChange={(open) => { if (!open) setAccessDialogSub(null); }}
-          projects={scopedProjects}
           assignments={assignments}
           portalUsers={portalUsers}
-          onAssignmentsChange={setAssignments}
           onPortalUsersChange={setPortalUsers}
         />
       )}

@@ -5,7 +5,7 @@ import {
   Users, ShieldCheck, Plus, Edit2, Trash2, Search,
   Save, Check, X, CalendarDays, Copy, CheckCheck,
   Building2, UserPlus, Mail, Phone, Loader2, Palette, Moon, Sun,
-  FileSignature, Link as LinkIcon, Tag, FileText,
+  FileSignature, Link as LinkIcon, Tag, FileText, HardHat,
 } from "lucide-react";
 import { useTheme } from "@/lib/ThemeContext";
 import { COLOR_SCHEMES } from "@/lib/colorSchemes";
@@ -25,6 +25,7 @@ import { sendInvite } from "@/lib/sendInvite";
 import { DEFAULT_LEAD_SOURCE_OPTIONS, fetchCustomLeadSources, addCustomLeadSource, removeCustomLeadSource } from "@/lib/leadSources";
 import { fetchDesigners, addDesigner, removeDesigner } from "@/lib/designers";
 import SubcontractorsTab from "@/components/settings/SubcontractorsTab";
+import JobAssignmentsTab from "@/components/settings/JobAssignmentsTab";
 import QuickBooksTab from "@/components/settings/QuickBooksTab";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -1115,6 +1116,7 @@ function TeamSubsTab() {
 const ALL_TABS = [
   { key: "organization", label: "Organization",        icon: Building2,      adminOnly: false },
   { key: "teamSubs",     label: "Team & Subcontractors", icon: Users,        adminOnly: false },
+  { key: "jobAssignments", label: "Job Assignments",   icon: HardHat,        adminOnly: false },
   { key: "permissions",  label: "Roles & Permissions", icon: ShieldCheck,    adminOnly: false },
   { key: "companies",    label: "Companies",           icon: Building2,      adminOnly: false },
   { key: "leadSources",  label: "Lead Sources",        icon: Tag,            adminOnly: false },
@@ -1164,6 +1166,7 @@ export default function Settings() {
 
       {activeTab === "organization" && <OrganizationTab />}
       {activeTab === "teamSubs"    && <TeamSubsTab />}
+      {activeTab === "jobAssignments" && <JobAssignmentsTab />}
       {activeTab === "permissions" && <PermissionsTab />}
       {activeTab === "companies"   && <CompanyManager />}
       {activeTab === "leadSources" && <LeadSourcesTab />}
