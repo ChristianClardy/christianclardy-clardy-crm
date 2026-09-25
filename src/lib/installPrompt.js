@@ -49,3 +49,29 @@ export function useInstallPrompt() {
     },
   };
 }
+
+// Which set of install steps to show. Install support differs a lot by
+// browser: only Chrome/Edge/Samsung prompt natively, iPhone needs Safari's
+// Share menu, Mac Safari uses File → Add to Dock, Firefox desktop can't.
+export function installPlatform() {
+  const ua = window.navigator.userAgent;
+  if (isIOS()) {
+    if (/CriOS|FxiOS|EdgiOS|GSA\//.test(ua)) return 'ios-other-browser';
+    if (/FBAN|FBAV|Instagram|Line\//.test(ua)) return 'ios-in-app';
+    return 'ios-safari';
+  }
+  if (/Android/i.test(ua)) {
+    if (/SamsungBrowser/i.test(ua)) return 'android-samsung';
+    if (/Firefox/i.test(ua)) return 'android-firefox';
+    return 'android-chrome';
+  }
+  if (/Edg\//.test(ua)) return 'desktop-edge';
+  if (/Firefox/i.test(ua)) return 'desktop-firefox';
+  if (/Chrome|Chromium/.test(ua)) return 'desktop-chrome';
+  if (/Safari/.test(ua) && /Macintosh/.test(ua)) return 'mac-safari';
+  return 'desktop-other';
+}
+
+export function isPhone() {
+  return installPlatform().startsWith('ios') || installPlatform().startsWith('android');
+}

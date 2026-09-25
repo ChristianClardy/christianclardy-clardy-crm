@@ -10,6 +10,7 @@ import { ThemeProvider } from '@/lib/ThemeContext';
 import Onboarding from './pages/Onboarding';
 import Login from './pages/Login';
 import SetPassword from './pages/SetPassword';
+import JoinPortal from './pages/JoinPortal';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import CRM from './pages/CRM';
 import CRMDashboard from './components/crm/CRMDashboard';
@@ -54,6 +55,10 @@ const isInviteFlow = (() => {
   }
 })();
 
+// Builder Portal link texted to a subcontractor. Captured at load because the
+// page rewrites the URL to /BuilderPortal once they're signed in.
+const isJoinFlow = window.location.pathname === '/join';
+
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, user } = useAuth();
   const { loading: tenantLoading, needsOnboarding } = useTenant();
@@ -61,6 +66,7 @@ const AuthenticatedApp = () => {
 
   // Invite link clicked — show password-set screen regardless of auth state
   if (isInviteFlow) return <SetPassword />;
+  if (isJoinFlow) return <JoinPortal />;
 
   // Show loading spinner while checking auth or tenant
   if (isLoadingPublicSettings || isLoadingAuth || (isAuthenticated && (tenantLoading || portalLoading))) {
