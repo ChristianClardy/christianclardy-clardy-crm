@@ -5,7 +5,7 @@ import {
   Users, ShieldCheck, Plus, Edit2, Trash2, Search,
   Save, Check, X, CalendarDays, Copy, CheckCheck,
   Building2, UserPlus, Mail, Loader2, Palette, Moon, Sun,
-  FileSignature, Link as LinkIcon, Tag, FileText, HardHat,
+  FileSignature, Link as LinkIcon, Tag, FileText, HardHat, ClipboardList,
 } from "lucide-react";
 import { useTheme } from "@/lib/ThemeContext";
 import { COLOR_SCHEMES } from "@/lib/colorSchemes";
@@ -28,6 +28,7 @@ import SubcontractorsTab from "@/components/settings/SubcontractorsTab";
 import JobAssignmentsTab from "@/components/settings/JobAssignmentsTab";
 import QuickBooksTab from "@/components/settings/QuickBooksTab";
 import PmLoginsSection from "@/components/settings/PmLoginsSection";
+import PmInviteDialog from "@/components/settings/PmInviteDialog";
 import { apiFetch } from "@/lib/apiFetch";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -88,14 +89,21 @@ function TeamTab() {
   const [editing, setEditing]     = useState(null);
   const [form, setForm]           = useState(EMPTY_EMPLOYEE);
   const [dupError, setDupError]   = useState("");
+  const [pmLogins, setPmLogins]   = useState([]);
+  const [portalFor, setPortalFor] = useState(null); // employee whose Builder Portal access is open
 
   useEffect(() => { load(); }, []);
 
   const load = async () => {
-    const data = await base44.entities.Employee.list("-created_date");
+    const [data, logins] = await Promise.all([
+      base44.entities.Employee.list("-created_date"),
+      base44.entities.PmPortalUser.list("email").catch(() => []),
+    ]);
     setEmployees(data);
+    setPmLogins(logins);
     setLoading(false);
   };
+  const loginFor = (emp) => pmLogins.find((l) => l.employee_id === emp.id);
 
   const openNew  = () => { setEditing(null); setForm(EMPTY_EMPLOYEE); setDupError(""); setDialogOpen(true); };
   const openEdit = (emp) => {
@@ -177,7 +185,7 @@ function TeamTab() {
                 <th className="px-5 py-3 text-left">Department</th>
                 <th className="px-5 py-3 text-left">Contact</th>
                 <th className="px-5 py-3 text-center">Status</th>
-                <th className="px-5 py-3 w-20"></th>
+                <th className="px-5 py-3 w-36"></th>
               </tr>
             </thead>
             <tbody>
@@ -207,6 +215,19 @@ function TeamTab() {
                   </td>
                   <td className="px-5 py-3 text-center">
                     <div className="flex items-center justify-center gap-1">
+                      {(() => {
+                        const login = loginFor(emp);
+                        return (
+                          <button
+                            onClick={() => setPortalFor(emp)}
+                            title={login ? "Builder Portal login" : "Invite to the Builder Portal by text or email"}
+                            className={cn("inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium whitespace-nowrap",
+                              login?.active ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800")}
+                          >
+                            <ClipboardList className="w-3.5 h-3.5" /> {login?.active ? "Portal" : "Invite"}
+                          </button>
+                        );
+                      })()}
                       <button onClick={() => openEdit(emp)} className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700"><Edit2 className="w-3.5 h-3.5" /></button>
                       <button onClick={() => handleDelete(emp.id)} className="p-1.5 rounded hover:bg-rose-100 text-slate-400 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
@@ -216,6 +237,15 @@ function TeamTab() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {portalFor && (
+        <PmInviteDialog
+          employee={portalFor}
+          login={loginFor(portalFor)}
+          onClose={() => setPortalFor(null)}
+          onChanged={load}
+        />
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
