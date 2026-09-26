@@ -25,6 +25,7 @@ import {
   Phone,
   Activity,
   ChevronDown,
+  ClipboardList,
 } from "lucide-react";
 import { useState } from "react";
 import NotificationBell from "@/components/notifications/NotificationBell";
@@ -48,7 +49,8 @@ export default function Layout({ children, currentPageName }) {
     { name: "Dashboard", href: createPageUrl("Dashboard"), icon: LayoutDashboard },
     { name: "Sales Dashboard", href: createPageUrl("SalesDashboard"), icon: CheckSquare },
     { name: "Projects", href: createPageUrl("Projects"), icon: FolderKanban },
-    { name: "Builder Portal", href: createPageUrl("BuilderPortal"), icon: HardHat },
+    { name: "Builder Portal", href: createPageUrl("Builder"), icon: ClipboardList },
+    { name: "Subcontractor Portal", href: createPageUrl("BuilderPortal"), icon: HardHat },
     {
       name: "CRM",
       href: createPageUrl("CRM"),

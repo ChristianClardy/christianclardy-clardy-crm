@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase';
 
 // Calls /api/invite with the signed-in user's access token (the endpoint
 // rejects unauthenticated and subcontractor callers). Pass subcontractorId to
-// create a Builder Portal login for that subcontractor instead of a staff one.
+// create a Subcontractor Portal login for that subcontractor instead of a staff one.
 export async function sendInvite({ email, fullName, subcontractorId }) {
   const { data: { session } } = await supabase.auth.getSession();
   const res = await fetch('/api/invite', {
@@ -18,7 +18,7 @@ export async function sendInvite({ email, fullName, subcontractorId }) {
   return json;
 }
 
-// Builder Portal login for a subcontractor, delivered as a link staff text
+// Subcontractor Portal login for a subcontractor, delivered as a link staff text
 // from their own phone instead of an email. Pass userId (and nothing else) to
 // get a fresh link for an existing login. Resolves { url, email, days }.
 export async function createTextInviteLink({ email, fullName, subcontractorId, userId }) {

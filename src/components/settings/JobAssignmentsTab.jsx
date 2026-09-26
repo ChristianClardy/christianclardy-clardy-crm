@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 const ACTIVE_STATUSES = new Set(["planning", "in_progress", "on_hold"]);
 const ALL = "all";
 
-// Which subcontractors can see which jobs in the Builder Portal app. A sub
+// Which subcontractors can see which jobs in the Subcontractor Portal app. A sub
 // only ever sees jobs checked here; the database enforces it
 // (project_subcontractors + 034_subcontractor_portal.sql). Pick one or many
 // subs and one or many jobs, filter jobs by company, then Assign / Unassign.
@@ -147,9 +147,9 @@ export default function JobAssignmentsTab() {
       <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-1">
         <h2 className="text-lg font-semibold text-slate-900">Job Assignments</h2>
         <p className="text-sm text-slate-500">
-          Choose which jobs each subcontractor sees in the Builder Portal app. Subs only ever see the jobs assigned here.
+          Choose which jobs each subcontractor sees in the Subcontractor Portal app. Subs only ever see the jobs assigned here.
           They never see other jobs, clients, pricing, or another company's work. Invite a sub's crew to the app from
-          Builder Portal → Subcontractor Compliance → Jobs &amp; app.
+          Subcontractor Portal → Subcontractor Compliance → Jobs &amp; app.
         </p>
       </div>
 

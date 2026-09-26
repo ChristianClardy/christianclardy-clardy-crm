@@ -164,7 +164,7 @@ function TextLinkPanel({ link, onClose }) {
   const first = link.name.split(" ")[0];
   const [phone, setPhone] = useState(link.phone);
   const [message, setMessage] = useState(
-    `Hi${first ? ` ${first}` : ""}, this is Principle Outdoor Living. Here's your link to the Builder Portal for your jobs. ` +
+    `Hi${first ? ` ${first}` : ""}, this is Principle Outdoor Living. Here's your link to the Subcontractor Portal for your jobs. ` +
     `Tap it to sign in, set a password, and add the app to your phone: ${link.url}`
   );
   const [copied, setCopied] = useState(null);

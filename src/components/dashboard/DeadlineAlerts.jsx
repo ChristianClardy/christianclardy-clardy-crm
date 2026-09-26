@@ -80,7 +80,7 @@ export default function DeadlineAlerts({ projects }) {
             {overdue.slice(0, 6).map((row, i) => (
               <Link
                 key={i}
-                to={createPageUrl(`ProjectDetail?id=${row.project.id}&tab=sheet&taskId=${row.id}`)}
+                to={createPageUrl(`Builder?project=${row.project.id}&tab=schedule&task=${row.id}`)}
                 className="flex items-start gap-3 px-5 py-3.5 hover:bg-rose-50 transition-colors group"
               >
                 <div className="flex-1 min-w-0">
@@ -119,7 +119,7 @@ export default function DeadlineAlerts({ projects }) {
             {upcoming.slice(0, 6).map((row, i) => (
               <Link
                 key={i}
-                to={createPageUrl(`ProjectDetail?id=${row.project.id}&tab=sheet&taskId=${row.id}`)}
+                to={createPageUrl(`Builder?project=${row.project.id}&tab=schedule&task=${row.id}`)}
                 className="flex items-start gap-3 px-5 py-3.5 hover:bg-amber-50 transition-colors group"
               >
                 <div className="flex-1 min-w-0">

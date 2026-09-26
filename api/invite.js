@@ -5,7 +5,7 @@
 // decided by the database's is_staff() (see 034_subcontractor_portal.sql).
 //   - Staff invite: emails a set-password link and adds the login to the staff
 //     organization. Re-inviting an existing login just grants staff access.
-//   - Subcontractor invite (`subcontractor_id`): creates a Builder Portal login
+//   - Subcontractor invite (`subcontractor_id`): creates a Subcontractor Portal login
 //     limited to that sub's assigned jobs.
 //
 // ?action=text-link (staff): same sub login, but instead of an email it
@@ -176,7 +176,7 @@ async function handleRedeem(req, res) {
   const portalUser = await getPortalUser(userId);
   if (!portalUser) return res.status(400).json({ error: expired });
   if (!portalUser.active) {
-    return res.status(403).json({ error: 'Your Builder Portal access has been turned off. Contact your project manager.' });
+    return res.status(403).json({ error: 'Your Subcontractor Portal access has been turned off. Contact your project manager.' });
   }
 
   const userRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, { headers: adminHeaders() });

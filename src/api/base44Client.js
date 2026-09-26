@@ -62,6 +62,7 @@ const TABLE_MAP = {
   SubBarrierAck:          'subcontractor_barrier_acknowledgments',
   SubcontractorPortalUser: 'subcontractor_portal_users',
   ProjectSubcontractor:   'project_subcontractors',
+  PunchListItem:          'punch_list_items',
 };
 
 // ─── Field name compatibility ────────────────────────────────────────────────
@@ -89,7 +90,9 @@ const TABLE_OPTIONAL_FIELDS = {
   estimates: new Set(['section_margins','is_locked','locked_at','locked_by','amendment_of','amendment_number']),
   leads: new Set(['property_address', 'estimated_budget', 'lost_reason', 'lost_reason_notes', 'assigned_designer']),
   payments: new Set(['acculynx_job_id','acculynx_payment_id','payment_id','source','collected_to_date','remaining_balance']),
-  projects: new Set(['collected_to_date','remaining_balance','linked_estimate_ids']),
+  projects: new Set(['collected_to_date','remaining_balance','linked_estimate_ids','actual_completion_date','baseline_end_date']),
+  barrier_daily_logs: new Set(['weather','temperature_f','crew_count','delays']),
+  permit_inspection_tasks: new Set(['result','inspector','result_date','schedule_row_id','photos']),
   draws: new Set(['retainage_percent','retainage_held','retainage_released','percent_of_contract','linked_task_id']),
   sub_invoices: new Set([]),
   todo_items: new Set(['created_by','assigned_to','notes']),
@@ -148,7 +151,7 @@ const COMPANY_SCOPED_TABLES = new Set([
   'leads', 'clients', 'estimates', 'invoices', 'payments', 'calendar_events',
   'tasks', 'change_orders', 'draws', 'sub_invoices',
   'projects', 'documents', 'municipalities',
-  'barrier_daily_logs', 'subcontractor_barrier_acknowledgments',
+  'barrier_daily_logs', 'subcontractor_barrier_acknowledgments', 'punch_list_items',
 ]);
 
 // Foreign keys that tie a record to a specific job; see create().

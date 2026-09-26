@@ -157,8 +157,8 @@ export default function Reports() {
         const client = clientMap[proj.client_id];
         const sheet = sheets[0];
         const sheetRows = sheet?.rows?.filter(r => !r.is_section_header) || [];
-        const overdueTasks = sheetRows.filter(r => r.end_date && moment(r.end_date).isBefore(moment(), "day") && r.status !== "completed");
-        const upcomingTasks = sheetRows.filter(r => r.end_date && moment(r.end_date).isBetween(moment(), moment().add(14, "days"), "day", "[]") && r.status !== "completed");
+        const overdueTasks = sheetRows.filter(r => r.end_date && moment(r.end_date).isBefore(moment(), "day") && (r.status || "").toLowerCase() !== "completed");
+        const upcomingTasks = sheetRows.filter(r => r.end_date && moment(r.end_date).isBetween(moment(), moment().add(14, "days"), "day", "[]") && (r.status || "").toLowerCase() !== "completed");
 
         return {
           name: proj.name,

@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Clardy.io",
   "short_name": "Clardy",
-  "description": "Clardy CRM and Builder Portal: daily jobsite logs, progress photos, and pool barrier compliance",
+  "description": "Clardy CRM and Subcontractor Portal: daily jobsite logs, progress photos, and pool barrier compliance",
   "start_url": "/BuilderPortal?source=app",
   "scope": "/",
   "display": "standalone",

@@ -472,7 +472,7 @@ function InviteTab() {
           <button type="button" onClick={() => goToSettingsTab("teamSubs", { people: "subcontractors" })} className="font-semibold underline">
             Team &amp; Subcontractors → Subcontractors
           </button>{" "}
-          and click <strong>Invite</strong> on their row. They'll get the Builder Portal only, by text or email.
+          and click <strong>Invite</strong> on their row. They'll get the Subcontractor Portal only, by text or email.
         </p>
         <p className="text-xs leading-relaxed">
           Only invite people from here. Accounts created any other way, such as the Supabase dashboard, don't get access.
@@ -1126,7 +1126,7 @@ const TAB_GROUPS = [
     label: "People & access",
     tabs: [
       { key: "teamSubs",       label: "Team & Subcontractors", icon: Users,        description: "Employees, subcontractors and their paperwork, and designers." },
-      { key: "jobAssignments", label: "Job Assignments",       icon: HardHat,      description: "Which jobs each subcontractor can see in the Builder Portal app." },
+      { key: "jobAssignments", label: "Job Assignments",       icon: HardHat,      description: "Which jobs each subcontractor can see in the Subcontractor Portal app." },
       { key: "invite",         label: "Invite Team Members",   icon: UserPlus,     description: "Give an employee a login to the full CRM." },
       { key: "permissions",    label: "Roles & Permissions",   icon: ShieldCheck,  description: "Which parts of the CRM each employee role can open." },
     ],

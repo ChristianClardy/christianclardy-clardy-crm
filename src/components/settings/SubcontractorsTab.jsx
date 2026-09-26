@@ -19,7 +19,7 @@ import SubAccessDialog from "@/components/builder/SubAccessDialog";
 import { goToSettingsTab } from "@/lib/settingsNav";
 
 // Subcontractor directory: contact info, compliance paperwork (insurance,
-// license, W-9, pool barrier policy), pay terms, and Builder Portal access.
+// license, W-9, pool barrier policy), pay terms, and Subcontractor Portal access.
 // Columns match the live `subcontractors` table (trade, insurance_exp, plus
 // 038_subcontractor_details.sql); until 038 is applied, base44Client drops the
 // new columns on save so the basics still work.
@@ -197,7 +197,7 @@ export default function SubcontractorsTab() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Subcontractors</h2>
-          <p className="text-sm text-slate-500">Contacts, insurance and paperwork, and Builder Portal access for every sub.</p>
+          <p className="text-sm text-slate-500">Contacts, insurance and paperwork, and Subcontractor Portal access for every sub.</p>
         </div>
         <Button onClick={() => setEditing("new")} className="bg-gradient-to-r from-amber-500 to-orange-500 text-white">
           <Plus className="w-4 h-4 mr-1.5" /> Add subcontractor
@@ -470,7 +470,7 @@ function SubFormDialog({ sub, allSubs, onClose, onSaved }) {
             </div>
           </Section>
 
-          <Section title="Main contact" hint="The mobile number is what text invites to the Builder Portal go to.">
+          <Section title="Main contact" hint="The mobile number is what text invites to the Subcontractor Portal go to.">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Contact person"><Input {...bind("contact_person")} className="h-9 text-sm" /></Field>
               <Field label="Mobile phone"><Input type="tel" {...bind("phone")} placeholder="(555) 555-5555" className="h-9 text-sm" /></Field>
@@ -519,7 +519,7 @@ function SubFormDialog({ sub, allSubs, onClose, onSaved }) {
               </span>
             </label>
             <p className="text-xs text-slate-500">
-              The pool barrier policy signature is recorded in Builder Portal → Subcontractor Compliance, or the sub signs it in their app.
+              The pool barrier policy signature is recorded in Subcontractor Portal → Subcontractor Compliance, or the sub signs it in their app.
             </p>
           </Section>
 

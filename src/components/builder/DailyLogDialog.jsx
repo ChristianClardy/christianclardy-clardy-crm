@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { Camera, Check, X, Minus, Loader2, Trash2, AlertTriangle, ShieldCheck, Fence, Hammer } from "lucide-react";
+import { Check, X, Minus, Loader2, Trash2, AlertTriangle, ShieldCheck, Fence, Hammer } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import PhotoPicker from "@/components/app/PhotoPicker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -50,7 +51,11 @@ const STATE_BUTTONS = [
   { value: "na", icon: Minus, label: "N/A", active: "bg-slate-500 text-white border-slate-500" },
 ];
 
-export default function DailyLogDialog({ open, onOpenChange, log, projects, subcontractors, user, defaultProjectId, defaultSubIds, onSaved }) {
+const WEATHER = ["Sunny", "Partly cloudy", "Cloudy", "Rain", "Storms", "Windy", "Hot", "Cold"];
+
+// `pmFields` adds the project manager's daily report fields (weather, crew
+// size, delays). Staff only; subs don't see them.
+export default function DailyLogDialog({ open, onOpenChange, log, projects, subcontractors, user, defaultProjectId, defaultSubIds, onSaved, pmFields = false }) {
   const [form, setForm] = useState(emptyLog(defaultProjectId, user));
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(null); // "progress" | "fence" | null
@@ -175,6 +180,30 @@ export default function DailyLogDialog({ open, onOpenChange, log, projects, subc
             <Input value={form.crew_notes || ""} onChange={(e) => set({ crew_notes: e.target.value })} placeholder="Crew names, deliveries, etc." />
           </div>
         </div>
+
+        {pmFields && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 rounded-xl bg-slate-50 p-3">
+            <div>
+              <Label className="text-xs">Weather</Label>
+              <select value={form.weather || ""} onChange={(e) => set({ weather: e.target.value })} className="mt-1 h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm">
+                <option value="">—</option>
+                {WEATHER.map((w) => <option key={w} value={w}>{w}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs">Temp (°F)</Label>
+              <Input type="number" inputMode="numeric" value={form.temperature_f ?? ""} onChange={(e) => set({ temperature_f: e.target.value === "" ? null : Number(e.target.value) })} className="mt-1 h-9" />
+            </div>
+            <div>
+              <Label className="text-xs">Crew on site</Label>
+              <Input type="number" inputMode="numeric" min="0" value={form.crew_count ?? ""} onChange={(e) => set({ crew_count: e.target.value === "" ? null : Number(e.target.value) })} className="mt-1 h-9" />
+            </div>
+            <div className="col-span-2 sm:col-span-4">
+              <Label className="text-xs">Delays or issues</Label>
+              <Input value={form.delays || ""} onChange={(e) => set({ delays: e.target.value })} className="mt-1 h-9" placeholder="Rain-out, material late, inspection failed…" />
+            </div>
+          </div>
+        )}
 
         <div>
           <Label>Subcontractors on site today</Label>
@@ -341,23 +370,15 @@ function toLocalInput(iso) {
 
 // Upload + grid for one kind of photo. Fence photos also get a checkpoint tag.
 function PhotoSection({ kind, photos, uploading, onUpload, onUpdate, onRemove }) {
-  const inputRef = useRef();
   const mine = photos.filter((p) => photoKind(p) === kind);
   const busy = uploading === kind;
   return (
     <div className="space-y-3">
-      <Button type="button" size="sm" variant="outline" onClick={() => inputRef.current?.click()} disabled={!!uploading}>
-        {busy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Camera className="w-4 h-4 mr-1" />}
-        {busy ? "Uploading…" : kind === "fence" ? "Add fence photos" : "Add progress photos"}
-      </Button>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        capture="environment"
-        className="hidden"
-        onChange={(e) => { const files = e.target.files; onUpload(kind, files); e.target.value = ""; }}
+      <PhotoPicker
+        busy={busy}
+        disabled={!!uploading}
+        cameraLabel={kind === "fence" ? "Take fence photo" : "Take progress photo"}
+        onFiles={(files) => onUpload(kind, files)}
       />
       {mine.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">

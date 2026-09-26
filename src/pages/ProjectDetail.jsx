@@ -9,16 +9,9 @@ import {
   Calendar,
   MapPin,
   User,
-  DollarSign,
   Edit2,
   Trash2,
   LayoutGrid,
-  TableProperties,
-  Images,
-  MessageSquare,
-  TrendingUp,
-  BarChart3,
-  Paperclip,
   FileText,
   Droplets,
 } from "lucide-react";
@@ -42,13 +35,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import ProjectSheetKeyboardView from "@/components/sheet/ProjectSheetKeyboardView";
+import ScheduleEditor from "@/components/pm/ScheduleEditor";
 import PhotoGallery from "@/components/projects/PhotoGallery";
 import ClientWorkflowControl from "@/components/clients/ClientWorkflowControl";
-import ProjectTimeline from "@/components/projects/ProjectTimeline";
 
 import CommentSection from "@/components/collaboration/CommentSection";
-import AttachmentSection from "@/components/collaboration/AttachmentSection";
 import ProjectFiles from "@/components/projects/ProjectFiles";
 import CashFlowTracker from "@/components/cashflow/CashFlowTracker";
 import ProjectFinancials from "@/components/financials/ProjectFinancials";
@@ -75,18 +66,17 @@ export default function ProjectDetail() {
   const requestedTab = urlParams.get("tab");
   const taskId = urlParams.get("taskId");
 
-  const MIN_DAY_PX = 6;
-  const MAX_DAY_PX = 60;
-  const DEFAULT_DAY_PX = 28;
 
   const [project, setProject] = useState(null);
   const [client, setClient] = useState(null);
   const [clients, setClients] = useState([]);
   const [companies, setCompanies] = useState([]);
-  const [activeTab, setActiveTab] = useState(["overview", "timeline", "appointments", "permits", "sheet", "photos", "files", "collaboration", "cashflow", "financials", "accounting"].includes(requestedTab) ? requestedTab : "overview");
-  const [sheetRows, setSheetRows] = useState([]);
+  // "sheet" and "timeline" were the old schedule tabs; old links land on Schedule.
+  const tabAlias = { sheet: "schedule", timeline: "schedule" };
+  const initialTab = tabAlias[requestedTab] || requestedTab;
+  const [activeTab, setActiveTab] = useState(["overview", "schedule", "appointments", "permits", "selections", "photos", "files", "collaboration", "cashflow", "financials", "accounting"].includes(initialTab) ? initialTab : "overview");
+  const [subcontractors, setSubcontractors] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [ganttZoom, setGanttZoom] = useState(DEFAULT_DAY_PX);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [formData, setFormData] = useState({});
 
@@ -94,6 +84,7 @@ export default function ProjectDetail() {
     if (projectId) loadData();
     loadCompanies();
     loadClients();
+    base44.entities.Subcontractor.list("name", 1000).then((s) => setSubcontractors(s.filter((x) => x.status !== "inactive"))).catch(() => {});
   }, [projectId]);
 
   const loadCompanies = async () => {
@@ -275,146 +266,30 @@ export default function ProjectDetail() {
           Pool Selections
         </button>
         <button
-          onClick={() => setActiveTab("sheet")}
+          onClick={() => setActiveTab("schedule")}
           className={cn(
             "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-            activeTab === "sheet"
+            activeTab === "schedule"
               ? "bg-white text-slate-900 shadow-sm"
               : "text-slate-500 hover:text-slate-700"
           )}
         >
-          <TableProperties className="w-4 h-4" />
-          Project Sheet
+          <Calendar className="w-4 h-4" />
+          Schedule
         </button>
-        <button
-           onClick={() => setActiveTab("timeline")}
-           className={cn(
-             "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-             activeTab === "timeline"
-               ? "bg-white text-slate-900 shadow-sm"
-               : "text-slate-500 hover:text-slate-700"
-           )}
-         >
-           <Calendar className="w-4 h-4" />
-           Timeline
-         </button>
-         <button
-           onClick={() => setActiveTab("appointments")}
-            className={cn(
-              "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-              activeTab === "appointments"
-                ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
-            )}
-          >
-            <Calendar className="w-4 h-4" />
-            Appointments
-          </button>
-          <button
-            onClick={() => setActiveTab("photos")}
-           className={cn(
-             "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-             activeTab === "photos"
-               ? "bg-white text-slate-900 shadow-sm"
-               : "text-slate-500 hover:text-slate-700"
-           )}
-         >
-           <Images className="w-4 h-4" />
-           Photos
-         </button>
-         <button
-           onClick={() => setActiveTab("files")}
-           className={cn(
-             "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-             activeTab === "files"
-               ? "bg-white text-slate-900 shadow-sm"
-               : "text-slate-500 hover:text-slate-700"
-           )}
-         >
-           <Paperclip className="w-4 h-4" />
-           Files
-         </button>
-         <button
-           onClick={() => setActiveTab("collaboration")}
-           className={cn(
-             "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-             activeTab === "collaboration"
-               ? "bg-white text-slate-900 shadow-sm"
-               : "text-slate-500 hover:text-slate-700"
-           )}
-         >
-           <MessageSquare className="w-4 h-4" />
-           Comments
-         </button>
-         <button
-           onClick={() => setActiveTab("cashflow")}
-           className={cn(
-             "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-             activeTab === "cashflow"
-               ? "bg-white text-slate-900 shadow-sm"
-               : "text-slate-500 hover:text-slate-700"
-           )}
-         >
-           <TrendingUp className="w-4 h-4" />
-           Billing
-         </button>
-         <button
-           onClick={() => setActiveTab("financials")}
-           className={cn(
-             "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-             activeTab === "financials"
-               ? "bg-white text-slate-900 shadow-sm"
-               : "text-slate-500 hover:text-slate-700"
-           )}
-         >
-           <BarChart3 className="w-4 h-4" />
-           Job Cost
-         </button>
-         <button
-           onClick={() => setActiveTab("accounting")}
-           className={cn(
-             "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-             activeTab === "accounting"
-               ? "bg-white text-slate-900 shadow-sm"
-               : "text-slate-500 hover:text-slate-700"
-           )}
-         >
-           <DollarSign className="w-4 h-4" />
-           AP & Cash
-         </button>
         </div>
 
-      {/* Timeline tab */}
-       {activeTab === "timeline" && (
-         <ProjectTimeline
-           project={project}
-           tasks={sheetRows
-             .filter(r => !r.is_section_header && r.end_date)
-             .map(r => ({
-               id: r.id,
-               name: r.task || r.section || "Unnamed",
-               status: r.status === "Completed" ? "completed"
-                 : r.status === "In Progress" ? "in_progress"
-                 : r.status === "Blocked" ? "blocked"
-                 : "not_started",
-               end_date: r.end_date,
-               start_date: r.start_date,
-               assigned_to: r.assigned_to,
-               description: r.notes,
-             }))}
-         />
-       )}
-
-       {/* Project Sheet tab — always mounted so edits made from other tabs stick */}
-       <div className={activeTab !== "sheet" ? "hidden" : ""}>
-         <ProjectSheetKeyboardView
-           projectId={projectId}
-           focusTaskId={taskId}
-           externalGanttZoom={ganttZoom}
-           onGanttZoomChange={setGanttZoom}
-           onRowsChange={setSheetRows}
-         />
-       </div>
+      {/* Schedule tab: the same schedule PMs run in the Builder Portal */}
+      {activeTab === "schedule" && (
+        <div className="space-y-3">
+          <div className="flex justify-end">
+            <Link to={createPageUrl(`Builder?project=${projectId}`)} className="text-sm font-medium text-amber-700 hover:underline">
+              Open in Builder Portal (logs, punch list, inspections) →
+            </Link>
+          </div>
+          <ScheduleEditor project={project} subcontractors={subcontractors} focusRowId={taskId} />
+        </div>
+      )}
 
        {activeTab === "appointments" && (
          <div className="grid gap-6 xl:grid-cols-2">

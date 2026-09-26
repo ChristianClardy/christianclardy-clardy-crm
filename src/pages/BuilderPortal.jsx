@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 import { logStatus, STATUS_STYLES, SUB_REQUIREMENTS, FENCE_CHECKPOINTS, photoKind, progressPhotos, fencePhotos } from "@/lib/barrierChecklist";
 import DailyLogDialog from "@/components/builder/DailyLogDialog";
+import SubSchedule from "@/components/builder/SubSchedule";
 import SubAcknowledgmentDialog from "@/components/builder/SubAcknowledgmentDialog";
 import SubAccessDialog from "@/components/builder/SubAccessDialog";
 
@@ -20,6 +21,7 @@ const STAFF_TABS = [
 
 const PORTAL_TABS = [
   { key: "today", label: "Today" },
+  { key: "schedule", label: "My Schedule" },
   { key: "logs", label: "Daily Logs" },
   { key: "photos", label: "Photos" },
   { key: "policy", label: "Barrier Policy" },
@@ -155,7 +157,7 @@ export default function BuilderPortal({ portal = null }) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold flex items-center gap-2" style={{ color: "#3d3530" }}>
-            <HardHat className="w-7 h-7" style={{ color: "#b5965a" }} /> Builder Portal
+            <HardHat className="w-7 h-7" style={{ color: "#b5965a" }} /> Subcontractor Portal
           </h1>
           <p className="text-sm mt-1" style={{ color: "#7a6e66" }}>
             {isPortal ? `${subcontractors[0]?.name || "Subcontractor"} · daily progress, fence compliance & barrier policy` : "Daily progress photos & daily fence (pool barrier) compliance"}
@@ -187,6 +189,8 @@ export default function BuilderPortal({ portal = null }) {
           </button>
         ))}
       </div>
+
+      {tab === "schedule" && isPortal && <SubSchedule />}
 
       {tab === "today" && (
         <div className="space-y-3">

@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { isStandalone, installPlatform } from '@/lib/installPrompt';
 import InstallSteps from '@/components/app/InstallSteps';
 
-// Where a subcontractor lands from the Builder Portal link staff text them
+// Where a subcontractor lands from the Subcontractor Portal link staff text them
 // (/join?t=…, made by /api/invite?action=text-link). Walks them through:
 //   1. signing in (the link trades for a one-time Supabase sign-in token),
 //   2. choosing a password (an iPhone home-screen app doesn't share Safari's
@@ -56,7 +56,7 @@ export default function JoinPortal() {
           <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3" style={{ backgroundColor: '#3d3530' }}>
             <HardHat className="w-6 h-6" style={{ color: '#b5965a' }} />
           </div>
-          <h1 className="text-2xl font-bold tracking-wide" style={{ color: '#3d3530' }}>Builder Portal</h1>
+          <h1 className="text-2xl font-bold tracking-wide" style={{ color: '#3d3530' }}>Subcontractor Portal</h1>
           <p className="text-sm mt-1" style={{ color: '#7a6e66' }}>Principle Outdoor Living</p>
         </div>
 

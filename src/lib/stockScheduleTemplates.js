@@ -1,9 +1,11 @@
+import { TEMPLATES } from "@/lib/schedule";
+
 // Built-in construction schedule templates — a free, deterministic
 // replacement for what used to be AI-generated (Template Picker's
 // "Generate" button, Workplace Items' AI template button). Same categories,
 // hand-authored once instead of asked of an LLM on every click, so the
 // result is identical and free every time. Rows match the shape
-// src/components/sheet/ProjectSheetView.jsx and Projects.jsx already expect
+// src/lib/schedule.js (Builder Portal) and Projects.jsx already expect
 // (id, section, task, is_section_header, start_date, end_date, duration,
 // status) — a user can edit/reorder/save these like any other sheet once
 // applied, same as before.
@@ -22,7 +24,14 @@ function template(key, label, emoji, sections) {
   return { key, label, emoji, rows: sections.flat() };
 }
 
+// Pool and outdoor-living schedules come from src/lib/schedule.js so the
+// Builder Portal and new-project dialog offer the same ones.
+const builderTemplates = TEMPLATES.map((t, ti) =>
+  template(t.key, t.label, t.key === "pool" ? "🏊" : "🌿",
+    t.phases.map(([name, tasks], si) => section(`b${ti}s${si}`, name, tasks.map(([task, days]) => [task, `${days} day${days !== 1 ? "s" : ""}`])))));
+
 export const STOCK_SCHEDULE_TEMPLATES = [
+  ...builderTemplates,
   template("new_home_build", "New Home Build", "🏠", [
     section("s1", "Site Prep & Foundation", [
       ["Clear, grade, and stake the site", "3 days"],

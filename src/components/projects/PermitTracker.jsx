@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { Plus, Trash2 } from "lucide-react";
-import PermitInspectionChecklist from "@/components/projects/PermitInspectionChecklist";
+import Inspections from "@/components/pm/Inspections";
 
 const STATUS_OPTIONS = ["Not Required", "Needed", "Submitted", "Approved", "Delayed", "Closed"];
 
@@ -183,7 +183,16 @@ export default function PermitTracker({ project, onProjectUpdated }) {
           )}
         </div>
 
-        <PermitInspectionChecklist projectId={project.id} isEnabled={inspectionsEnabled} />
+        {inspectionsEnabled ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
+            <h3 className="font-semibold text-slate-900">Inspections</h3>
+            <Inspections project={project} />
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-5 text-sm text-slate-500">
+            Inspections open up once the permit is approved.
+          </div>
+        )}
       </div>
     </div>
   );

@@ -55,7 +55,7 @@ const isInviteFlow = (() => {
   }
 })();
 
-// Builder Portal link texted to a subcontractor. Captured at load because the
+// Subcontractor Portal link texted to a subcontractor. Captured at load because the
 // page rewrites the URL to /BuilderPortal once they're signed in.
 const isJoinFlow = window.location.pathname === '/join';
 
@@ -172,7 +172,7 @@ const SubPortalApp = ({ portalUser }) => (
       <BuilderPortal portal={portalUser} />
     ) : (
       <div className="max-w-md mx-auto p-8 text-center text-sm" style={{ color: "#7a6e66" }}>
-        Your Builder Portal access has been turned off. Contact your Principle Outdoor Living project manager if you think this is a mistake.
+        Your Subcontractor Portal access has been turned off. Contact your Principle Outdoor Living project manager if you think this is a mistake.
       </div>
     )}
   </SubPortalLayout>

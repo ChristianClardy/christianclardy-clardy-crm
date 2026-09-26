@@ -12,7 +12,7 @@ export default function SubPortalLayout({ subcontractorName, children }) {
           <HardHat className="w-5 h-5" style={{ color: "#f5f0eb" }} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold tracking-wide truncate" style={{ color: "#f5f0eb" }}>Builder Portal</p>
+          <p className="text-sm font-bold tracking-wide truncate" style={{ color: "#f5f0eb" }}>Subcontractor Portal</p>
           <p className="text-xs truncate" style={{ color: "#c9ac76" }}>{subcontractorName || user?.email}</p>
         </div>
         <InstallAppButton label="" className="p-2 rounded" style={{ color: "#c9ac76" }} />
