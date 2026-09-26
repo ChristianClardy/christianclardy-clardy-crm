@@ -175,66 +175,47 @@ function TeamTab() {
           <p className="text-slate-500 text-sm">No team members yet. Add your first one.</p>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                <th className="px-5 py-3 text-left">Name</th>
-                <th className="px-5 py-3 text-left">Role</th>
-                <th className="px-5 py-3 text-left">Department</th>
-                <th className="px-5 py-3 text-left">Contact</th>
-                <th className="px-5 py-3 text-center">Status</th>
-                <th className="px-5 py-3 w-36"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(emp => (
-                <tr key={emp.id} className="border-b border-slate-100 hover:bg-amber-50/30">
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center flex-shrink-0">
-                        <span className="text-sm font-bold text-amber-600">{(emp.full_name || "?")[0].toUpperCase()}</span>
-                      </div>
-                      <span className="font-medium text-slate-900">{emp.full_name}</span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3"><RoleBadge roleKey={emp.role} /></td>
-                  <td className="px-5 py-3 text-slate-500 text-xs">{emp.department || "—"}</td>
-                  <td className="px-5 py-3 text-xs text-slate-500">
-                    {emp.email && <p>{emp.email}</p>}
-                    {emp.phone && <p>{emp.phone}</p>}
-                    {!emp.email && !emp.phone && "—"}
-                  </td>
-                  <td className="px-5 py-3 text-center">
-                    <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full",
-                      emp.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
-                    )}>
-                      {emp.status === "active" ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      {(() => {
-                        const login = loginFor(emp);
-                        return (
-                          <button
-                            onClick={() => setPortalFor(emp)}
-                            title={login ? "Builder Portal login" : "Invite to the Builder Portal by text or email"}
-                            className={cn("inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium whitespace-nowrap",
-                              login?.active ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800")}
-                          >
-                            <ClipboardList className="w-3.5 h-3.5" /> {login?.active ? "Portal" : "Invite"}
-                          </button>
-                        );
-                      })()}
-                      <button onClick={() => openEdit(emp)} className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700"><Edit2 className="w-3.5 h-3.5" /></button>
-                      <button onClick={() => setRemoving(emp)} title="Remove employee" className="p-1.5 rounded hover:bg-rose-100 text-slate-400 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        // A list, not a table: the table's action column got pushed off the
+        // right edge on narrower screens, hiding the Remove button.
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm divide-y divide-slate-100">
+          {filtered.map(emp => {
+            const login = loginFor(emp);
+            return (
+              <div key={emp.id} className="flex flex-col md:flex-row md:items-center gap-3 px-4 py-3 hover:bg-amber-50/30">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center flex-shrink-0">
+                    <span className="text-sm font-bold text-amber-600">{(emp.full_name || "?")[0].toUpperCase()}</span>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-slate-900 flex flex-wrap items-center gap-2">
+                      <span className="truncate">{emp.full_name}</span>
+                      <RoleBadge roleKey={emp.role} />
+                      {emp.status !== "active" && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">Inactive</span>}
+                    </p>
+                    <p className="text-xs text-slate-500 truncate">
+                      {[emp.department, emp.email, emp.phone].filter(Boolean).join(" · ") || "No contact info"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={() => setPortalFor(emp)}
+                    title={login ? "Builder Portal login" : "Invite to the Builder Portal by text or email"}
+                    className={cn("inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium whitespace-nowrap",
+                      login?.active ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-slate-200 text-slate-600 hover:bg-slate-50")}
+                  >
+                    <ClipboardList className="w-3.5 h-3.5" /> {login?.active ? "Builder Portal" : "Invite"}
+                  </button>
+                  <button onClick={() => openEdit(emp)} className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
+                    <Edit2 className="w-3.5 h-3.5" /> Edit
+                  </button>
+                  <button onClick={() => setRemoving(emp)} className="inline-flex items-center gap-1 rounded-md border border-rose-200 px-2.5 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50">
+                    <Trash2 className="w-3.5 h-3.5" /> Remove
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
