@@ -21,7 +21,9 @@ import { STOCK_SCHEDULE_TEMPLATES } from "@/lib/stockScheduleTemplates";
 // The job schedule: phases and tasks with dates, subs, and dependencies.
 // Stored in project_sheets.rows (see src/lib/schedule.js). Every change is
 // recalculated (later tasks shift) and saved automatically.
-export default function ScheduleEditor({ project, subcontractors, focusRowId, onRowsChange }) {
+// `saveProgress(percent)` overrides how the job's percent complete is saved
+// (PM-only logins can't write projects directly).
+export default function ScheduleEditor({ project, subcontractors, focusRowId, onRowsChange, saveProgress }) {
   // Ref, not state: debounced and on-leave saves must see the id a moment-ago
   // create returned, or a new schedule would be created twice.
   const sheetIdRef = useRef(null);
@@ -73,7 +75,8 @@ export default function ScheduleEditor({ project, subcontractors, focusRowId, on
           const created = await base44.entities.ProjectSheet.create({ project_id: project.id, rows: next });
           sheetIdRef.current = created.id;
         }
-        await base44.entities.Project.update(project.id, { percent_complete: percentComplete(next) });
+        if (saveProgress) await saveProgress(percentComplete(next));
+        else await base44.entities.Project.update(project.id, { percent_complete: percentComplete(next) });
         setSaveState("saved");
       } catch {
         setSaveState("error");

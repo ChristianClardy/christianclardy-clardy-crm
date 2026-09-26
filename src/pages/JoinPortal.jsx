@@ -37,7 +37,7 @@ export default function JoinPortal() {
         // Drop the token from the address bar, so "Add to Home Screen" saves
         // the portal itself rather than a sign-in link that expires.
         window.history.replaceState(null, '', '/BuilderPortal');
-        setAccount({ email: json.email, full_name: json.full_name });
+        setAccount({ email: json.email, full_name: json.full_name, portal: json.portal });
         setStep(1);
       } catch (err) {
         setError(err.message);
@@ -56,7 +56,7 @@ export default function JoinPortal() {
           <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3" style={{ backgroundColor: '#3d3530' }}>
             <HardHat className="w-6 h-6" style={{ color: '#b5965a' }} />
           </div>
-          <h1 className="text-2xl font-bold tracking-wide" style={{ color: '#3d3530' }}>Subcontractor Portal</h1>
+          <h1 className="text-2xl font-bold tracking-wide" style={{ color: '#3d3530' }}>{account?.portal === 'pm' ? 'Builder Portal' : 'Subcontractor Portal'}</h1>
           <p className="text-sm mt-1" style={{ color: '#7a6e66' }}>Principle Outdoor Living</p>
         </div>
 

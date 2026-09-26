@@ -34,6 +34,7 @@ import DocuSignCallback from './pages/DocuSignCallback';
 import DocuSignSenderReturn from './pages/DocuSignSenderReturn';
 import QuickBooksCallback from './pages/QuickBooksCallback';
 import BuilderPortal from './pages/BuilderPortal';
+import Builder from './pages/Builder';
 import SubPortalLayout from './components/app/SubPortalLayout';
 import { usePortalUser } from '@/lib/portalUser';
 
@@ -62,7 +63,7 @@ const isJoinFlow = window.location.pathname === '/join';
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, user } = useAuth();
   const { loading: tenantLoading, needsOnboarding } = useTenant();
-  const { loading: portalLoading, portalUser, isStaff } = usePortalUser(isAuthenticated ? user?.id : null);
+  const { loading: portalLoading, portalUser, pmUser, isStaff } = usePortalUser(isAuthenticated ? user?.id : null);
 
   // Invite link clicked — show password-set screen regardless of auth state
   if (isInviteFlow) return <SetPassword />;
@@ -93,6 +94,15 @@ const AuthenticatedApp = () => {
     return (
       <Routes>
         <Route path="*" element={<SubPortalApp portalUser={portalUser} />} />
+      </Routes>
+    );
+  }
+
+  // Project manager with a Builder Portal-only login: their jobs, no CRM or money.
+  if (pmUser) {
+    return (
+      <Routes>
+        <Route path="*" element={<PmPortalApp pmUser={pmUser} />} />
       </Routes>
     );
   }
@@ -165,6 +175,18 @@ const NoAccess = () => {
     </div>
   );
 };
+
+const PmPortalApp = ({ pmUser }) => (
+  <SubPortalLayout title="Builder Portal" subcontractorName={pmUser.full_name}>
+    {pmUser.active ? (
+      <Builder pm={pmUser} />
+    ) : (
+      <div className="max-w-md mx-auto p-8 text-center text-sm" style={{ color: "#7a6e66" }}>
+        Your Builder Portal access has been turned off. Contact the Principle Outdoor Living office if you think this is a mistake.
+      </div>
+    )}
+  </SubPortalLayout>
+);
 
 const SubPortalApp = ({ portalUser }) => (
   <SubPortalLayout subcontractorName={portalUser.full_name}>

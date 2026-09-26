@@ -61,6 +61,7 @@ const TABLE_MAP = {
   BarrierDailyLog:        'barrier_daily_logs',
   SubBarrierAck:          'subcontractor_barrier_acknowledgments',
   SubcontractorPortalUser: 'subcontractor_portal_users',
+  PmPortalUser:           'pm_portal_users',
   ProjectSubcontractor:   'project_subcontractors',
   PunchListItem:          'punch_list_items',
 };

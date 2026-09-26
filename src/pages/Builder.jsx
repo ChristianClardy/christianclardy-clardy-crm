@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { supabase } from "@/lib/supabase";
 import {
   Building, ArrowLeft, Loader2, MapPin, User, CalendarDays, AlertTriangle, ClipboardCheck, ListChecks,
   NotebookPen, Wrench, Search, Phone, MessageSquare, Smartphone, ExternalLink, CloudSun, Users, Flag,
@@ -23,7 +24,19 @@ import SubAccessDialog from "@/components/builder/SubAccessDialog";
 
 // Builder Portal: where project managers run their jobs. The board lists every
 // job with its schedule health; ?project=<id> opens one job's schedule, daily
-// logs, punch list, inspections and subs. Staff only (inside the CRM).
+// logs, punch list, inspections and subs.
+//
+// Staff open it inside the CRM. A PM with a Builder Portal-only login gets it
+// as their whole app (`pm` = their pm_portal_users row, see App.jsx): jobs and
+// subs then come from pm_portal_projects() / pm_subcontractors(), which leave
+// out money columns, and job changes go through pm_update_project()
+// (040_pm_portal_logins.sql). The database limits them to their own jobs.
+
+const rpcList = (fn) => supabase.rpc(fn).then(({ data, error }) => { if (error) throw error; return data || []; });
+const clientLabel = (p, clientById) => {
+  const c = clientById?.[p.client_id];
+  return c?.name || p.client_name || "";
+};
 
 const PROJECT_STATUS = {
   planning: { label: "Planning", cls: "bg-slate-100 text-slate-700" },
@@ -34,10 +47,11 @@ const PROJECT_STATUS = {
 };
 const ACTIVE = new Set(["planning", "in_progress", "on_hold"]);
 
-export default function Builder() {
+export default function Builder({ pm = null }) {
   const [params, setParams] = useSearchParams();
   const projectId = params.get("project");
-  const scope = useCompanyScope();
+  const companyScope = useCompanyScope();
+  const scope = pm ? "all" : companyScope;
 
   const [loading, setLoading] = useState(true);
   const [me, setMe] = useState(null);
@@ -54,11 +68,11 @@ export default function Builder() {
     const safe = (p) => p.catch(() => []);
     const [u, p, c, sh, s, e, pu, ins, l] = await Promise.all([
       base44.auth.me().catch(() => null),
-      safe(base44.entities.Project.list("-updated_date", 2000)),
-      safe(base44.entities.Client.list("-created_date", 5000)),
+      safe(pm ? rpcList("pm_portal_projects") : base44.entities.Project.list("-updated_date", 2000)),
+      pm ? [] : safe(base44.entities.Client.list("-created_date", 5000)),
       safe(base44.entities.ProjectSheet.list("-updated_date", 2000)),
-      safe(base44.entities.Subcontractor.list("name", 1000)),
-      safe(base44.entities.Employee.list("full_name", 500)),
+      safe(pm ? rpcList("pm_subcontractors") : base44.entities.Subcontractor.list("name", 1000)),
+      pm ? [] : safe(base44.entities.Employee.list("full_name", 500)),
       safe(base44.entities.PunchListItem.list("-created_date", 5000)),
       safe(base44.entities.PermitInspectionTask.list("due_date", 5000)),
       safe(base44.entities.BarrierDailyLog.list("-log_date", 3000)),
@@ -89,7 +103,7 @@ export default function Builder() {
     );
   }
 
-  const ctx = { me, clients, subs, employees, rowsByProject, punch, inspections, logs };
+  const ctx = { pm, me, clients, subs, employees, rowsByProject, punch, inspections, logs };
 
   return project ? (
     <JobView
@@ -117,10 +131,11 @@ export default function Builder() {
 // ─── Board ───────────────────────────────────────────────────────────────────
 
 function JobsBoard({ projects, ctx, onOpen }) {
-  const { me, clients, rowsByProject, punch, inspections, logs, subs } = ctx;
+  const { pm, me, clients, rowsByProject, punch, inspections, logs, subs } = ctx;
   const myName = (me?.full_name || "").trim().toLowerCase();
   const mineExists = projects.some((p) => (p.project_manager || "").trim().toLowerCase() === myName && myName);
-  const [who, setWho] = useState(mineExists ? "mine" : "all");
+  // A PM-only login already sees just its own jobs.
+  const [who, setWho] = useState(mineExists && !pm ? "mine" : "all");
   const [status, setStatus] = useState("active");
   const [search, setSearch] = useState("");
 
@@ -135,8 +150,7 @@ function JobsBoard({ projects, ctx, onOpen }) {
     .filter((p) => {
       const q = search.trim().toLowerCase();
       if (!q) return true;
-      const c = clientById[p.client_id];
-      return [p.name, p.address, p.project_manager, c?.name, c?.first_name, c?.last_name].some((v) => v?.toLowerCase().includes(q));
+      return [p.name, p.address, p.project_manager, clientLabel(p, clientById)].some((v) => v?.toLowerCase().includes(q));
     })
     .map((p) => {
       const rows = rowsByProject[p.id] || [];
@@ -193,11 +207,13 @@ function JobsBoard({ projects, ctx, onOpen }) {
       </div>
 
       <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-        <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
-          {[["mine", "My jobs"], ["all", "All jobs"]].map(([k, l]) => (
-            <button key={k} onClick={() => setWho(k)} className={cn("rounded-md px-3 py-1.5 text-sm", who === k ? "bg-slate-900 text-white" : "text-slate-600")}>{l}</button>
-          ))}
-        </div>
+        {!pm && (
+          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
+            {[["mine", "My jobs"], ["all", "All jobs"]].map(([k, l]) => (
+              <button key={k} onClick={() => setWho(k)} className={cn("rounded-md px-3 py-1.5 text-sm", who === k ? "bg-slate-900 text-white" : "text-slate-600")}>{l}</button>
+            ))}
+          </div>
+        )}
         <select value={status} onChange={(e) => setStatus(e.target.value)} className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm">
           <option value="active">Active</option>
           <option value="completed">Completed</option>
@@ -216,10 +232,10 @@ function JobsBoard({ projects, ctx, onOpen }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 content-start">
-          {jobs.map((j) => <JobCard key={j.p.id} job={j} client={clientById[j.p.client_id]} onOpen={onOpen} />)}
+          {jobs.map((j) => <JobCard key={j.p.id} job={j} clientName={clientLabel(j.p, clientById)} onOpen={onOpen} />)}
           {!jobs.length && who !== "mine" && (
             <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
-              No jobs match. Jobs come from <Link to={createPageUrl("Projects")} className="underline">Projects</Link>.
+              {pm ? "No jobs yet. Jobs show up here once the office sets you as their project manager." : <>No jobs match. Jobs come from <Link to={createPageUrl("Projects")} className="underline">Projects</Link>.</>}
             </div>
           )}
         </div>
@@ -247,14 +263,13 @@ function JobsBoard({ projects, ctx, onOpen }) {
   );
 }
 
-function JobCard({ job, client, onOpen }) {
+function JobCard({ job, clientName, onOpen }) {
   const { p, rows, health, openPunch, nextInspection, lastLog } = job;
   const pct = taskRows(rows).length ? percentComplete(rows) : p.percent_complete || 0;
   const forecast = forecastEnd(rows);
   const current = currentRows(rows)[0];
   const upNext = !current && nextRow(rows);
   const st = PROJECT_STATUS[p.status] || PROJECT_STATUS.planning;
-  const clientName = client ? client.name || [client.first_name, client.last_name].filter(Boolean).join(" ") : "";
   return (
     <button onClick={() => onOpen(p.id)} className="text-left rounded-2xl border border-slate-200 bg-white p-4 hover:shadow-md hover:border-slate-300 transition-all space-y-3">
       <div className="flex items-start justify-between gap-2">
@@ -301,16 +316,20 @@ const JOB_TABS = [
 ];
 
 function JobView({ project, ctx, tab, setTab, focusRowId, onBack, onProjectChange, onRowsChange, onLogSaved, onPunchChange, onInspectionsChange }) {
-  const { me, clients, subs, employees, rowsByProject, logs, punch, inspections } = ctx;
+  const { pm, me, clients, subs, employees, rowsByProject, logs, punch, inspections } = ctx;
   const [rows, setRows] = useState(rowsByProject[project.id] || []);
-  const client = clients.find((c) => c.id === project.client_id);
-  const clientName = client ? client.name || [client.first_name, client.last_name].filter(Boolean).join(" ") : "";
+  const clientName = clientLabel(project, Object.fromEntries(clients.map((c) => [c.id, c])));
   const health = scheduleHealth(project, rows);
   const pct = taskRows(rows).length ? percentComplete(rows) : project.percent_complete || 0;
   const forecast = forecastEnd(rows);
 
   const update = async (patch) => {
     onProjectChange({ id: project.id, ...patch });
+    if (pm) {
+      const { error } = await supabase.rpc("pm_update_project", { p_id: project.id, p_patch: patch });
+      if (error) alert(`Could not save: ${error.message}`);
+      return;
+    }
     const saved = await base44.entities.Project.update(project.id, patch);
     if (saved) onProjectChange(saved);
   };
@@ -354,9 +373,11 @@ function JobView({ project, ctx, tab, setTab, focusRowId, onBack, onProjectChang
           </div>
           <div className="flex items-center gap-2">
             <span className={cn("text-xs font-medium px-2 py-1 rounded-full", HEALTH_STYLE[health.level])}>{health.label}</span>
-            <Link to={createPageUrl(`ProjectDetail?id=${project.id}`)} className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900">
-              Full project page <ExternalLink className="w-3 h-3" />
-            </Link>
+            {!pm && (
+              <Link to={createPageUrl(`ProjectDetail?id=${project.id}`)} className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900">
+                Full project page <ExternalLink className="w-3 h-3" />
+              </Link>
+            )}
           </div>
         </div>
 
@@ -367,11 +388,15 @@ function JobView({ project, ctx, tab, setTab, focusRowId, onBack, onProjectChang
             </select>
           </Field>
           <Field label="Project manager">
-            <select value={project.project_manager || ""} onChange={(e) => update({ project_manager: e.target.value || null })} className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm">
-              <option value="">Unassigned</option>
-              {!pmInList && <option value={project.project_manager}>{project.project_manager}</option>}
-              {pmOptions.map((e) => <option key={e.id} value={e.full_name}>{e.full_name}</option>)}
-            </select>
+            {pm ? (
+              <p className="h-9 flex items-center text-sm text-slate-800 truncate">{project.project_manager || "Unassigned"}</p>
+            ) : (
+              <select value={project.project_manager || ""} onChange={(e) => update({ project_manager: e.target.value || null })} className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm">
+                <option value="">Unassigned</option>
+                {!pmInList && <option value={project.project_manager}>{project.project_manager}</option>}
+                {pmOptions.map((e) => <option key={e.id} value={e.full_name}>{e.full_name}</option>)}
+              </select>
+            )}
           </Field>
           <Field label="Start">
             <Input type="date" value={project.start_date || ""} onChange={(e) => update({ start_date: e.target.value || null })} className="h-9 text-sm px-2" />
@@ -405,12 +430,18 @@ function JobView({ project, ctx, tab, setTab, focusRowId, onBack, onProjectChang
       </div>
 
       {tab === "schedule" && (
-        <ScheduleEditor project={project} subcontractors={subs} focusRowId={focusRowId} onRowsChange={(r) => { setRows(r); onRowsChange(r); }} />
+        <ScheduleEditor
+          project={project}
+          subcontractors={subs}
+          focusRowId={focusRowId}
+          onRowsChange={(r) => { setRows(r); onRowsChange(r); }}
+          saveProgress={(percent_complete) => update({ percent_complete })}
+        />
       )}
       {tab === "logs" && <JobLogs project={project} logs={logs.filter((l) => l.project_id === project.id)} subs={subs} me={me} onSaved={onLogSaved} />}
       {tab === "punch" && <PunchList project={project} subcontractors={subs} user={me} onChange={onPunchChange} />}
       {tab === "inspections" && <Inspections project={project} rows={rows} user={me} onChange={onInspectionsChange} />}
-      {tab === "subs" && <JobSubs project={project} rows={rows} subs={subs} />}
+      {tab === "subs" && <JobSubs project={project} rows={rows} subs={subs} canInvite={!pm} />}
     </div>
   );
 }
@@ -483,7 +514,7 @@ function JobLogs({ project, logs, subs, me, onSaved }) {
   );
 }
 
-function JobSubs({ project, rows, subs }) {
+function JobSubs({ project, rows, subs, canInvite }) {
   const [assignments, setAssignments] = useState(null);
   const [portalUsers, setPortalUsers] = useState([]);
   const [accessSub, setAccessSub] = useState(null);
@@ -491,7 +522,7 @@ function JobSubs({ project, rows, subs }) {
   useEffect(() => {
     Promise.all([
       base44.entities.ProjectSubcontractor.list().catch(() => []),
-      base44.entities.SubcontractorPortalUser.list("email").catch(() => []),
+      canInvite ? base44.entities.SubcontractorPortalUser.list("email").catch(() => []) : [],
     ]).then(([a, u]) => { setAssignments(a); setPortalUsers(u); });
   }, [project.id]);
 
@@ -526,11 +557,11 @@ function JobSubs({ project, rows, subs }) {
                   <div className="flex gap-1 shrink-0">
                     {s.phone && <a href={`tel:${s.phone}`} className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" title="Call"><Phone className="w-4 h-4" /></a>}
                     {s.phone && <a href={`sms:${s.phone.replace(/[^\d+]/g, "")}`} className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" title="Text"><MessageSquare className="w-4 h-4" /></a>}
-                    <button onClick={() => setAccessSub(s)} className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" title="App access"><Smartphone className="w-4 h-4" /></button>
+                    {canInvite && <button onClick={() => setAccessSub(s)} className="p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" title="App access"><Smartphone className="w-4 h-4" /></button>}
                   </div>
                 </div>
                 {insExpired && <p className="text-xs text-rose-700"><AlertTriangle className="w-3 h-3 inline -mt-0.5" /> Liability insurance expired {fmtShort(s.insurance_exp)}</p>}
-                {!logins && <p className="text-xs text-amber-700">No app login yet, so they can't see their dates. Tap <Smartphone className="w-3 h-3 inline" /> to invite.</p>}
+                {canInvite && !logins && <p className="text-xs text-amber-700">No app login yet, so they can't see their dates. Tap <Smartphone className="w-3 h-3 inline" /> to invite.</p>}
                 {theirs.length ? (
                   <ul className="space-y-1">
                     {theirs.map((r) => (

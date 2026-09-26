@@ -27,6 +27,7 @@ import { fetchDesigners, addDesigner, removeDesigner } from "@/lib/designers";
 import SubcontractorsTab from "@/components/settings/SubcontractorsTab";
 import JobAssignmentsTab from "@/components/settings/JobAssignmentsTab";
 import QuickBooksTab from "@/components/settings/QuickBooksTab";
+import PmLoginsSection from "@/components/settings/PmLoginsSection";
 import { apiFetch } from "@/lib/apiFetch";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -380,7 +381,36 @@ function PermissionsTab() {
 
 // ─── Invite & Logins tab ─────────────────────────────────────────────────────
 
+const ACCESS_LEVELS = [
+  { key: "full", label: "Full CRM", hint: "Everything their role allows (Roles & Permissions)." },
+  { key: "pm", label: "Builder Portal only", hint: "Project managers who should only run their jobs. No CRM or money." },
+];
+
 function InviteTab() {
+  const [access, setAccess] = useState(() => (new URLSearchParams(window.location.search).get("access") === "pm" ? "pm" : "full"));
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-2xl">
+        {ACCESS_LEVELS.map(({ key, label, hint }) => (
+          <button
+            key={key}
+            onClick={() => setAccess(key)}
+            className={cn(
+              "rounded-xl border p-3 text-left transition-colors",
+              access === key ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+            )}
+          >
+            <p className="text-sm font-semibold">{label}</p>
+            <p className={cn("text-xs mt-0.5", access === key ? "text-slate-300" : "text-slate-500")}>{hint}</p>
+          </button>
+        ))}
+      </div>
+      {access === "pm" ? <PmLoginsSection /> : <FullAccessInvite />}
+    </div>
+  );
+}
+
+function FullAccessInvite() {
   const [inviteEmail, setInviteEmail]               = useState("");
   const [inviteFullName, setInviteFullName]         = useState("");
   const [inviteEmployeeRole, setInviteEmployeeRole] = useState("laborer");
@@ -1127,7 +1157,7 @@ const TAB_GROUPS = [
     tabs: [
       { key: "teamSubs",       label: "Team & Subcontractors", icon: Users,        description: "Employees, subcontractors and their paperwork, and designers." },
       { key: "jobAssignments", label: "Job Assignments",       icon: HardHat,      description: "Which jobs each subcontractor can see in the Subcontractor Portal app." },
-      { key: "invite",         label: "Invite Team Members",   icon: UserPlus,     description: "Give an employee a login to the full CRM." },
+      { key: "invite",         label: "Invite Team Members",   icon: UserPlus,     description: "Give an employee a login: the full CRM, or the Builder Portal only." },
       { key: "permissions",    label: "Roles & Permissions",   icon: ShieldCheck,  description: "Which parts of the CRM each employee role can open." },
     ],
   },
