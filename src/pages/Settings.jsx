@@ -29,6 +29,7 @@ import JobAssignmentsTab from "@/components/settings/JobAssignmentsTab";
 import QuickBooksTab from "@/components/settings/QuickBooksTab";
 import PmLoginsSection from "@/components/settings/PmLoginsSection";
 import PmInviteDialog from "@/components/settings/PmInviteDialog";
+import RemoveEmployeeDialog from "@/components/settings/RemoveEmployeeDialog";
 import { apiFetch } from "@/lib/apiFetch";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -91,6 +92,7 @@ function TeamTab() {
   const [dupError, setDupError]   = useState("");
   const [pmLogins, setPmLogins]   = useState([]);
   const [portalFor, setPortalFor] = useState(null); // employee whose Builder Portal access is open
+  const [removing, setRemoving]   = useState(null); // employee being removed
 
   useEffect(() => { load(); }, []);
 
@@ -144,9 +146,6 @@ function TeamTab() {
     load();
   };
 
-  const handleDelete = async (id) => {
-    if (confirm("Remove this team member?")) { await base44.entities.Employee.delete(id); load(); }
-  };
 
   const filtered = employees.filter(emp =>
     (emp.full_name || "").toLowerCase().includes(search.toLowerCase()) ||
@@ -229,7 +228,7 @@ function TeamTab() {
                         );
                       })()}
                       <button onClick={() => openEdit(emp)} className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700"><Edit2 className="w-3.5 h-3.5" /></button>
-                      <button onClick={() => handleDelete(emp.id)} className="p-1.5 rounded hover:bg-rose-100 text-slate-400 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => setRemoving(emp)} title="Remove employee" className="p-1.5 rounded hover:bg-rose-100 text-slate-400 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   </td>
                 </tr>
@@ -237,6 +236,15 @@ function TeamTab() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {removing && (
+        <RemoveEmployeeDialog
+          employee={removing}
+          pmLogin={pmLogins.find((l) => l.employee_id === removing.id || (removing.email && l.email === removing.email.trim().toLowerCase()))}
+          onClose={() => setRemoving(null)}
+          onDone={() => { setRemoving(null); load(); }}
+        />
       )}
 
       {portalFor && (
