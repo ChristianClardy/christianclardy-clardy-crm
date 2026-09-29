@@ -38,8 +38,8 @@ export default function CustomerPortalDialog({ client, onClose }) {
     try {
       const args = { email: form.email.trim(), fullName: form.full_name.trim(), customer: { client_id: client.id } };
       if (how === "email") {
-        await sendInvite(args);
-        setMessage({ ok: true, text: `Invite emailed to ${args.email}.` });
+        const r = await sendInvite(args);
+        setMessage({ ok: true, text: r.existing ? `Access restored for ${args.email}.${r.emailed === false ? " Couldn't email a sign-in link; use Text link instead." : " We emailed them a sign-in link."}` : `Invite emailed to ${args.email}.` });
       } else {
         const { url, days } = await createTextInviteLink(args);
         setTextLink({ url, days, name: args.fullName, phone: form.phone.trim(), portal: "customer" });

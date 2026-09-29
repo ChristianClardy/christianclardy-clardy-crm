@@ -29,8 +29,8 @@ export default function PmInviteDialog({ employee, login, onClose, onChanged }) 
     try {
       const args = { email: email.trim(), fullName: employee.full_name, pm: { employee_id: employee.id, all_jobs: allJobs } };
       if (how === "email") {
-        await sendInvite(args);
-        setMessage({ ok: true, text: `Invite emailed to ${args.email}.` });
+        const r = await sendInvite(args);
+        setMessage({ ok: true, text: r.existing ? `Access restored for ${args.email}.${r.emailed === false ? " Couldn't email a sign-in link; use Text link instead." : " We emailed them a sign-in link."}` : `Invite emailed to ${args.email}.` });
       } else {
         const { url, days } = await createTextInviteLink(args);
         link(url, days);

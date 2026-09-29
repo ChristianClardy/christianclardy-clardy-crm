@@ -58,8 +58,8 @@ export default function PmLoginsSection() {
       const name = form.full_name.trim() || employees.find((x) => x.id === employee_id)?.full_name || "";
       const args = { email: form.email.trim(), fullName: name, pm: { employee_id, all_jobs: form.all_jobs } };
       if (how === "email") {
-        await sendInvite(args);
-        setMessage({ ok: true, text: `Invite emailed to ${args.email}.` });
+        const r = await sendInvite(args);
+        setMessage({ ok: true, text: r.existing ? `Access restored for ${args.email}.${r.emailed === false ? " Couldn't email a sign-in link; use Text link instead." : " We emailed them a sign-in link."}` : `Invite emailed to ${args.email}.` });
       } else {
         const { url, days } = await createTextInviteLink(args);
         setTextLink({ url, days, name, phone: form.phone.trim(), portal: "pm" });

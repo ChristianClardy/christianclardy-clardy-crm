@@ -142,12 +142,77 @@ function portalRow(kind, body, userId, email, caller) {
 const PORTAL_ROLE = { sub: 'subcontractor', pm: 'project_manager', customer: 'customer' };
 const PORTAL_NAME = { sub: 'Subcontractor Portal', pm: 'Builder Portal', customer: 'Customer Portal' };
 
-// Same login for the same person? (same sub company / same client)
-function sameLogin(existing, kind, body) {
-  if (!existing || existing.kind !== kind) return false;
-  if (kind === 'sub') return existing.row.subcontractor_id === body.subcontractor_id;
-  if (kind === 'customer') return existing.row.client_id === body.customer.client_id;
-  return true;
+async function exists(table, id) {
+  if (!id) return false;
+  const rows = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=id&id=eq.${encodeURIComponent(id)}`, { headers: adminHeaders() }).then((r) => r.json());
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+async function isStaffUser(userId) {
+  const orgId = await rpc('staff_org_id');
+  const rows = await fetch(
+    `${SUPABASE_URL}/rest/v1/organization_members?select=id&user_id=eq.${userId}&organization_id=eq.${orgId}&or=(status.eq.active,status.is.null)`,
+    { headers: adminHeaders() }
+  ).then((r) => r.json());
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+// Re-inviting an email that already has a login: bring that login back
+// instead of refusing, so staff can always re-add someone. Covers a login
+// that was turned off, one whose sub company / client / employee record was
+// deleted, and a leftover account with no portal access at all. Refuses
+// staff accounts, a different kind of login, and a login that's still active
+// for a different sub or client. Returns the user id, or throws a message
+// meant for staff.
+async function restoreLogin(kind, body, email, caller) {
+  const userId = await rpc('auth_user_id_by_email', { p_email: email });
+  if (!userId) throw new Error('That email already has a Clardy login, but it could not be found.');
+  const existing = await getPortalLogin(userId);
+  const [table, row] = portalRow(kind, body, userId, email, caller);
+
+  if (!existing) {
+    if (await isStaffUser(userId)) throw new Error('That email is a staff login. Use a different email.');
+    await insertRow(table, row);
+    return userId;
+  }
+  if (existing.kind !== kind) {
+    throw new Error(`That email is already a ${PORTAL_NAME[existing.kind]} login. Use a different email.`);
+  }
+
+  const cur = existing.row;
+  if (kind === 'sub' && cur.active && cur.subcontractor_id && cur.subcontractor_id !== body.subcontractor_id
+      && (await exists('subcontractors', cur.subcontractor_id))) {
+    throw new Error('That email is an active login for a different subcontractor. Turn it off there first, then invite again.');
+  }
+  if (kind === 'customer' && cur.active && cur.client_id !== body.customer.client_id) {
+    throw new Error('That email is an active Customer Portal login for a different client. Turn it off there first, then invite again.');
+  }
+
+  const patch = { ...row, active: true };
+  delete patch.user_id;
+  delete patch.email;
+  if (!patch.full_name) delete patch.full_name;
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?user_id=eq.${userId}`, {
+    method: 'PATCH',
+    headers: { ...adminHeaders(), Prefer: 'return=minimal' },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(`Could not restore access: ${err.message || res.statusText}`);
+  }
+  return userId;
+}
+
+// Emails an existing login a one-time sign-in link (their original invite
+// email can't be sent twice).
+async function emailSignInLink(email) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/otp`, {
+    method: 'POST',
+    headers: adminHeaders(),
+    body: JSON.stringify({ email, create_user: false }),
+  });
+  return res.ok;
 }
 
 function joinUrl(req, userId) {
@@ -185,14 +250,13 @@ async function handleTextLink(req, res, caller) {
   if (!createRes.ok) {
     const msg = created?.msg || created?.message || created?.error_description || 'Could not create the login.';
     if (/already.*registered|already.*exists/i.test(msg)) {
-      // Already the same kind of login (same sub, same client, or a PM login)? Just hand out a new link.
-      const existingId = await rpc('auth_user_id_by_email', { p_email: email });
-      const existing = existingId && (await getPortalLogin(existingId));
-      if (sameLogin(existing, kind, body)) {
-        if (!existing.row.active) return res.status(400).json({ error: 'That login is turned off. Turn it back on first.' });
-        return res.status(200).json({ url: joinUrl(req, existingId), email: existing.row.email, days: JOIN_LINK_DAYS, existing: true });
+      let existingId;
+      try {
+        existingId = await restoreLogin(kind, body, email, caller);
+      } catch (err) {
+        return res.status(400).json({ error: err.message });
       }
-      return res.status(400).json({ error: 'That email already has a Clardy login. Use a different email.' });
+      return res.status(200).json({ url: joinUrl(req, existingId), email: email.toLowerCase(), days: JOIN_LINK_DAYS, existing: true });
     }
     return res.status(createRes.status).json({ error: msg });
   }
@@ -303,11 +367,18 @@ module.exports = async function handler(req, res) {
         res.status(200).json({ success: true, existing: true });
         return;
       }
-      res.status(inviteRes.status).json({
-        error: taken
-          ? 'That email already has a Clardy login. Use a different email.'
-          : msg,
-      });
+      if (taken && kind) {
+        try {
+          await restoreLogin(kind, body, email, caller);
+        } catch (err) {
+          res.status(400).json({ error: err.message });
+          return;
+        }
+        const emailed = await emailSignInLink(email);
+        res.status(200).json({ success: true, existing: true, emailed });
+        return;
+      }
+      res.status(inviteRes.status).json({ error: msg });
       return;
     }
 

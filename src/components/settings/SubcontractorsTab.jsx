@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { supabase } from "@/lib/supabase";
 import {
   Plus, Search, Mail, Phone, MapPin, MoreHorizontal, Wrench, ShieldCheck,
-  AlertTriangle, Smartphone, FileText, Upload, Loader2, Check, X, Briefcase,
+  AlertTriangle, Smartphone, FileText, Upload, Loader2, Check, X, Briefcase, UserCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -258,6 +258,8 @@ export default function SubcontractorsTab() {
         </div>
       )}
 
+      <UnlinkedLogins logins={portalUsers.filter((u) => !u.subcontractor_id || !subs.some((s) => s.id === u.subcontractor_id))} subs={subs} onLinked={load} />
+
       {editing && (
         <SubFormDialog
           sub={editing === "new" ? null : editing}
@@ -276,6 +278,53 @@ export default function SubcontractorsTab() {
           onPortalUsersChange={setPortalUsers}
         />
       )}
+    </div>
+  );
+}
+
+// Sub logins whose subcontractor was deleted (the link is cleared, so they
+// see "access turned off"). Link one to a subcontractor to restore it; then
+// "Text link" from that sub's Access button sends a fresh sign-in link.
+function UnlinkedLogins({ logins, subs, onLinked }) {
+  const [pick, setPick] = useState({});
+  const [busy, setBusy] = useState(null);
+  if (!logins.length) return null;
+
+  const link = async (login) => {
+    const subcontractor_id = pick[login.user_id];
+    if (!subcontractor_id) return;
+    setBusy(login.user_id);
+    // Keyed by user_id (no `id` column), so this goes straight to Supabase.
+    const { error } = await supabase.from("subcontractor_portal_users").update({ subcontractor_id, active: true }).eq("user_id", login.user_id);
+    setBusy(null);
+    if (error) { alert(`Could not link: ${error.message}`); return; }
+    onLinked();
+  };
+
+  return (
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold text-slate-900">App logins not linked to a subcontractor</h3>
+        <p className="text-xs text-slate-600">Their subcontractor was deleted, so they can't get in. Link each one to a subcontractor to turn access back on, or re-invite the same email from a subcontractor's Access button.</p>
+      </div>
+      <div className="rounded-xl border border-amber-200 bg-white divide-y divide-slate-100">
+        {logins.map((l) => (
+          <div key={l.user_id} className="flex flex-col sm:flex-row sm:items-center gap-2 px-3 py-2.5">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-slate-900 truncate">{l.full_name || l.email}</p>
+              <p className="text-xs text-slate-500 truncate">{l.email}</p>
+            </div>
+            <select value={pick[l.user_id] || ""} onChange={(e) => setPick((p) => ({ ...p, [l.user_id]: e.target.value }))}
+              className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs sm:w-52">
+              <option value="">Choose subcontractor…</option>
+              {subs.filter((s) => s.status !== "inactive").map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <Button size="sm" variant="outline" className="h-8" disabled={!pick[l.user_id] || busy === l.user_id} onClick={() => link(l)}>
+              {busy === l.user_id ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <UserCheck className="w-4 h-4 mr-1" />} Link &amp; turn on
+            </Button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -35,8 +35,8 @@ export default function SubAccessDialog({ sub, onOpenChange, assignments, portal
     try {
       const args = { email: invite.email.trim(), fullName: invite.full_name.trim(), subcontractorId: sub.id };
       if (how === "email") {
-        await sendInvite(args);
-        setInviteMsg({ ok: true, text: `Invite sent to ${invite.email.trim()}. They'll get an email to set a password, then can install the app.` });
+        const r = await sendInvite(args);
+        setInviteMsg({ ok: true, text: r.existing ? `Access restored for ${args.email}.${r.emailed === false ? " Couldn't email a sign-in link; use Text link instead." : " We emailed them a sign-in link."}` : `Invite sent to ${invite.email.trim()}. They'll get an email to set a password, then can install the app.` });
       } else {
         const { url, days } = await createTextInviteLink(args);
         setTextLink({ url, days, name: invite.full_name.trim(), phone: invite.phone.trim() });
