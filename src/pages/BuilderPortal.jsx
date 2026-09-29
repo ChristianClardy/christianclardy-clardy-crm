@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { HardHat, Plus, Camera, AlertTriangle, CheckCircle2, FileSignature, ImageIcon, X, Smartphone, Fence } from "lucide-react";
+import { HardHat, Plus, Camera, AlertTriangle, CheckCircle2, FileSignature, ImageIcon, X, Smartphone, Fence, Download, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,6 +11,7 @@ import DailyLogDialog from "@/components/builder/DailyLogDialog";
 import SubSchedule from "@/components/builder/SubSchedule";
 import SubAcknowledgmentDialog from "@/components/builder/SubAcknowledgmentDialog";
 import SubAccessDialog from "@/components/builder/SubAccessDialog";
+import { downloadSubAgreementPdf } from "@/lib/subAgreementPdf";
 
 const STAFF_TABS = [
   { key: "today", label: "Today" },
@@ -354,6 +355,7 @@ export default function BuilderPortal({ portal = null }) {
                         <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-700">Not signed</span>
                       )}
                       {ack?.document_url && <a href={ack.document_url} target="_blank" rel="noopener noreferrer" className="text-xs text-amber-700 hover:underline">Document</a>}
+                      {ack && <AgreementDownloadButton ack={ack} subcontractorName={s.name} projectName={projectById[ack.project_id]?.name} label="PDF" />}
                       <Button size="sm" variant="outline" onClick={() => setAckDialog({ open: true, ack: ack || null, subId: s.id })}>
                         {ack ? "View" : "Record"}
                       </Button>
@@ -371,8 +373,26 @@ export default function BuilderPortal({ portal = null }) {
 
       {tab === "policy" && isPortal && (() => {
         const ack = latestAckBySub[portal.subcontractor_id];
+        const subName = subById[portal.subcontractor_id]?.name;
         return (
           <div className="space-y-4">
+            {ack && (
+              <div className="rounded-xl border bg-white p-4 space-y-3" style={{ borderColor: "#ddd5c8" }}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-slate-900 flex items-center gap-1.5"><FileSignature className="w-4 h-4 text-emerald-600" /> Your signed agreement</p>
+                    <p className="text-xs text-slate-500">{subName}{ack.project_id ? ` · ${projectById[ack.project_id]?.name || "project"}` : " · all projects"}</p>
+                  </div>
+                  <AgreementDownloadButton ack={ack} subcontractorName={subName} projectName={projectById[ack.project_id]?.name} label="Download PDF" primary />
+                </div>
+                <dl className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+                  <div><dt className="text-xs text-slate-500">Signed by</dt><dd className="text-slate-900">{ack.authorized_representative || "—"}</dd></div>
+                  <div><dt className="text-xs text-slate-500">Signature</dt><dd className="text-slate-900 font-serif italic">{ack.signature_name || "—"}</dd></div>
+                  <div><dt className="text-xs text-slate-500">Date signed</dt><dd className="text-slate-900">{fmtDate(ack.signed_date)}</dd></div>
+                </dl>
+                {ack.document_url && <a href={ack.document_url} target="_blank" rel="noopener noreferrer" className="text-sm text-amber-700 hover:underline">View attached signed copy</a>}
+              </div>
+            )}
             <div className={cn("rounded-xl border px-4 py-3 flex items-center justify-between gap-3", ack ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50")}>
               <p className={cn("text-sm", ack ? "text-emerald-700" : "text-red-700")}>
                 {ack ? `Signed ${fmtDate(ack.signed_date)}${ack.authorized_representative ? ` by ${ack.authorized_representative}` : ""}.` : "Not signed yet."}
@@ -468,4 +488,25 @@ function groupBy(list, keyFn) {
     m.get(k).push(item);
   }
   return [...m.entries()];
+}
+
+// Builds the signed agreement PDF on the device (src/lib/subAgreementPdf.js).
+function AgreementDownloadButton({ ack, subcontractorName, projectName, label, primary = false }) {
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    try {
+      await downloadSubAgreementPdf(ack, { subcontractorName, projectName });
+    } catch (err) {
+      alert(`Could not create the PDF: ${err.message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Button size="sm" variant={primary ? "default" : "outline"} onClick={run} disabled={busy} className="shrink-0"
+      style={primary ? { backgroundColor: "#b5965a", color: "#f5f0eb" } : undefined}>
+      {busy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Download className="w-4 h-4 mr-1" />} {label}
+    </Button>
+  );
 }

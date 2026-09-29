@@ -100,6 +100,14 @@ export const SUB_REQUIREMENTS = [
   ["Charge back", "If Subcontractor does not take care of a warrantable call within 2 weeks, Principle will have the warranty work completed and the full cost will be charged back to Subcontractor. The charge back will be deducted from Subcontractor's next check, or, if no payment is due, billed to Subcontractor's company."],
 ];
 
+// The terms exactly as shown when someone signs, stored on the signed row
+// (agreement_snapshot, 042) so its PDF always shows what was agreed to.
+export const agreementSnapshot = () => ({
+  title: AGREEMENT_TITLE,
+  requirements: SUB_REQUIREMENTS.map(([title, body]) => ({ title, body })),
+  acknowledgment: ACKNOWLEDGMENT_TEXT,
+});
+
 export const ITEM_STATES = ["pass", "fail", "na"];
 
 // Each photo on a daily log is either job progress or fence/barrier

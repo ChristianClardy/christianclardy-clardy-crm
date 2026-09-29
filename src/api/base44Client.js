@@ -87,6 +87,7 @@ const CLIENT_ONLY_FIELDS = new Set(['client_name', 'follow_up_end_time']);
 // Per-table fields to strip when a schema-cache "column not found" error occurs on retry.
 // These are fields the app sends that the DB might not have yet.
 const TABLE_OPTIONAL_FIELDS = {
+  subcontractor_barrier_acknowledgments: new Set(['agreement_snapshot']),
   lead_follow_ups: new Set(['title','details','assigned_to','lead_name','follow_up_type','follow_up_date','follow_up_time','status']),
   estimates: new Set(['section_margins','is_locked','locked_at','locked_by','amendment_of','amendment_number']),
   leads: new Set(['property_address', 'estimated_budget', 'lost_reason', 'lost_reason_notes', 'assigned_designer']),

@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { SUB_REQUIREMENTS, ACKNOWLEDGMENT_TEXT, AGREEMENT_TITLE } from "@/lib/barrierChecklist";
+import { SUB_REQUIREMENTS, ACKNOWLEDGMENT_TEXT, AGREEMENT_TITLE, agreementSnapshot } from "@/lib/barrierChecklist";
 
 const NO_PROJECT = "__none__";
 
@@ -63,6 +63,9 @@ export default function SubAcknowledgmentDialog({ open, onOpenChange, ack, defau
     try {
       const payload = { ...form };
       delete payload.id;
+      // New signatures keep a copy of the terms they were given for; edits
+      // leave the original copy alone.
+      if (!ack?.id) payload.agreement_snapshot = agreementSnapshot();
       const project = projects.find((p) => p.id === form.project_id);
       if (project?.company_id) payload.company_id = project.company_id;
       const saved = ack?.id ? await base44.entities.SubBarrierAck.update(ack.id, payload) : await base44.entities.SubBarrierAck.create(payload);
