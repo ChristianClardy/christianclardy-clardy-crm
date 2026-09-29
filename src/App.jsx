@@ -35,6 +35,8 @@ import DocuSignSenderReturn from './pages/DocuSignSenderReturn';
 import QuickBooksCallback from './pages/QuickBooksCallback';
 import BuilderPortal from './pages/BuilderPortal';
 import Builder from './pages/Builder';
+import CustomerPortal from './pages/CustomerPortal';
+import { Home } from 'lucide-react';
 import SubPortalLayout from './components/app/SubPortalLayout';
 import { usePortalUser } from '@/lib/portalUser';
 
@@ -63,7 +65,7 @@ const isJoinFlow = window.location.pathname === '/join';
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, user } = useAuth();
   const { loading: tenantLoading, needsOnboarding } = useTenant();
-  const { loading: portalLoading, portalUser, pmUser, isStaff } = usePortalUser(isAuthenticated ? user?.id : null);
+  const { loading: portalLoading, portalUser, pmUser, customerUser, isStaff } = usePortalUser(isAuthenticated ? user?.id : null);
 
   // Invite link clicked — show password-set screen regardless of auth state
   if (isInviteFlow) return <SetPassword />;
@@ -103,6 +105,16 @@ const AuthenticatedApp = () => {
     return (
       <Routes>
         <Route path="*" element={<PmPortalApp pmUser={pmUser} />} />
+      </Routes>
+    );
+  }
+
+  // Customer (homeowner) login: their own projects' payments, progress and
+  // signed documents, nothing else.
+  if (customerUser) {
+    return (
+      <Routes>
+        <Route path="*" element={<CustomerPortalApp customerUser={customerUser} />} />
       </Routes>
     );
   }
@@ -183,6 +195,18 @@ const PmPortalApp = ({ pmUser }) => (
     ) : (
       <div className="max-w-md mx-auto p-8 text-center text-sm" style={{ color: "#7a6e66" }}>
         Your Builder Portal access has been turned off. Contact the Principle Outdoor Living office if you think this is a mistake.
+      </div>
+    )}
+  </SubPortalLayout>
+);
+
+const CustomerPortalApp = ({ customerUser }) => (
+  <SubPortalLayout title="Customer Portal" icon={Home} subcontractorName={customerUser.full_name}>
+    {customerUser.active ? (
+      <CustomerPortal customer={customerUser} />
+    ) : (
+      <div className="max-w-md mx-auto p-8 text-center text-sm" style={{ color: "#7a6e66" }}>
+        Your Customer Portal access has been turned off. Contact Principle Outdoor Living if you think this is a mistake.
       </div>
     )}
   </SubPortalLayout>

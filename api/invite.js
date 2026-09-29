@@ -10,13 +10,16 @@
 //   - PM invite (`pm: { employee_id, all_jobs }`): creates a Builder Portal-only
 //     login for a project manager, limited to their jobs and with no money
 //     or CRM access (040_pm_portal_logins.sql).
+//   - Customer invite (`customer: { client_id }`): creates a Customer Portal
+//     login for a homeowner, limited to that client's projects: payments,
+//     progress and signed documents (041_customer_portal.sql).
 //
 // ?action=text-link (staff): same sub login, but instead of an email it
 // returns a /join link for staff to text from their own phone. Pass
 // `user_id` instead to get a fresh link for an existing sub login.
 // ?action=redeem (public): trades a /join link's token for a one-time sign-in
 // token (see src/pages/JoinPortal.jsx). The join token is HMAC-signed and
-// only ever works for an active subcontractor login, never staff.
+// only ever works for an active sub, PM or customer login, never staff.
 
 const crypto = require('crypto');
 const { getStaffCaller } = require('./_lib/staffAuth.js');
@@ -109,29 +112,43 @@ async function getRow(table, userId) {
   return Array.isArray(rows) ? rows[0] || null : null;
 }
 
-// A limited (non-staff) login: a sub's Subcontractor Portal login or a PM's
-// Builder Portal login. Returns { kind: 'sub' | 'pm', row } or null.
+// A limited (non-staff) login: a sub's Subcontractor Portal login, a PM's
+// Builder Portal login, or a customer's Customer Portal login.
+// Returns { kind: 'sub' | 'pm' | 'customer', row } or null.
 async function getPortalLogin(userId) {
   const sub = await getRow('subcontractor_portal_users', userId);
   if (sub) return { kind: 'sub', row: sub };
   const pm = await getRow('pm_portal_users', userId).catch(() => null);
-  return pm ? { kind: 'pm', row: pm } : null;
+  if (pm) return { kind: 'pm', row: pm };
+  const customer = await getRow('customer_portal_users', userId).catch(() => null);
+  return customer ? { kind: 'customer', row: customer } : null;
 }
 
 // Which limited login a request is for, from its body.
 function requestedKind(body) {
   if (body.subcontractor_id) return 'sub';
   if (body.pm) return 'pm';
+  if (body.customer?.client_id) return 'customer';
   return null;
 }
 
 function portalRow(kind, body, userId, email, caller) {
   const base = { user_id: userId, email: email.toLowerCase(), full_name: body.full_name || null, invited_by: caller.email };
   if (kind === 'sub') return ['subcontractor_portal_users', { ...base, subcontractor_id: body.subcontractor_id }];
+  if (kind === 'customer') return ['customer_portal_users', { ...base, client_id: body.customer.client_id }];
   return ['pm_portal_users', { ...base, employee_id: body.pm.employee_id || null, all_jobs: !!body.pm.all_jobs }];
 }
 
-const PORTAL_ROLE = { sub: 'subcontractor', pm: 'project_manager' };
+const PORTAL_ROLE = { sub: 'subcontractor', pm: 'project_manager', customer: 'customer' };
+const PORTAL_NAME = { sub: 'Subcontractor Portal', pm: 'Builder Portal', customer: 'Customer Portal' };
+
+// Same login for the same person? (same sub company / same client)
+function sameLogin(existing, kind, body) {
+  if (!existing || existing.kind !== kind) return false;
+  if (kind === 'sub') return existing.row.subcontractor_id === body.subcontractor_id;
+  if (kind === 'customer') return existing.row.client_id === body.customer.client_id;
+  return true;
+}
 
 function joinUrl(req, userId) {
   const host = req.headers['x-forwarded-host'] || req.headers.host;
@@ -141,12 +158,12 @@ function joinUrl(req, userId) {
 
 async function handleTextLink(req, res, caller) {
   const body = req.body || {};
-  const { email, full_name, subcontractor_id, user_id } = body;
+  const { email, full_name, user_id } = body;
 
   // Fresh link for someone who already has a login.
   if (user_id) {
     const login = await getPortalLogin(user_id);
-    if (!login) return res.status(404).json({ error: 'Links only work for Subcontractor Portal and Builder Portal logins.' });
+    if (!login) return res.status(404).json({ error: 'Links only work for Subcontractor, Builder and Customer Portal logins.' });
     if (!login.row.active) return res.status(400).json({ error: 'Turn this login back on before sending a link.' });
     return res.status(200).json({ url: joinUrl(req, user_id), email: login.row.email, days: JOIN_LINK_DAYS });
   }
@@ -168,11 +185,10 @@ async function handleTextLink(req, res, caller) {
   if (!createRes.ok) {
     const msg = created?.msg || created?.message || created?.error_description || 'Could not create the login.';
     if (/already.*registered|already.*exists/i.test(msg)) {
-      // Already the same kind of login (same sub, or a PM login)? Just hand out a new link.
+      // Already the same kind of login (same sub, same client, or a PM login)? Just hand out a new link.
       const existingId = await rpc('auth_user_id_by_email', { p_email: email });
       const existing = existingId && (await getPortalLogin(existingId));
-      const same = existing && existing.kind === kind && (kind === 'pm' || existing.row.subcontractor_id === subcontractor_id);
-      if (same) {
+      if (sameLogin(existing, kind, body)) {
         if (!existing.row.active) return res.status(400).json({ error: 'That login is turned off. Turn it back on first.' });
         return res.status(200).json({ url: joinUrl(req, existingId), email: existing.row.email, days: JOIN_LINK_DAYS, existing: true });
       }
@@ -193,7 +209,7 @@ async function handleTextLink(req, res, caller) {
 }
 
 async function handleRedeem(req, res) {
-  const expired = 'This link has expired or is not valid. Ask your project manager to text you a new one.';
+  const expired = 'This link has expired or is not valid. Ask Principle Outdoor Living to text you a new one.';
   const userId = readJoinToken((req.body || {}).t);
   if (!userId) return res.status(400).json({ error: expired });
 
@@ -201,7 +217,7 @@ async function handleRedeem(req, res) {
   if (!login) return res.status(400).json({ error: expired });
   const portalUser = login.row;
   if (!portalUser.active) {
-    return res.status(403).json({ error: `Your ${login.kind === 'pm' ? 'Builder' : 'Subcontractor'} Portal access has been turned off. Contact your office.` });
+    return res.status(403).json({ error: `Your ${PORTAL_NAME[login.kind]} access has been turned off. Contact Principle Outdoor Living.` });
   }
 
   const userRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, { headers: adminHeaders() });

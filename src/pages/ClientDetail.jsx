@@ -19,6 +19,7 @@ import {
   XCircle,
   Clock,
   RefreshCw,
+  Home,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +44,7 @@ import ClientWorkflowControl from "@/components/clients/ClientWorkflowControl";
 import AppointmentsPanel from "@/components/scheduling/AppointmentsPanel";
 import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
 import ContactHistoryPanel from "@/components/crm/ContactHistoryPanel";
+import CustomerPortalDialog from "@/components/clients/CustomerPortalDialog";
 import { cn } from "@/lib/utils";
 
 const statusStyles = {
@@ -71,6 +73,7 @@ export default function ClientDetail() {
   const [companyProfiles, setCompanyProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [portalOpen, setPortalOpen] = useState(false);
   const [formData, setFormData] = useState({});
 
   useEffect(() => {
@@ -191,7 +194,11 @@ export default function ClientDetail() {
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setPortalOpen(true)}>
+            <Home className="w-4 h-4 mr-2" />
+            Customer Portal
+          </Button>
           <Button variant="outline" onClick={() => navigate(createPageUrl(`Calendar?mode=calendar&new=task&clientId=${clientId}`))}>
             <Plus className="w-4 h-4 mr-2" />
             Add Task
@@ -205,6 +212,8 @@ export default function ClientDetail() {
           </Button>
         </div>
       </div>
+
+      {portalOpen && <CustomerPortalDialog client={client} onClose={() => setPortalOpen(false)} />}
 
       {/* Contact Info */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6">

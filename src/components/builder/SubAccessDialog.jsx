@@ -161,12 +161,19 @@ export default function SubAccessDialog({ sub, onOpenChange, assignments, portal
 // phone (sms: opens Messages on iPhone, Android and Mac) or copied to paste
 // anywhere else.
 // link: { url, days, name, phone, portal? }. portal "pm" words it for a
-// project manager's Builder Portal login.
+// project manager's Builder Portal login, "customer" for a homeowner's
+// Customer Portal login.
+const PORTAL_BLURB = {
+  sub: "Subcontractor Portal for your jobs",
+  pm: "Builder Portal to run your jobs",
+  customer: "Customer Portal, where you can check your project's progress, payments and signed documents",
+};
+
 export function TextLinkPanel({ link, onClose }) {
   const first = link.name.split(" ")[0];
   const [phone, setPhone] = useState(link.phone);
   const [message, setMessage] = useState(
-    `Hi${first ? ` ${first}` : ""}, this is Principle Outdoor Living. Here's your link to the ${link.portal === "pm" ? "Builder Portal to run your jobs" : "Subcontractor Portal for your jobs"}. ` +
+    `Hi${first ? ` ${first}` : ""}, this is Principle Outdoor Living. Here's your link to the ${PORTAL_BLURB[link.portal] || PORTAL_BLURB.sub}. ` +
     `Tap it to sign in, set a password, and add the app to your phone: ${link.url}`
   );
   const [copied, setCopied] = useState(null);

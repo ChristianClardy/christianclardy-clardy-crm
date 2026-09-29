@@ -11,6 +11,7 @@ import InstallSteps from '@/components/app/InstallSteps';
 //      sign-in, so they'll need it there),
 //   3. adding Clardy to their home screen / desktop.
 const STEPS = ['Sign in', 'Password', 'Install'];
+const PORTAL_TITLE = { sub: 'Subcontractor Portal', pm: 'Builder Portal', customer: 'Customer Portal' };
 
 export default function JoinPortal() {
   const [step, setStep] = useState(0);
@@ -24,7 +25,7 @@ export default function JoinPortal() {
     const token = new URLSearchParams(window.location.search).get('t');
     (async () => {
       try {
-        if (!token) throw new Error('This link is missing its code. Ask your project manager to text you a new one.');
+        if (!token) throw new Error('This link is missing its code. Ask Principle Outdoor Living to text you a new one.');
         const res = await fetch('/api/invite?action=redeem', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -36,7 +37,7 @@ export default function JoinPortal() {
         if (otpErr) throw new Error(otpErr.message);
         // Drop the token from the address bar, so "Add to Home Screen" saves
         // the portal itself rather than a sign-in link that expires.
-        window.history.replaceState(null, '', '/BuilderPortal');
+        window.history.replaceState(null, '', json.portal === 'customer' ? '/CustomerPortal' : '/BuilderPortal');
         setAccount({ email: json.email, full_name: json.full_name, portal: json.portal });
         setStep(1);
       } catch (err) {
@@ -47,7 +48,9 @@ export default function JoinPortal() {
 
   const firstName = account?.full_name?.split(' ')[0];
   const ios = installPlatform().startsWith('ios');
-  const openPortal = () => { window.location.href = '/BuilderPortal'; };
+  const isCustomer = account?.portal === 'customer';
+  const openPortal = () => { window.location.href = isCustomer ? '/CustomerPortal' : '/BuilderPortal'; };
+  const destination = isCustomer ? 'my project' : 'my jobs';
 
   return (
     <div className="min-h-screen flex items-start sm:items-center justify-center px-4 py-8" style={{ backgroundColor: '#f5f0eb', fontFamily: "'Georgia', serif" }}>
@@ -56,7 +59,7 @@ export default function JoinPortal() {
           <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3" style={{ backgroundColor: '#3d3530' }}>
             <HardHat className="w-6 h-6" style={{ color: '#b5965a' }} />
           </div>
-          <h1 className="text-2xl font-bold tracking-wide" style={{ color: '#3d3530' }}>{account?.portal === 'pm' ? 'Builder Portal' : 'Subcontractor Portal'}</h1>
+          <h1 className="text-2xl font-bold tracking-wide" style={{ color: '#3d3530' }}>{PORTAL_TITLE[account?.portal] || 'Subcontractor Portal'}</h1>
           <p className="text-sm mt-1" style={{ color: '#7a6e66' }}>Principle Outdoor Living</p>
         </div>
 
@@ -98,7 +101,7 @@ export default function JoinPortal() {
             <div className="space-y-5">
               <div>
                 <h2 className="text-lg font-semibold" style={{ color: '#3d3530' }}>Add Clardy to your {ios || installPlatform().startsWith('android') ? 'home screen' : 'computer'}</h2>
-                <p className="text-sm mt-1" style={{ color: '#7a6e66' }}>Then it opens like any other app, right to your jobs.</p>
+                <p className="text-sm mt-1" style={{ color: '#7a6e66' }}>Then it opens like any other app, right to {destination}.</p>
               </div>
               <InstallSteps
                 finalStep={ios
@@ -106,7 +109,7 @@ export default function JoinPortal() {
                   : <>Open <strong>Clardy</strong> from your home screen or desktop. You're already signed in.</>}
               />
               <button onClick={openPortal} className="w-full py-2.5 rounded-lg text-sm font-semibold" style={{ backgroundColor: '#3d3530', color: '#f5f0eb' }}>
-                Done, go to my jobs
+                Done, go to {destination}
               </button>
               <button onClick={openPortal} className="w-full text-xs hover:underline" style={{ color: '#7a6e66' }}>I'll do this later</button>
             </div>
@@ -114,7 +117,7 @@ export default function JoinPortal() {
             <div className="space-y-4 text-center">
               <p className="text-sm" style={{ color: '#3d3530' }}>You're all set.</p>
               <button onClick={openPortal} className="w-full py-2.5 rounded-lg text-sm font-semibold" style={{ backgroundColor: '#3d3530', color: '#f5f0eb' }}>
-                Go to my jobs
+                Go to {destination}
               </button>
             </div>
           )}
