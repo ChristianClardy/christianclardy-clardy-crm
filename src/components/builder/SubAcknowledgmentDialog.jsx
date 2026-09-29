@@ -14,7 +14,6 @@ const NO_PROJECT = "__none__";
 const emptyAck = (subId, user, portalMode) => ({
   subcontractor_id: subId || "",
   project_id: "",
-  project_manager: "",
   authorized_representative: "",
   signature_name: "",
   signed_date: new Date().toLocaleDateString("en-CA"),
@@ -100,10 +99,6 @@ export default function SubAcknowledgmentDialog({ open, onOpenChange, ack, defau
                 {projects.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
               </SelectContent>
             </Select>
-          </div>
-          <div>
-            <Label>Project Manager</Label>
-            <Input value={form.project_manager || ""} onChange={(e) => set({ project_manager: e.target.value })} />
           </div>
           <div>
             <Label>Date signed</Label>

@@ -166,11 +166,35 @@ export function getCurrentOrgId() {
   return _currentOrgId;
 }
 
+// ─── Flaky connections ───────────────────────────────────────────────────────
+// Phones on a jobsite (and iPhones waking from idle) often fail a request
+// before it ever reaches Supabase: "Load failed" (Safari) / "Failed to fetch"
+// (Chrome). Those are retried a couple of times. A new row gets its id up
+// front, so retrying an insert that did land can't create a duplicate.
+const NETWORK_ERROR = /load failed|failed to fetch|networkerror|network request failed|network connection was lost/i;
+const isNetworkError = (error) => !!error && NETWORK_ERROR.test(error.message || String(error));
+const RETRY_DELAYS_MS = [700, 1800];
+// Tables keyed by something other than a generated uuid `id`.
+const NO_UUID_ID_TABLES = new Set(['subcontractor_portal_users', 'pm_portal_users', 'customer_portal_users', 'quickbooks_credentials']);
+
+async function withRetry(run) {
+  let result = await run(0);
+  for (let i = 0; i < RETRY_DELAYS_MS.length && isNetworkError(result.error); i++) {
+    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[i]));
+    result = await run(i + 1);
+  }
+  return result;
+}
+
+const newId = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : null);
+
 // ─── Centralised error reporter ──────────────────────────────────────────────
 // Alerts on write failures. Read failures are logged to console so components
 // can catch and render empty states without interrupting the user.
 function reportError(op, table, error) {
-  const msg = `${op} failed on "${table}": ${error?.message || error}`;
+  const msg = isNetworkError(error)
+    ? "Couldn't reach the server. Check your signal or Wi-Fi and try again."
+    : `${op} failed on "${table}": ${error?.message || error}`;
   console.error('[base44]', msg, error);
   const isWrite = op === 'create' || op === 'update' || op === 'delete';
   if (isWrite) setTimeout(() => alert(msg), 0);
@@ -197,7 +221,7 @@ function createEntity(tableName) {
       const sort = parseSortField(sortField);
       if (sort) query = query.order(sort.field, { ascending: sort.ascending });
       if (limit) query = query.limit(limit);
-      const { data, error } = await query;
+      const { data, error } = await withRetry(() => query);
       if (error) reportError('list', tableName, error);
       return (data || []).map(mapDates);
     },
@@ -213,7 +237,7 @@ function createEntity(tableName) {
       const sort = parseSortField(sortField);
       if (sort) query = query.order(sort.field, { ascending: sort.ascending });
       if (limit) query = query.limit(limit);
-      const { data, error } = await query;
+      const { data, error } = await withRetry(() => query);
       if (error) reportError('filter', tableName, error);
       return (data || []).map(mapDates);
     },
@@ -222,7 +246,7 @@ function createEntity(tableName) {
     async get(id) {
       let query = supabase.from(tableName).select('*').eq('id', id);
       if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
-      const { data, error } = await query.single();
+      const { data, error } = await withRetry(() => query.single());
       if (error) reportError('get', tableName, error);
       return mapDates(data);
     },
@@ -244,13 +268,25 @@ function createEntity(tableName) {
         const scope = getSelectedCompanyScope();
         if (scope !== 'all') payload.company_id = scope;
       }
-      let { data, error } = await supabase.from(tableName).insert(payload).select().single();
+      if (!payload.id && !NO_UUID_ID_TABLES.has(tableName)) {
+        const id = newId();
+        if (id) payload.id = id;
+      }
+      const insert = (row) => withRetry(async (attempt) => {
+        const res = await supabase.from(tableName).insert(row).select().single();
+        // A retry hitting our own id means the earlier attempt did save.
+        if (attempt > 0 && row.id && res.error?.code === '23505') {
+          return supabase.from(tableName).select('*').eq('id', row.id).single();
+        }
+        return res;
+      });
+      let { data, error } = await insert(payload);
       // If a column is missing from the schema cache, strip optional fields and retry once
       if (error?.message?.includes('schema cache') || error?.message?.includes('Could not find')) {
         const optional = TABLE_OPTIONAL_FIELDS[tableName];
         if (optional) {
           const stripped = Object.fromEntries(Object.entries(payload).filter(([k]) => !optional.has(k)));
-          ({ data, error } = await supabase.from(tableName).insert(stripped).select().single());
+          ({ data, error } = await insert(stripped));
         }
       }
       if (error) reportError('create', tableName, error);
@@ -262,7 +298,7 @@ function createEntity(tableName) {
       const payload = cleanForWrite(record);
       let query = supabase.from(tableName).update(payload).eq('id', id);
       if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
-      let { error } = await query;
+      let { error } = await withRetry(() => query);
       // If a column is missing from the schema cache, strip optional fields and retry once
       if (error?.message?.includes('schema cache') || error?.message?.includes('Could not find')) {
         const optional = TABLE_OPTIONAL_FIELDS[tableName];
@@ -275,7 +311,7 @@ function createEntity(tableName) {
       }
       if (error) reportError('update', tableName, error);
       // Fetch the updated record separately to avoid PostgREST "coerce to single object" errors
-      const { data, error: fetchError } = await supabase.from(tableName).select('*').eq('id', id).single();
+      const { data, error: fetchError } = await withRetry(() => supabase.from(tableName).select('*').eq('id', id).single());
       if (fetchError) reportError('update', tableName, fetchError);
       return mapDates(data);
     },
@@ -284,7 +320,7 @@ function createEntity(tableName) {
     async delete(id) {
       let query = supabase.from(tableName).delete().eq('id', id);
       if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
-      const { error } = await query;
+      const { error } = await withRetry(() => query);
       if (error) reportError('delete', tableName, error);
     },
 
