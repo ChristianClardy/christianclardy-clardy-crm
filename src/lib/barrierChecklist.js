@@ -74,11 +74,18 @@ export const CHECKLIST_SECTIONS = [
 export const CERTIFICATION_TEXT =
   "I certify that I inspected the pool construction barrier and, to the best of my knowledge, the site was secured in accordance with the Principle Outdoor Living Pool Construction Barrier Safety Policy.";
 
-export const ACKNOWLEDGMENT_TEXT =
-  "The undersigned acknowledges receipt of the Mandatory Subcontractor Requirements for Pool Construction Barrier Safety and agrees to comply with them while performing work on any Principle Outdoor Living pool or spa project.";
+// The one Subcontractor Agreement every sub signs, whatever their trade.
+// Signing it is what the "signed" status on a sub means everywhere.
+export const AGREEMENT_TITLE = "Principle Outdoor Living Subcontractor Agreement";
 
-// Condensed from sections 2–9 of the requirements doc, shown to the sub before signing.
+export const ACKNOWLEDGMENT_TEXT =
+  "The undersigned acknowledges receipt of the Principle Outdoor Living Subcontractor Agreement and agrees to comply with it on every Principle Outdoor Living project, including the pool construction barrier safety requirements on any pool or spa project, the Friday payment schedule, and the subcontractor direct warranty and charge back terms described above.";
+
+// Barrier items are condensed from sections 2–9 of the barrier requirements
+// doc; they apply whenever the sub works on a pool or spa project. Payment,
+// warranty and charge back terms apply to all work. Shown before signing.
 export const SUB_REQUIREMENTS = [
+  ["Pool barrier safety (pool and spa projects)", "Items 2–9 apply whenever Subcontractor works on a Principle pool or spa project, whatever Subcontractor's trade."],
   ["No unsecured pool excavation", "Never leave an excavation or partially completed pool unsecured. If a barrier is damaged, missing, displaced, or inadequate: secure the area, notify the Principle Site Supervisor or PM, prevent unauthorized access, and don't leave until it's addressed."],
   ["Fencing", "Construction fencing (min. 4 ft high) surrounds the pool site from excavation until the permanent barrier is complete. Never remove, relocate, cut, or compromise it without Principle's authorization."],
   ["Gates", "Keep construction gates closed and secured when not in active use. Never prop open, leave unsecured, disable locks, remove hardware, or leave a gate open when leaving the property."],
@@ -87,6 +94,10 @@ export const SUB_REQUIREMENTS = [
   ["Damage to barrier", "Any sub that damages a barrier must immediately notify Principle and help restore it. Don't assume another contractor will find or fix it."],
   ["Permanent barrier work", "Follow approved plans, manufacturer's instructions, applicable requirements, and Principle's direction (height, clearance, openings, gate, latch, access control)."],
   ["Stop-work", "Principle may stop work whenever a sub's activities create an unsafe or unsecured pool-access condition. Work resumes only once corrected to Principle's satisfaction."],
+  ["Payment schedule", "Payouts and payments are made on Fridays. Work must be completed by Wednesday at 5:00 PM to be paid that Friday. Work completed after Wednesday at 5:00 PM will be paid the following Friday."],
+  ["Subcontractor direct warranty", "Subcontractor directly warrants its own work and materials to Principle and the homeowner. Subcontractor must take care of any warranty call within 2 weeks (14 days) of being notified by Principle."],
+  ["What is warrantable", "Not every call is a warranty item. Warranty covers defects in Subcontractor's workmanship or in materials Subcontractor supplied or installed. It does not cover normal wear and tear, damage caused by the homeowner or others, misuse or lack of maintenance, weather or acts of nature, or work and materials Subcontractor did not perform or supply. Principle will tell Subcontractor, with each warranty call, why it is Subcontractor's responsibility."],
+  ["Charge back", "If Subcontractor does not take care of a warrantable call within 2 weeks, Principle will have the warranty work completed and the full cost will be charged back to Subcontractor. The charge back will be deducted from Subcontractor's next check, or, if no payment is due, billed to Subcontractor's company."],
 ];
 
 export const ITEM_STATES = ["pass", "fail", "na"];

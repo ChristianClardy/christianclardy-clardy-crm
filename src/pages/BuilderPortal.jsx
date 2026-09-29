@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
-import { logStatus, STATUS_STYLES, SUB_REQUIREMENTS, FENCE_CHECKPOINTS, photoKind, progressPhotos, fencePhotos } from "@/lib/barrierChecklist";
+import { logStatus, STATUS_STYLES, SUB_REQUIREMENTS, AGREEMENT_TITLE, FENCE_CHECKPOINTS, photoKind, progressPhotos, fencePhotos } from "@/lib/barrierChecklist";
 import DailyLogDialog from "@/components/builder/DailyLogDialog";
 import SubSchedule from "@/components/builder/SubSchedule";
 import SubAcknowledgmentDialog from "@/components/builder/SubAcknowledgmentDialog";
@@ -24,7 +24,7 @@ const PORTAL_TABS = [
   { key: "schedule", label: "My Schedule" },
   { key: "logs", label: "Daily Logs" },
   { key: "photos", label: "Photos" },
-  { key: "policy", label: "Barrier Policy" },
+  { key: "policy", label: "Agreement" },
 ];
 
 const ALL = "__all__";
@@ -160,7 +160,7 @@ export default function BuilderPortal({ portal = null }) {
             <HardHat className="w-7 h-7" style={{ color: "#b5965a" }} /> Subcontractor Portal
           </h1>
           <p className="text-sm mt-1" style={{ color: "#7a6e66" }}>
-            {isPortal ? `${subcontractors[0]?.name || "Subcontractor"} · daily progress, fence compliance & barrier policy` : "Daily progress photos & daily fence (pool barrier) compliance"}
+            {isPortal ? `${subcontractors[0]?.name || "Subcontractor"} · daily progress, fence compliance & subcontractor agreement` : "Daily progress photos & daily fence (pool barrier) compliance"}
           </p>
         </div>
         <Button onClick={() => openLog(null, projectFilter !== ALL ? projectFilter : null)} className="gap-2" style={{ backgroundColor: "#b5965a", color: "#f5f0eb" }}>
@@ -174,9 +174,9 @@ export default function BuilderPortal({ portal = null }) {
         <Tile icon={AlertTriangle} label="Open deficiencies" value={openDeficiencies.length} alert={openDeficiencies.length > 0} onClick={() => setTab("logs")} />
         <Tile icon={Camera} label="Progress photos today" value={todaysLogs.reduce((n, l) => n + progressPhotos(l).length, 0)} onClick={() => { setPhotoFilter("progress"); setTab("photos"); }} />
         {isPortal ? (
-          <Tile icon={FileSignature} label="Barrier policy" value={latestAckBySub[portal.subcontractor_id] ? "Signed" : "Not signed"} alert={!latestAckBySub[portal.subcontractor_id]} onClick={() => setTab("policy")} />
+          <Tile icon={FileSignature} label="Subcontractor agreement" value={latestAckBySub[portal.subcontractor_id] ? "Signed" : "Not signed"} alert={!latestAckBySub[portal.subcontractor_id]} onClick={() => setTab("policy")} />
         ) : (
-          <Tile icon={FileSignature} label="Subs without signed policy" value={subcontractors.filter((s) => !latestAckBySub[s.id]).length} alert={unsignedOnSiteToday.length > 0} onClick={() => setTab("subs")} />
+          <Tile icon={FileSignature} label="Subs without signed agreement" value={subcontractors.filter((s) => !latestAckBySub[s.id]).length} alert={unsignedOnSiteToday.length > 0} onClick={() => setTab("subs")} />
         )}
       </div>
 
@@ -197,12 +197,12 @@ export default function BuilderPortal({ portal = null }) {
           {!isPortal && unsignedOnSiteToday.length > 0 && (
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-              <span>On site today without a signed barrier policy acknowledgment: <strong>{unsignedOnSiteToday.map((id) => subById[id]?.name || "Unknown").join(", ")}</strong></span>
+              <span>On site today without a signed subcontractor agreement: <strong>{unsignedOnSiteToday.map((id) => subById[id]?.name || "Unknown").join(", ")}</strong></span>
             </div>
           )}
           {isPortal && !latestAckBySub[portal.subcontractor_id] && (
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-center justify-between gap-3">
-              <span className="flex items-start gap-2"><AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />Sign the Pool Barrier Safety policy before working on a Principle pool or spa job.</span>
+              <span className="flex items-start gap-2"><AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />Sign the Subcontractor Agreement before working on a Principle job.</span>
               <Button size="sm" onClick={() => setAckDialog({ open: true, ack: null, subId: portal.subcontractor_id })} className="shrink-0" style={{ backgroundColor: "#b5965a", color: "#f5f0eb" }}>Sign now</Button>
             </div>
           )}
@@ -342,7 +342,7 @@ export default function BuilderPortal({ portal = null }) {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-slate-900">{s.name}{s.trade ? <span className="text-slate-500 font-normal"> · {s.trade}</span> : null}</p>
                       <p className="text-xs text-slate-500">
-                        {ack ? `Signed ${fmtDate(ack.signed_date)}${ack.authorized_representative ? ` by ${ack.authorized_representative}` : ""}${ack.project_id ? ` · ${projectById[ack.project_id]?.name || "project"}` : " · all projects"}` : "No signed acknowledgment on file"}
+                        {ack ? `Signed ${fmtDate(ack.signed_date)}${ack.authorized_representative ? ` by ${ack.authorized_representative}` : ""}${ack.project_id ? ` · ${projectById[ack.project_id]?.name || "project"}` : " · all projects"}` : "No signed agreement on file"}
                         {lastOnSite && ` · Last on site ${fmtDate(lastOnSite.log_date)}`}
                       </p>
                       <p className="text-xs text-slate-500">{jobCount} job{jobCount !== 1 ? "s" : ""} assigned · {loginCount} app login{loginCount !== 1 ? "s" : ""}</p>
@@ -378,11 +378,11 @@ export default function BuilderPortal({ portal = null }) {
                 {ack ? `Signed ${fmtDate(ack.signed_date)}${ack.authorized_representative ? ` by ${ack.authorized_representative}` : ""}.` : "Not signed yet."}
               </p>
               {!ack && (
-                <Button size="sm" onClick={() => setAckDialog({ open: true, ack: null, subId: portal.subcontractor_id })} style={{ backgroundColor: "#b5965a", color: "#f5f0eb" }}>Sign policy</Button>
+                <Button size="sm" onClick={() => setAckDialog({ open: true, ack: null, subId: portal.subcontractor_id })} style={{ backgroundColor: "#b5965a", color: "#f5f0eb" }}>Sign agreement</Button>
               )}
             </div>
             <div className="rounded-xl border bg-white p-4 space-y-3" style={{ borderColor: "#ddd5c8" }}>
-              <h3 className="font-semibold text-slate-900">Mandatory Subcontractor Requirements: Pool Construction Barrier Safety</h3>
+              <h3 className="font-semibold text-slate-900">{AGREEMENT_TITLE}</h3>
               <ol className="space-y-2 list-decimal list-inside">
                 {SUB_REQUIREMENTS.map(([title, body]) => (
                   <li key={title} className="text-sm text-slate-600"><span className="font-medium text-slate-800">{title}.</span> {body}</li>

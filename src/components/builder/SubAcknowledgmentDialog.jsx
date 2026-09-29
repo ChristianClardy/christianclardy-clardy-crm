@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { SUB_REQUIREMENTS, ACKNOWLEDGMENT_TEXT } from "@/lib/barrierChecklist";
+import { SUB_REQUIREMENTS, ACKNOWLEDGMENT_TEXT, AGREEMENT_TITLE } from "@/lib/barrierChecklist";
 
 const NO_PROJECT = "__none__";
 
@@ -78,7 +78,7 @@ export default function SubAcknowledgmentDialog({ open, onOpenChange, ack, defau
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Subcontractor Barrier Policy Acknowledgment</DialogTitle>
+          <DialogTitle>{AGREEMENT_TITLE}</DialogTitle>
         </DialogHeader>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -96,7 +96,7 @@ export default function SubAcknowledgmentDialog({ open, onOpenChange, ack, defau
             <Select value={form.project_id || NO_PROJECT} onValueChange={(v) => set({ project_id: v === NO_PROJECT ? "" : v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value={NO_PROJECT}>All Principle pool/spa projects</SelectItem>
+                <SelectItem value={NO_PROJECT}>All Principle projects</SelectItem>
                 {projects.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -112,7 +112,7 @@ export default function SubAcknowledgmentDialog({ open, onOpenChange, ack, defau
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2 max-h-64 overflow-y-auto">
-          <p className="text-sm font-semibold text-slate-800">Mandatory requirements (summary)</p>
+          <p className="text-sm font-semibold text-slate-800">Agreement terms</p>
           <ol className="space-y-1.5 list-decimal list-inside">
             {SUB_REQUIREMENTS.map(([title, body]) => (
               <li key={title} className="text-sm text-slate-600"><span className="font-medium text-slate-800">{title}.</span> {body}</li>
@@ -164,7 +164,7 @@ export default function SubAcknowledgmentDialog({ open, onOpenChange, ack, defau
           {!(portalMode && ack?.id) && (
             <Button onClick={handleSave} disabled={saving || uploading} style={{ backgroundColor: "#b5965a", color: "#f5f0eb" }}>
               {saving && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
-              {portalMode ? "Sign and submit" : "Save acknowledgment"}
+              {portalMode ? "Sign and submit" : "Save agreement"}
             </Button>
           )}
         </div>

@@ -84,7 +84,7 @@ function complianceIssues(sub, signed) {
   else if (wc === "soon") issues.push({ level: "warn", text: `Workers' comp expires ${moment(sub.workers_comp_exp).format("MMM D")}` });
   if (lic === "expired") issues.push({ level: "bad", text: "License expired" });
   else if (lic === "soon") issues.push({ level: "warn", text: `License expires ${moment(sub.license_exp).format("MMM D")}` });
-  if (!signed) issues.push({ level: "bad", text: "Barrier policy not signed" });
+  if (!signed) issues.push({ level: "bad", text: "Subcontractor agreement not signed" });
   if (!sub.w9_on_file) issues.push({ level: "warn", text: "No W-9 on file" });
   return issues;
 }
@@ -93,7 +93,7 @@ const FILTERS = [
   { key: "all", label: "All" },
   { key: "attention", label: "Needs attention" },
   { key: "insurance", label: "Insurance expiring / expired" },
-  { key: "unsigned", label: "Barrier policy unsigned" },
+  { key: "unsigned", label: "Agreement unsigned" },
   { key: "nologin", label: "No app login" },
 ];
 
@@ -178,7 +178,7 @@ export default function SubcontractorsTab() {
       jobs ? `${jobs} job assignment${jobs !== 1 ? "s" : ""}` : null,
       logins ? `${logins} app login${logins !== 1 ? "s" : ""} (they'll lose access)` : null,
     ].filter(Boolean).join(" and ");
-    const msg = `Delete ${sub.name}?${extra ? `\n\nThis also removes ${extra} and their signed barrier acknowledgments.` : ""}\n\nTo keep the history, choose "Mark inactive" instead.`;
+    const msg = `Delete ${sub.name}?${extra ? `\n\nThis also removes ${extra} and their signed subcontractor agreements.` : ""}\n\nTo keep the history, choose "Mark inactive" instead.`;
     if (!confirm(msg)) return;
     await base44.entities.Subcontractor.delete(sub.id);
     load();
@@ -317,7 +317,7 @@ function SubRow({ row, signed, onEdit, onAccess, onStatus, onDelete }) {
           <span key={i.text} className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">{i.text}</span>
         ))}
         {signed && signed !== "on file" && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5 text-xs text-slate-500">Barrier policy signed {moment(signed).format("M/D/YY")}</span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5 text-xs text-slate-500">Agreement signed {moment(signed).format("M/D/YY")}</span>
         )}
       </div>
 
@@ -519,7 +519,7 @@ function SubFormDialog({ sub, allSubs, onClose, onSaved }) {
               </span>
             </label>
             <p className="text-xs text-slate-500">
-              The pool barrier policy signature is recorded in Subcontractor Portal → Subcontractor Compliance, or the sub signs it in their app.
+              The Subcontractor Agreement signature is recorded in Subcontractor Portal → Subcontractor Compliance, or the sub signs it in their app.
             </p>
           </Section>
 
