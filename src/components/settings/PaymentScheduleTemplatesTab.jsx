@@ -11,19 +11,21 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Pencil, Trash2, GripVertical, DollarSign } from "lucide-react";
+import { Plus, Pencil, Trash2, GripVertical, DollarSign, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { hasBuilderFee, feePercentTotal, costPercentTotal } from "@/lib/drawSchedule";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 const rid = () => Math.random().toString(36).slice(2, 10);
 
-function fmtItem(item) {
+function fmtItem(item, withFee) {
+  const fee = Number(item.fee_percent) > 0 ? ` + ${item.fee_percent}% of builder fee` : "";
   if (item.invoice_amount_type === "percent_of_contract")
-    return `${item.invoice_amount_value}% of contract`;
+    return `${item.invoice_amount_value}% of ${withFee ? "contract minus fee" : "contract"}${fee}`;
   if (item.invoice_amount_type === "fixed")
-    return `$${Number(item.invoice_amount_value).toLocaleString()} fixed`;
-  return "Remaining balance";
+    return `$${Number(item.invoice_amount_value).toLocaleString()} fixed${fee}`;
+  return `Remaining balance${fee}`;
 }
 
 const EMPTY_ITEM = () => ({
@@ -37,7 +39,7 @@ const EMPTY_TEMPLATE = { name: "", description: "", items: [EMPTY_ITEM()] };
 
 // ─── item row inside the dialog ──────────────────────────────────────────────
 
-function ItemRow({ item, onChange, onRemove, canRemove }) {
+function ItemRow({ item, onChange, onRemove, canRemove, withFee }) {
   const isPercent = item.invoice_amount_type === "percent_of_contract";
   const isFixed   = item.invoice_amount_type === "fixed";
 
@@ -47,7 +49,7 @@ function ItemRow({ item, onChange, onRemove, canRemove }) {
       <div className="flex-1 grid grid-cols-12 gap-2 items-start">
         {/* Title */}
         <Input
-          className="col-span-5 h-8 text-sm"
+          className={cn(withFee ? "col-span-4" : "col-span-5", "h-8 text-sm")}
           placeholder="e.g. 30% Deposit"
           value={item.title}
           onChange={(e) => onChange({ ...item, title: e.target.value })}
@@ -57,7 +59,7 @@ function ItemRow({ item, onChange, onRemove, canRemove }) {
           value={item.invoice_amount_type}
           onValueChange={(v) => onChange({ ...item, invoice_amount_type: v, invoice_amount_value: "" })}
         >
-          <SelectTrigger className="col-span-4 h-8 text-sm">
+          <SelectTrigger className={cn(withFee ? "col-span-3" : "col-span-4", "h-8 text-sm")}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -83,6 +85,21 @@ function ItemRow({ item, onChange, onRemove, canRemove }) {
         ) : (
           <div className="col-span-2" />
         )}
+        {/* Share of the flat builder fee billed with this milestone */}
+        {withFee && (
+          <div className="col-span-3 flex items-center gap-1">
+            <Input
+              type="number"
+              min="0"
+              max="100"
+              className="h-8 text-sm"
+              placeholder="0"
+              value={item.fee_percent ?? ""}
+              onChange={(e) => onChange({ ...item, fee_percent: e.target.value })}
+            />
+            <span className="text-xs text-slate-400">%</span>
+          </div>
+        )}
       </div>
       <button
         type="button"
@@ -101,6 +118,7 @@ function ItemRow({ item, onChange, onRemove, canRemove }) {
 function TemplateDialog({ open, initial, companyId, onClose, onSaved }) {
   const [form, setForm] = useState(EMPTY_TEMPLATE);
   const [saving, setSaving] = useState(false);
+  const [withFee, setWithFee] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -109,6 +127,7 @@ function TemplateDialog({ open, initial, companyId, onClose, onSaved }) {
           ? { name: initial.name, description: initial.description || "", items: initial.items?.length ? initial.items : [EMPTY_ITEM()] }
           : { ...EMPTY_TEMPLATE, items: [EMPTY_ITEM()] }
       );
+      setWithFee(hasBuilderFee(initial));
     }
   }, [open, initial]);
 
@@ -121,8 +140,26 @@ function TemplateDialog({ open, initial, companyId, onClose, onSaved }) {
 
   const removeItem = (id) => setItems(form.items.filter((it) => it.id !== id));
 
+  // Turning the fee on starts it 90% with the first milestone and 10% with
+  // the last (editable); turning it off clears every milestone's fee share.
+  const toggleFee = (on) => {
+    setWithFee(on);
+    setItems(form.items.map((it, i, all) => ({
+      ...it,
+      fee_percent: !on ? undefined
+        : all.length === 1 ? 100
+        : i === 0 ? 90 : i === all.length - 1 ? 10 : 0,
+    })));
+  };
+  const feeTotal = feePercentTotal(form.items);
+  const pctTotal = costPercentTotal(form.items);
+  const hasRemaining = form.items.some((it) => it.invoice_amount_type === "remaining_balance");
+
   const handleSave = async () => {
     if (!form.name.trim()) return;
+    if (withFee && Math.abs(feeTotal - 100) > 0.001) {
+      if (!confirm(`The builder fee shares add up to ${feeTotal}%, not 100%, so not all of the fee would be billed. Save anyway?`)) return;
+    }
     setSaving(true);
     const payload = {
       name: form.name.trim(),
@@ -137,6 +174,7 @@ function TemplateDialog({ open, initial, companyId, onClose, onSaved }) {
             ? (Number(it.invoice_amount_value) || 0)
             : null,
           sort_order: i,
+          ...(withFee && Number(it.fee_percent) > 0 ? { fee_percent: Number(it.fee_percent) } : {}),
         })),
       company_id: companyId || null,
     };
@@ -151,7 +189,7 @@ function TemplateDialog({ open, initial, companyId, onClose, onSaved }) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{initial ? "Edit Template" : "New Payment Schedule Template"}</DialogTitle>
         </DialogHeader>
@@ -183,11 +221,24 @@ function TemplateDialog({ open, initial, companyId, onClose, onSaved }) {
               <p className="text-xs text-slate-400">Amounts recalculate automatically from the project's contract value</p>
             </div>
 
+            <label className="mb-3 flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              <input type="checkbox" className="mt-0.5" checked={withFee} onChange={(e) => toggleFee(e.target.checked)} />
+              <span>
+                Includes a flat builder fee
+                <span className="block text-xs text-slate-500">
+                  The fee amount is entered per project when you apply this template. The contract includes the fee:
+                  milestone percentages split the contract minus the fee, and the Fee % column says how much of the
+                  fee is billed with each milestone.
+                </span>
+              </span>
+            </label>
+
             {/* column headers */}
             <div className="grid grid-cols-12 gap-2 px-6 mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              <span className="col-span-5">Milestone</span>
-              <span className="col-span-4">Amount Type</span>
+              <span className={withFee ? "col-span-4" : "col-span-5"}>Milestone</span>
+              <span className={withFee ? "col-span-3" : "col-span-4"}>Amount Type</span>
               <span className="col-span-2">Value</span>
+              {withFee && <span className="col-span-3">Fee %</span>}
             </div>
 
             <div className="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100">
@@ -198,6 +249,7 @@ function TemplateDialog({ open, initial, companyId, onClose, onSaved }) {
                   onChange={(patch) => updateItem(item.id, patch)}
                   onRemove={() => removeItem(item.id)}
                   canRemove={form.items.length > 1}
+                  withFee={withFee}
                 />
               ))}
             </div>
@@ -209,6 +261,19 @@ function TemplateDialog({ open, initial, companyId, onClose, onSaved }) {
             >
               <Plus className="h-3.5 w-3.5" /> Add milestone
             </button>
+
+            <div className="mt-3 space-y-0.5 text-xs">
+              {!hasRemaining && (
+                <p className={Math.abs(pctTotal - 100) < 0.001 ? "text-emerald-700" : "text-amber-700"}>
+                  Milestone percentages: {pctTotal}% of {withFee ? "contract minus fee" : "contract"}{Math.abs(pctTotal - 100) < 0.001 ? "" : " (should be 100%)"}
+                </p>
+              )}
+              {withFee && (
+                <p className={Math.abs(feeTotal - 100) < 0.001 ? "text-emerald-700" : "text-amber-700"}>
+                  Builder fee billed: {feeTotal}% of the fee{Math.abs(feeTotal - 100) < 0.001 ? "" : " (should be 100%)"}
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
@@ -245,6 +310,16 @@ export default function PaymentScheduleTemplatesTab() {
 
   useEffect(() => { load(); }, [companyId]);
 
+  const handleDuplicate = async (tmpl) => {
+    await supabase.from("payment_schedule_templates").insert({
+      name: `${tmpl.name} (copy)`,
+      description: tmpl.description,
+      items: (tmpl.items || []).map((it) => ({ ...it, id: rid() })),
+      company_id: tmpl.company_id,
+    });
+    load();
+  };
+
   const handleDelete = async (id) => {
     if (!confirm("Delete this template?")) return;
     await supabase.from("payment_schedule_templates").delete().eq("id", id);
@@ -280,6 +355,9 @@ export default function PaymentScheduleTemplatesTab() {
               <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-slate-900">{tmpl.name}</p>
+                  {hasBuilderFee(tmpl) && (
+                    <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">Flat builder fee</span>
+                  )}
                   {tmpl.description && (
                     <p className="text-xs text-slate-500 mt-0.5">{tmpl.description}</p>
                   )}
@@ -290,13 +368,20 @@ export default function PaymentScheduleTemplatesTab() {
                           key={item.id}
                           className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700"
                         >
-                          {item.title}{item.invoice_amount_type !== "remaining_balance" ? ` — ${fmtItem(item)}` : " — remaining balance"}
+                          {item.title} — {fmtItem(item, hasBuilderFee(tmpl))}
                         </span>
                       ))}
                     </div>
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    variant="ghost" size="icon" title="Duplicate"
+                    className="h-8 w-8 text-slate-400 hover:text-slate-700"
+                    onClick={() => handleDuplicate(tmpl)}
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </Button>
                   <Button
                     variant="ghost" size="icon"
                     className="h-8 w-8 text-slate-400 hover:text-slate-700"

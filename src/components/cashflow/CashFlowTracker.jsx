@@ -21,6 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Plus, Edit2, Trash2, DollarSign, TrendingUp, CheckCircle2, Clock, AlertCircle, Link2, ThumbsUp, ThumbsDown, Send, LayoutList } from "lucide-react";
 import ProjectPaymentManager from "@/components/payments/ProjectPaymentManager";
+import { buildDraws, hasBuilderFee } from "@/lib/drawSchedule";
 
 const statusConfig = {
   pending:   { label: "Pending",   class: "bg-slate-100 text-slate-600",   icon: Clock },
@@ -55,6 +56,7 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
   const [availableTemplates, setAvailableTemplates] = useState([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState(null);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
+  const [builderFee, setBuilderFee] = useState("");
 
   useEffect(() => {
     loadDraws();
@@ -195,35 +197,32 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
     const { data } = await query;
     setAvailableTemplates(data || []);
     setSelectedTemplateId(null);
+    setBuilderFee("");
     setTemplateDialogOpen(true);
   };
 
-  const calcItemAmount = (item) => {
-    if (item.invoice_amount_type === "percent_of_contract") {
-      return contractValue > 0 ? (Number(item.invoice_amount_value) / 100) * contractValue : null;
-    }
-    if (item.invoice_amount_type === "fixed") {
-      return Number(item.invoice_amount_value) || 0;
-    }
-    return null; // remaining_balance
-  };
+  const selectedTemplate = availableTemplates.find((t) => t.id === selectedTemplateId) || null;
+  const selectedHasFee = hasBuilderFee(selectedTemplate);
+  const feeValue = Number(builderFee) || 0;
+  const feeInvalid = selectedHasFee && (feeValue <= 0 || feeValue >= contractValue);
 
   const handleApplyTemplate = async () => {
-    const tmpl = availableTemplates.find((t) => t.id === selectedTemplateId);
+    const tmpl = selectedTemplate;
     if (!tmpl?.items?.length) return;
+    if (feeInvalid) { alert("Enter the builder fee for this project (more than $0 and less than the contract value)."); return; }
     setApplyingTemplate(true);
     const startDrawNumber = draws.length + 1;
-    for (let i = 0; i < tmpl.items.length; i++) {
-      const item = tmpl.items[i];
-      const pct = item.invoice_amount_type === "percent_of_contract" ? Number(item.invoice_amount_value) : 0;
-      const amt = calcItemAmount(item) ?? 0;
+    const planned = buildDraws(tmpl, contractValue, feeValue);
+    for (let i = 0; i < planned.length; i++) {
+      const d = planned[i];
       await base44.entities.Draw.create({
         project_id: projectId,
-        title: item.title,
-        percent_of_contract: pct,
-        amount: amt,
+        title: d.title,
+        percent_of_contract: d.percent_of_contract,
+        amount: d.amount,
         status: "pending",
         draw_number: startDrawNumber + i,
+        ...(d.notes ? { notes: d.notes } : {}),
       });
     }
     setApplyingTemplate(false);
@@ -489,23 +488,19 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
                         {tmpl.description && (
                           <p className="text-xs text-slate-500 mt-0.5">{tmpl.description}</p>
                         )}
+                        {hasBuilderFee(tmpl) && (
+                          <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">Flat builder fee</span>
+                        )}
                         {tmpl.items?.length > 0 && (
                           <div className="mt-2 space-y-0.5">
-                            {tmpl.items.map((item) => {
-                              const amt = calcItemAmount(item);
-                              return (
-                                <div key={item.id} className="flex justify-between text-xs text-slate-600">
-                                  <span>{item.title}</span>
-                                  <span className="font-medium text-slate-800">
-                                    {item.invoice_amount_type === "percent_of_contract"
-                                      ? `${item.invoice_amount_value}%${amt != null ? ` — ${fmt(amt)}` : ""}`
-                                      : item.invoice_amount_type === "fixed"
-                                      ? fmt(item.invoice_amount_value)
-                                      : "Remaining balance"}
-                                  </span>
-                                </div>
-                              );
-                            })}
+                            {buildDraws(tmpl, contractValue, selected ? feeValue : 0).map((d, i) => (
+                              <div key={i} className="flex justify-between gap-3 text-xs text-slate-600">
+                                <span>{d.title}{d.fee_amount ? <span className="text-amber-700"> (+{fmt(d.fee_amount)} fee)</span> : null}</span>
+                                <span className="font-medium text-slate-800 shrink-0">
+                                  {contractValue > 0 ? `${fmt(d.amount)} · ${d.percent_of_contract.toFixed(1)}%` : "—"}
+                                </span>
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
@@ -513,13 +508,23 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
                   );
                 })}
               </div>
+              {selectedHasFee && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-1.5">
+                  <Label className="text-amber-900">Builder fee for this project ($)</Label>
+                  <Input type="number" min="0" step="0.01" value={builderFee} onChange={(e) => setBuilderFee(e.target.value)} placeholder="e.g. 15000" className="bg-white" />
+                  <p className="text-xs text-amber-800">
+                    Included in the {fmt(contractValue)} contract. Milestone percentages split the rest
+                    {feeValue > 0 && feeValue < contractValue ? ` (${fmt(contractValue - feeValue)})` : ""}, and the fee is billed with the milestones set in the template.
+                  </p>
+                </div>
+              )}
               <div className="flex justify-end gap-3 pt-2">
                 <Button variant="outline" onClick={() => setTemplateDialogOpen(false)} disabled={applyingTemplate}>
                   Cancel
                 </Button>
                 <Button
                   onClick={handleApplyTemplate}
-                  disabled={applyingTemplate || !selectedTemplateId}
+                  disabled={applyingTemplate || !selectedTemplateId || feeInvalid}
                   className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
                 >
                   {applyingTemplate ? "Applying…" : "Apply Template"}
