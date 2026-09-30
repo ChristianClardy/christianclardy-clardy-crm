@@ -14,6 +14,7 @@ import {
   LayoutGrid,
   FileText,
   Droplets,
+  FilePen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +47,7 @@ import ProjectFinancials from "@/components/financials/ProjectFinancials";
 import ProjectAccounting from "@/components/accounting/ProjectAccounting";
 import PermitTracker from "@/components/projects/PermitTracker";
 import PoolSelectionsPanel from "@/components/projects/PoolSelectionsPanel";
+import ChangeOrdersPanel from "@/components/projects/ChangeOrdersPanel";
 import AppointmentsPanel from "@/components/scheduling/AppointmentsPanel";
 import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
 
@@ -74,7 +76,7 @@ export default function ProjectDetail() {
   // "sheet" and "timeline" were the old schedule tabs; old links land on Schedule.
   const tabAlias = { sheet: "schedule", timeline: "schedule" };
   const initialTab = tabAlias[requestedTab] || requestedTab;
-  const [activeTab, setActiveTab] = useState(["overview", "schedule", "appointments", "permits", "selections", "photos", "files", "collaboration", "cashflow", "financials", "accounting"].includes(initialTab) ? initialTab : "overview");
+  const [activeTab, setActiveTab] = useState(["overview", "schedule", "changeorders", "appointments", "permits", "selections", "photos", "files", "collaboration", "cashflow", "financials", "accounting"].includes(initialTab) ? initialTab : "overview");
   const [subcontractors, setSubcontractors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -277,7 +279,27 @@ export default function ProjectDetail() {
           <Calendar className="w-4 h-4" />
           Schedule
         </button>
+        <button
+          onClick={() => setActiveTab("changeorders")}
+          className={cn(
+            "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+            activeTab === "changeorders"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-500 hover:text-slate-700"
+          )}
+        >
+          <FilePen className="w-4 h-4" />
+          Change Orders
+        </button>
         </div>
+
+      {activeTab === "changeorders" && (
+        <ChangeOrdersPanel
+          project={project}
+          client={client}
+          company={companies.find((c) => c.id === project.company_id) || companies[0] || null}
+        />
+      )}
 
       {/* Schedule tab: the same schedule PMs run in the Builder Portal */}
       {activeTab === "schedule" && (

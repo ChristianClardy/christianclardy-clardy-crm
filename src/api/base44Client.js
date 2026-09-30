@@ -88,6 +88,7 @@ const CLIENT_ONLY_FIELDS = new Set(['client_name', 'follow_up_end_time']);
 // These are fields the app sends that the DB might not have yet.
 const TABLE_OPTIONAL_FIELDS = {
   subcontractor_barrier_acknowledgments: new Set(['agreement_snapshot']),
+  change_orders: new Set(['number','schedule_days','signed_at','signed_document_url']),
   lead_follow_ups: new Set(['title','details','assigned_to','lead_name','follow_up_type','follow_up_date','follow_up_time','status']),
   estimates: new Set(['section_margins','is_locked','locked_at','locked_by','amendment_of','amendment_number']),
   leads: new Set(['property_address', 'estimated_budget', 'lost_reason', 'lost_reason_notes', 'assigned_designer']),

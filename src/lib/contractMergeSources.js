@@ -82,6 +82,17 @@ export const MERGE_SOURCES = [
   { value: "draws.payment_schedule_table", label: "Draws — Payment Schedule Table",   group: "Draw Schedule", description: "Draw schedule as a formatted text table (Milestone | % | Amount) with a totals row — ready to paste into a contract." },
   { value: "draws.payment_schedule_total", label: "Draws — Payment Schedule Total ($)", group: "Draw Schedule", description: "Sum of all draw amounts on the project's Billing tab." },
 
+  { value: "change_order.number",              label: "Change Order — Number",               group: "Change Order", description: "Change order number on this project, e.g. \"CO-3\"." },
+  { value: "change_order.title",               label: "Change Order — Title",                group: "Change Order", description: "Short name of the change order." },
+  { value: "change_order.description",         label: "Change Order — Description",          group: "Change Order", description: "The description written on the change order in the project's Change Orders tab." },
+  { value: "change_order.line_items",          label: "Change Order — Line Items",           group: "Change Order", description: "Each line item with its amount, one per line." },
+  { value: "change_order.line_items_table",    label: "Change Order — Line Items Table",     group: "Change Order", description: "Line items as a formatted text table (Item | Amount) with a total row." },
+  { value: "change_order.amount",              label: "Change Order — Amount ($)",           group: "Change Order", description: "Total of this change order. A credit shows as a negative amount." },
+  { value: "change_order.schedule_days",       label: "Change Order — Schedule Impact",      group: "Change Order", description: "Workdays this change adds to the schedule, e.g. \"3 workdays\" or \"No change\"." },
+  { value: "change_order.date",                label: "Change Order — Date",                 group: "Change Order", description: "Date on the change order." },
+  { value: "change_order.previous_contract_total", label: "Change Order — Contract Total Before ($)", group: "Change Order", description: "Original contract value plus all previously approved change orders." },
+  { value: "change_order.new_contract_total",  label: "Change Order — New Contract Total ($)", group: "Change Order", description: "Contract total after this change order." },
+
   { value: "today",                label: "Today's Date",              group: "Other",    description: "Today's date, e.g. \"January 1, 2026\"." },
 ];
 
@@ -147,6 +158,36 @@ function formatDrawSchedule(draws) {
     .join("\n");
 }
 
+// Change orders can have cents and can be credits.
+function formatMoney(n) {
+  const v = Number(n || 0);
+  const abs = Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${v < 0 ? "-" : ""}$${abs}`;
+}
+
+function changeOrderItems(co) {
+  return (co?.line_items || []).filter((li) => (li.description || "").trim() || Number(li.amount));
+}
+
+function formatChangeOrderItems(co) {
+  return changeOrderItems(co).map((li) => `${li.description || "Item"}: ${formatMoney(li.amount)}`).join("\n");
+}
+
+function formatChangeOrderTable(co) {
+  const items = changeOrderItems(co);
+  if (!items.length) return "";
+  const rows = items.map((li) => [li.description || "Item", formatMoney(li.amount)]);
+  const table = buildTable(["Item", "Amount"], rows);
+  const pad = rows.reduce((m, r) => Math.max(m, r[0].length), 4);
+  return `${table}\n${"-".repeat(20)}\n${"Total".padEnd(pad)} | ${formatMoney(co.amount)}`;
+}
+
+function formatDateLong(iso) {
+  if (!iso) return "";
+  const d = new Date(`${String(iso).slice(0, 10)}T00:00:00`);
+  return isNaN(d) ? String(iso) : d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+}
+
 function sumAmounts(rows) {
   return (rows || []).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 }
@@ -190,7 +231,10 @@ function formatAllowancesTableDraws(draws) {
   return `${table}\n${"-".repeat(20)}\n${"Total".padEnd(pad)} |     | ${formatCurrency(total)}`;
 }
 
-export function resolveContractMergeValue(source, { deal, client, company, project, estimate, estimateVersion, selections, draws } = {}) {
+// changeOrder / changeOrderPriorTotal come from a project's Change Orders tab
+// (src/components/projects/ChangeOrdersPanel.jsx); priorTotal is the contract
+// value plus every other approved change order.
+export function resolveContractMergeValue(source, { deal, client, company, project, estimate, estimateVersion, selections, draws, changeOrder, changeOrderPriorTotal } = {}) {
   switch (source) {
     case "client.name":              return client?.name || "";
     case "client.contact_person":    return client?.contact_person || "";
@@ -259,6 +303,21 @@ export function resolveContractMergeValue(source, { deal, client, company, proje
     case "draws.payment_schedule":       return formatDrawSchedule(draws);
     case "draws.payment_schedule_table": return formatAllowancesTableDraws(draws);
     case "draws.payment_schedule_total": return formatCurrency(sumAmounts(draws));
+
+    case "change_order.number":            return changeOrder?.number ? `CO-${changeOrder.number}` : "";
+    case "change_order.title":             return changeOrder?.title || "";
+    case "change_order.description":       return changeOrder?.description || "";
+    case "change_order.line_items":        return formatChangeOrderItems(changeOrder);
+    case "change_order.line_items_table":  return formatChangeOrderTable(changeOrder);
+    case "change_order.amount":            return changeOrder ? formatMoney(changeOrder.amount) : "";
+    case "change_order.schedule_days": {
+      if (!changeOrder) return "";
+      const days = Number(changeOrder.schedule_days) || 0;
+      return days ? `${days} workday${Math.abs(days) === 1 ? "" : "s"}` : "No change";
+    }
+    case "change_order.date":              return formatDateLong(changeOrder?.requested_date);
+    case "change_order.previous_contract_total": return changeOrder ? formatMoney(changeOrderPriorTotal) : "";
+    case "change_order.new_contract_total":      return changeOrder ? formatMoney(Number(changeOrderPriorTotal || 0) + Number(changeOrder.amount || 0)) : "";
 
     case "today":                    return new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
     default:                         return "";
@@ -357,6 +416,19 @@ export const SAMPLE_CONTEXT = {
     other_improvements: "New paver decking.",
     notes: "Sample selection notes.",
   },
+  changeOrder: {
+    number: 2,
+    title: "Add spa spillway lighting",
+    description: "Add two LED lights to the spa spillway and run a new circuit to the equipment pad.",
+    line_items: [
+      { description: "LED spillway lights (2)", amount: 850 },
+      { description: "Electrical circuit to equipment pad", amount: 650 },
+    ],
+    amount: 1500,
+    schedule_days: 2,
+    requested_date: "2026-10-05",
+  },
+  changeOrderPriorTotal: 45000,
   draws: [
     { title: "30% Deposit", percent_of_contract: 30, amount: 13500 },
     { title: "40% Midway", percent_of_contract: 40, amount: 18000 },

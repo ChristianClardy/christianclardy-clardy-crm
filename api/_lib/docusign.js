@@ -6,7 +6,7 @@
 // status refresh, and the daily cron, so all three behave identically and are
 // safe to run more than once for the same envelope.
 
-const { sbFetch, sbList, sbGetById, sbInsert } = require('./supabaseAdmin.js');
+const { sbFetch, sbList, sbGetById, sbInsert, sbUpdate } = require('./supabaseAdmin.js');
 const { handleEnvelopeCompleted } = require('./dealAutomation.js');
 
 const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
@@ -97,6 +97,10 @@ async function filingTarget(row) {
 
   let clientId = null;
   if (type === 'project') return { type: 'project', id };
+  if (type === 'change_order') {
+    const co = await sbGetById('change_orders', id, 'project_id');
+    return co?.project_id ? { type: 'project', id: co.project_id } : null;
+  }
   if (type === 'estimate') {
     const est = await sbGetById('estimates', id, 'client_id,project_id');
     if (est?.project_id) return { type: 'project', id: est.project_id };
@@ -115,12 +119,42 @@ async function filingTarget(row) {
 }
 
 // "Signed Contract - Lezlee Burt - 2026-09-14.pdf"
-function signedFilename(row, completedAt) {
+// "Signed Change Order CO-2 - Lezlee Burt - 2026-10-05.pdf"
+async function signedFilename(row, completedAt) {
   const who = row.signers?.[0]?.name
     || (row.subject || '').replace(/^Contract package:\s*/i, '').trim()
     || 'Client';
   const date = (completedAt || new Date().toISOString()).slice(0, 10);
-  return `Signed Contract - ${who} - ${date}.pdf`.replace(/[\\/:*?"<>|]/g, '-');
+  let what = 'Signed Contract';
+  if (row.entity_type === 'change_order') {
+    const co = await sbGetById('change_orders', row.entity_id, 'number').catch(() => null);
+    what = co?.number ? `Signed Change Order CO-${co.number}` : 'Signed Change Order';
+  }
+  return `${what} - ${who} - ${date}.pdf`.replace(/[\\/:*?"<>|]/g, '-');
+}
+
+// A change order's envelope drives its status: signed → approved, declined →
+// declined, voided → back to draft so it can be fixed and re-sent. If the
+// signing columns (043) aren't in the database yet, the status still updates.
+async function updateChangeOrder(id, patch, required) {
+  try {
+    await sbUpdate('change_orders', id, patch);
+  } catch (err) {
+    if (!required) return;
+    try { await sbUpdate('change_orders', id, required); } catch (e) { console.error('change order update failed:', e.message); }
+  }
+}
+
+async function syncChangeOrderStatus(row, status, at) {
+  if (row.entity_type !== 'change_order' || !row.entity_id) return;
+  if (status === 'completed') {
+    const approved_date = String(at || new Date().toISOString()).slice(0, 10);
+    await updateChangeOrder(row.entity_id, { status: 'approved', approved_date, signed_at: at || new Date().toISOString() }, { status: 'approved', approved_date });
+  } else if (status === 'declined') {
+    await updateChangeOrder(row.entity_id, { status: 'declined' }, { status: 'declined' });
+  } else if (status === 'voided') {
+    await updateChangeOrder(row.entity_id, { status: 'draft' }, { status: 'draft' });
+  }
 }
 
 // Downloads the fully signed PDF (all documents + DocuSign's certificate of
@@ -157,7 +191,7 @@ async function saveSignedContract(row, docusign, completedAt) {
       await sbInsert('attachments', {
         entity_type: target.type,
         entity_id: target.id,
-        filename: signedFilename(row, completedAt),
+        filename: await signedFilename(row, completedAt),
         url,
         file_type: 'application/pdf',
         file_size: pdf.length,
@@ -173,6 +207,9 @@ async function saveSignedContract(row, docusign, completedAt) {
     headers: { Prefer: 'return=minimal' },
     body: JSON.stringify({ signed_document_url: url, signed_saved_at: new Date().toISOString() }),
   });
+  if (row.entity_type === 'change_order' && row.entity_id) {
+    await updateChangeOrder(row.entity_id, { signed_document_url: url });
+  }
   return url;
 }
 
@@ -203,6 +240,7 @@ async function syncEnvelope(row) {
       body: JSON.stringify(patch),
     });
     if (status === 'completed') await handleEnvelopeCompleted(row.entity_type, row.entity_id);
+    await syncChangeOrderStatus(row, status, patch.completed_at);
   }
 
   let signedUrl = row.signed_document_url || null;
