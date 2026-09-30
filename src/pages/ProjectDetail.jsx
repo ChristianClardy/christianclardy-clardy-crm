@@ -16,6 +16,12 @@ import {
   Droplets,
   FilePen,
   FileSignature,
+  Images,
+  Paperclip,
+  MessageSquare,
+  TrendingUp,
+  BarChart3,
+  DollarSign,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -63,6 +69,24 @@ const statusStyles = {
 
 
 
+// Every tab on a project, in order. Each key must have a matching
+// `activeTab === key` section below.
+const PROJECT_TABS = [
+  { key: "overview",      label: "Overview",        icon: LayoutGrid },
+  { key: "permits",       label: "Permits",         icon: FileText },
+  { key: "selections",    label: "Pool Selections", icon: Droplets },
+  { key: "schedule",      label: "Schedule",        icon: Calendar },
+  { key: "appointments",  label: "Appointments",    icon: Calendar },
+  { key: "photos",        label: "Photos",          icon: Images },
+  { key: "files",         label: "Files",           icon: Paperclip },
+  { key: "collaboration", label: "Comments",        icon: MessageSquare },
+  { key: "contracts",     label: "Contracts",       icon: FileSignature },
+  { key: "changeorders",  label: "Change Orders",   icon: FilePen },
+  { key: "cashflow",      label: "Billing",         icon: TrendingUp },
+  { key: "financials",    label: "Job Cost",        icon: BarChart3 },
+  { key: "accounting",    label: "AP & Cash",       icon: DollarSign },
+];
+
 export default function ProjectDetail() {
   const navigate = useNavigate();
   const urlParams = new URLSearchParams(window.location.search);
@@ -78,7 +102,7 @@ export default function ProjectDetail() {
   // "sheet" and "timeline" were the old schedule tabs; old links land on Schedule.
   const tabAlias = { sheet: "schedule", timeline: "schedule" };
   const initialTab = tabAlias[requestedTab] || requestedTab;
-  const [activeTab, setActiveTab] = useState(["overview", "schedule", "contracts", "changeorders", "appointments", "permits", "selections", "photos", "files", "collaboration", "cashflow", "financials", "accounting"].includes(initialTab) ? initialTab : "overview");
+  const [activeTab, setActiveTab] = useState(PROJECT_TABS.some((t) => t.key === initialTab) ? initialTab : "overview");
   const [subcontractors, setSubcontractors] = useState([]);
   // Set by a change order's "Send for signature": the Contracts tab opens
   // with that change order and a change order template picked.
@@ -236,79 +260,25 @@ export default function ProjectDetail() {
 
       {/* Tab Navigation */}
       <div className="flex gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto max-w-full">
-        <button
-          onClick={() => setActiveTab("overview")}
-          className={cn(
-            "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-            activeTab === "overview"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-500 hover:text-slate-700"
-          )}
-        >
-          <LayoutGrid className="w-4 h-4" />
-          Overview
-        </button>
-        <button
-          onClick={() => setActiveTab("permits")}
-          className={cn(
-            "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-            activeTab === "permits"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-500 hover:text-slate-700"
-          )}
-        >
-          <FileText className="w-4 h-4" />
-          Permits
-        </button>
-        <button
-          onClick={() => setActiveTab("selections")}
-          className={cn(
-            "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-            activeTab === "selections"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-500 hover:text-slate-700"
-          )}
-        >
-          <Droplets className="w-4 h-4" />
-          Pool Selections
-        </button>
-        <button
-          onClick={() => setActiveTab("schedule")}
-          className={cn(
-            "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-            activeTab === "schedule"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-500 hover:text-slate-700"
-          )}
-        >
-          <Calendar className="w-4 h-4" />
-          Schedule
-        </button>
-        <button
-          onClick={() => { setSendChangeOrderId(null); setActiveTab("contracts"); }}
-          className={cn(
-            "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-            activeTab === "contracts"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-500 hover:text-slate-700"
-          )}
-        >
-          <FileSignature className="w-4 h-4" />
-          Contracts
-        </button>
-        <button
-          onClick={() => setActiveTab("changeorders")}
-          className={cn(
-            "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-            activeTab === "changeorders"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-500 hover:text-slate-700"
-          )}
-        >
-          <FilePen className="w-4 h-4" />
-          Change Orders
-        </button>
-        </div>
+        {PROJECT_TABS.map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            onClick={() => {
+              if (key === "contracts") setSendChangeOrderId(null);
+              setActiveTab(key);
+            }}
+            className={cn(
+              "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+              activeTab === key
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-700"
+            )}
+          >
+            <Icon className="w-4 h-4" />
+            {label}
+          </button>
+        ))}
+      </div>
 
       {activeTab === "contracts" && (
         <div className="bg-white rounded-2xl border border-slate-200">
