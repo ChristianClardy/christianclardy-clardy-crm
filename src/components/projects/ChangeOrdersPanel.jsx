@@ -44,6 +44,7 @@ const hasItems = (items) => (items || []).some((li) => (li.description || "").tr
 
 export default function ChangeOrdersPanel({ project, client, company }) {
   const [orders, setOrders] = useState(null);
+  const [payments, setPayments] = useState([]);
   const [editing, setEditing] = useState(null); // null | "new" | change order
   const [sending, setSending] = useState(null); // change order
 
@@ -53,6 +54,9 @@ export default function ChangeOrdersPanel({ project, client, company }) {
     setOrders(rows);
   };
   useEffect(() => { load(); }, [project.id]);
+  useEffect(() => {
+    base44.entities.Payment.filter({ linked_job_id: project.id }).then(setPayments).catch(() => setPayments([]));
+  }, [project.id]);
 
   const approvedTotal = (orders || []).filter((o) => o.status === "approved").reduce((s, o) => s + Number(o.amount || 0), 0);
   const pendingTotal = (orders || []).filter((o) => o.status === "draft" || o.status === "sent").reduce((s, o) => s + Number(o.amount || 0), 0);
@@ -179,6 +183,8 @@ export default function ChangeOrdersPanel({ project, client, company }) {
           company={company}
           changeOrder={sending}
           priorTotal={priorTotalFor(sending)}
+          changeOrders={orders}
+          payments={payments}
           onClose={() => setSending(null)}
           onSent={() => { setSending(null); load(); }}
         />
@@ -319,7 +325,7 @@ function ChangeOrderEditor({ project, changeOrder, nextNumber, onClose, onSaved 
 
 const BUILT_IN = "__built_in__";
 
-function SendChangeOrderDialog({ project, client, company, changeOrder, priorTotal, onClose, onSent }) {
+function SendChangeOrderDialog({ project, client, company, changeOrder, priorTotal, changeOrders, payments, onClose, onSent }) {
   const { user } = useAuth();
   const [templates, setTemplates] = useState([]);
   const [templateId, setTemplateId] = useState(BUILT_IN);
@@ -333,7 +339,7 @@ function SendChangeOrderDialog({ project, client, company, changeOrder, priorTot
       .catch(() => {});
   }, []);
 
-  const ctx = { client, company, project, changeOrder, changeOrderPriorTotal: priorTotal };
+  const ctx = { client, company, project, changeOrder, changeOrderPriorTotal: priorTotal, changeOrders, payments };
   const template = templates.find((t) => t.id === templateId) || null;
   const isText = !template || template.body_type === "text";
 
@@ -341,7 +347,7 @@ function SendChangeOrderDialog({ project, client, company, changeOrder, priorTot
     if (!template) return { body: renderContractTemplate(defaultChangeOrderBody(changeOrder), ctx), title: `Change Order CO-${changeOrder.number || ""} - ${project.name}` };
     if (template.body_type === "text") return { body: renderContractTemplate(template.body, ctx, template.field_defaults), title: `${template.name} - CO-${changeOrder.number || ""}` };
     return { mergeFields: (template.merge_fields || []).map((mf) => ({ ...mf, value: resolveContractMergeValue(mf.source, ctx) })) };
-  }, [templateId, templates, changeOrder, client, company, project, priorTotal]);
+  }, [templateId, templates, changeOrder, client, company, project, priorTotal, changeOrders, payments]);
 
   const preview = () => {
     const file = generateContractPdf(prepared.body, { title: prepared.title });

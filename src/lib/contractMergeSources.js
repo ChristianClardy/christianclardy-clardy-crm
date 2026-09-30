@@ -92,6 +92,29 @@ export const MERGE_SOURCES = [
   { value: "change_order.date",                label: "Change Order — Date",                 group: "Change Order", description: "Date on the change order." },
   { value: "change_order.previous_contract_total", label: "Change Order — Contract Total Before ($)", group: "Change Order", description: "Original contract value plus all previously approved change orders." },
   { value: "change_order.new_contract_total",  label: "Change Order — New Contract Total ($)", group: "Change Order", description: "Contract total after this change order." },
+  { value: "change_order.amount_words",        label: "Change Order — Amount in Words",      group: "Change Order", description: "The amount written out, e.g. \"One Thousand Five Hundred and 00/100 Dollars\"." },
+  { value: "change_order.new_contract_total_words", label: "Change Order — New Contract Total in Words", group: "Change Order", description: "The new contract total written out in words." },
+  { value: "change_order.type",                label: "Change Order — Type",                 group: "Change Order", description: "\"Addition\", \"Credit\" or \"No Cost Change\", from the amount." },
+  { value: "change_order.status",              label: "Change Order — Status",               group: "Change Order", description: "Draft, Out for Signature, Approved, Declined or Void." },
+  { value: "change_order.approved_date",       label: "Change Order — Approved Date",        group: "Change Order", description: "Date the change order was approved (signed)." },
+  { value: "change_order.line_item_count",     label: "Change Order — Number of Line Items", group: "Change Order", description: "How many line items are on the change order." },
+  { value: "change_order.completion_date_before", label: "Change Order — Completion Date Before", group: "Change Order", description: "Project end date plus the workdays from previously approved change orders." },
+  { value: "change_order.new_completion_date", label: "Change Order — New Completion Date",  group: "Change Order", description: "Completion date after this change order's schedule impact (workdays, skipping weekends)." },
+
+  { value: "change_orders.approved_count",     label: "All Change Orders — Approved Count",  group: "All Change Orders", description: "How many change orders on the project are approved." },
+  { value: "change_orders.approved_total",     label: "All Change Orders — Approved Total ($)", group: "All Change Orders", description: "Sum of all approved change orders (credits subtract)." },
+  { value: "change_orders.pending_total",      label: "All Change Orders — Pending Total ($)", group: "All Change Orders", description: "Sum of change orders still in draft or out for signature." },
+  { value: "change_orders.approved_list",      label: "All Change Orders — Approved List",   group: "All Change Orders", description: "Every approved change order, one per line: number, title, amount and date approved." },
+  { value: "change_orders.approved_table",     label: "All Change Orders — Approved Table",  group: "All Change Orders", description: "Approved change orders as a formatted text table (CO | Title | Amount) with a total row." },
+  { value: "change_orders.all_list",           label: "All Change Orders — Full List",       group: "All Change Orders", description: "Every change order except void ones, one per line with its status." },
+  { value: "change_orders.schedule_days_total", label: "All Change Orders — Schedule Days Added", group: "All Change Orders", description: "Total workdays added to the schedule by approved change orders." },
+
+  { value: "contract.original_value",          label: "Contract — Original Value ($)",       group: "Contract Totals", description: "The project's contract value before any change orders." },
+  { value: "contract.revised_value",           label: "Contract — Revised Value ($)",        group: "Contract Totals", description: "Original contract value plus all approved change orders." },
+  { value: "contract.revised_value_words",     label: "Contract — Revised Value in Words",   group: "Contract Totals", description: "The revised contract value written out in words." },
+  { value: "contract.paid_to_date",            label: "Contract — Paid to Date ($)",         group: "Contract Totals", description: "Total of payments recorded on the project." },
+  { value: "contract.balance_due",             label: "Contract — Balance Due ($)",          group: "Contract Totals", description: "Revised contract value minus payments recorded." },
+  { value: "contract.revised_completion_date", label: "Contract — Revised Completion Date",  group: "Contract Totals", description: "Project end date plus workdays from all approved change orders." },
 
   { value: "today",                label: "Today's Date",              group: "Other",    description: "Today's date, e.g. \"January 1, 2026\"." },
 ];
@@ -182,6 +205,60 @@ function formatChangeOrderTable(co) {
   return `${table}\n${"-".repeat(20)}\n${"Total".padEnd(pad)} | ${formatMoney(co.amount)}`;
 }
 
+// "One Thousand Five Hundred and 00/100 Dollars" (check-writing style).
+const ONES = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve",
+  "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+const TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+function under1000(n) {
+  const out = [];
+  if (n >= 100) { out.push(`${ONES[Math.floor(n / 100)]} Hundred`); n %= 100; }
+  if (n >= 20) { out.push(TENS[Math.floor(n / 10)] + (n % 10 ? `-${ONES[n % 10]}` : "")); }
+  else if (n > 0) out.push(ONES[n]);
+  return out.join(" ");
+}
+function moneyInWords(amount) {
+  const v = Math.abs(Number(amount || 0));
+  let dollars = Math.floor(v);
+  const cents = Math.round((v - dollars) * 100);
+  const parts = [];
+  for (const [size, name] of [[1e9, "Billion"], [1e6, "Million"], [1e3, "Thousand"], [1, ""]]) {
+    if (dollars >= size) {
+      parts.push(`${under1000(Math.floor(dollars / size))}${name ? ` ${name}` : ""}`);
+      dollars %= size;
+    }
+  }
+  const words = `${parts.join(" ") || "Zero"} and ${String(cents).padStart(2, "0")}/100 Dollars`;
+  return Number(amount) < 0 ? `Credit of ${words}` : words;
+}
+
+// Adds workdays (Mon–Fri) to a YYYY-MM-DD date, like the schedule does.
+function addWorkdays(iso, days) {
+  if (!iso) return "";
+  const d = new Date(`${String(iso).slice(0, 10)}T00:00:00`);
+  if (isNaN(d)) return "";
+  let left = Math.abs(parseInt(days, 10) || 0);
+  const step = days < 0 ? -1 : 1;
+  while (left > 0) {
+    d.setDate(d.getDate() + step);
+    if (d.getDay() !== 0 && d.getDay() !== 6) left--;
+  }
+  return d.toLocaleDateString("en-CA");
+}
+
+const CO_STATUS_LABELS = { draft: "Draft", sent: "Out for Signature", approved: "Approved", declined: "Declined", void: "Void" };
+const coNumber = (co) => (co?.number ? `CO-${co.number}` : "CO");
+const approvedOrders = (orders) => (orders || []).filter((o) => o.status === "approved")
+  .sort((a, b) => (a.number || 0) - (b.number || 0));
+const sumField = (rows, f) => (rows || []).reduce((s, r) => s + (Number(r[f]) || 0), 0);
+
+function formatApprovedTable(orders) {
+  const rows = approvedOrders(orders);
+  if (!rows.length) return "";
+  const data = rows.map((o) => [coNumber(o), o.title || "", formatMoney(o.amount)]);
+  const table = buildTable(["CO", "Title", "Amount"], data);
+  return `${table}\n${"-".repeat(20)}\nTotal | ${formatMoney(sumField(rows, "amount"))}`;
+}
+
 function formatDateLong(iso) {
   if (!iso) return "";
   const d = new Date(`${String(iso).slice(0, 10)}T00:00:00`);
@@ -234,7 +311,15 @@ function formatAllowancesTableDraws(draws) {
 // changeOrder / changeOrderPriorTotal come from a project's Change Orders tab
 // (src/components/projects/ChangeOrdersPanel.jsx); priorTotal is the contract
 // value plus every other approved change order.
-export function resolveContractMergeValue(source, { deal, client, company, project, estimate, estimateVersion, selections, draws, changeOrder, changeOrderPriorTotal } = {}) {
+// changeOrders is every change order on the project and payments its payments
+// (the "All Change Orders" and "Contract Totals" fields); both work in any
+// contract sent for a client with a project.
+export function resolveContractMergeValue(source, { deal, client, company, project, estimate, estimateVersion, selections, draws, changeOrder, changeOrderPriorTotal, changeOrders, payments } = {}) {
+  const approved = approvedOrders(changeOrders);
+  const approvedTotal = sumField(approved, "amount");
+  const approvedDays = sumField(approved, "schedule_days");
+  const revisedValue = Number(project?.contract_value || 0) + approvedTotal;
+  const priorDays = sumField(approved.filter((o) => o.id !== changeOrder?.id), "schedule_days");
   switch (source) {
     case "client.name":              return client?.name || "";
     case "client.contact_person":    return client?.contact_person || "";
@@ -318,6 +403,35 @@ export function resolveContractMergeValue(source, { deal, client, company, proje
     case "change_order.date":              return formatDateLong(changeOrder?.requested_date);
     case "change_order.previous_contract_total": return changeOrder ? formatMoney(changeOrderPriorTotal) : "";
     case "change_order.new_contract_total":      return changeOrder ? formatMoney(Number(changeOrderPriorTotal || 0) + Number(changeOrder.amount || 0)) : "";
+    case "change_order.amount_words":      return changeOrder ? moneyInWords(changeOrder.amount) : "";
+    case "change_order.new_contract_total_words": return changeOrder ? moneyInWords(Number(changeOrderPriorTotal || 0) + Number(changeOrder.amount || 0)) : "";
+    case "change_order.type": {
+      if (!changeOrder) return "";
+      const a = Number(changeOrder.amount || 0);
+      return a > 0 ? "Addition" : a < 0 ? "Credit" : "No Cost Change";
+    }
+    case "change_order.status":            return changeOrder ? CO_STATUS_LABELS[changeOrder.status] || changeOrder.status || "" : "";
+    case "change_order.approved_date":     return formatDateLong(changeOrder?.approved_date);
+    case "change_order.line_item_count":   return changeOrder ? String(changeOrderItems(changeOrder).length) : "";
+    case "change_order.completion_date_before": return changeOrder ? formatDateLong(addWorkdays(project?.end_date, priorDays)) : "";
+    case "change_order.new_completion_date":    return changeOrder ? formatDateLong(addWorkdays(project?.end_date, priorDays + (parseInt(changeOrder.schedule_days, 10) || 0))) : "";
+
+    case "change_orders.approved_count":   return String(approved.length);
+    case "change_orders.approved_total":   return formatMoney(approvedTotal);
+    case "change_orders.pending_total":    return formatMoney(sumField((changeOrders || []).filter((o) => o.status === "draft" || o.status === "sent"), "amount"));
+    case "change_orders.approved_list":    return approved.map((o) => `${coNumber(o)} ${o.title || ""}: ${formatMoney(o.amount)}${o.approved_date ? ` (approved ${formatDateLong(o.approved_date)})` : ""}`).join("\n");
+    case "change_orders.approved_table":   return formatApprovedTable(changeOrders);
+    case "change_orders.all_list":         return (changeOrders || []).filter((o) => o.status !== "void")
+      .sort((a, b) => (a.number || 0) - (b.number || 0))
+      .map((o) => `${coNumber(o)} ${o.title || ""}: ${formatMoney(o.amount)} (${CO_STATUS_LABELS[o.status] || o.status || "Draft"})`).join("\n");
+    case "change_orders.schedule_days_total": return `${approvedDays} workday${Math.abs(approvedDays) === 1 ? "" : "s"}`;
+
+    case "contract.original_value":        return project ? formatMoney(project.contract_value) : "";
+    case "contract.revised_value":         return project ? formatMoney(revisedValue) : "";
+    case "contract.revised_value_words":   return project ? moneyInWords(revisedValue) : "";
+    case "contract.paid_to_date":          return project ? formatMoney(sumField(payments, "amount_received")) : "";
+    case "contract.balance_due":           return project ? formatMoney(revisedValue - sumField(payments, "amount_received")) : "";
+    case "contract.revised_completion_date": return formatDateLong(addWorkdays(project?.end_date, approvedDays));
 
     case "today":                    return new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
     default:                         return "";
@@ -427,8 +541,14 @@ export const SAMPLE_CONTEXT = {
     amount: 1500,
     schedule_days: 2,
     requested_date: "2026-10-05",
+    status: "sent",
   },
-  changeOrderPriorTotal: 45000,
+  changeOrderPriorTotal: 47400,
+  changeOrders: [
+    { id: "co1", number: 1, title: "Upgrade to travertine coping", amount: 2400, schedule_days: 1, status: "approved", approved_date: "2026-09-20" },
+    { id: "co2", number: 2, title: "Add spa spillway lighting", amount: 1500, schedule_days: 2, status: "sent" },
+  ],
+  payments: [{ amount_received: 13500 }],
   draws: [
     { title: "30% Deposit", percent_of_contract: 30, amount: 13500 },
     { title: "40% Midway", percent_of_contract: 40, amount: 18000 },
