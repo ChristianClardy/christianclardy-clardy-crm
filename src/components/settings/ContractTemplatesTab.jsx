@@ -10,6 +10,30 @@ import { cn } from "@/lib/utils";
 import { MERGE_SOURCES, anchorForSource, extractContractTokens, renderContractTemplate, SAMPLE_CONTEXT } from "@/lib/contractMergeSources";
 import { scanTemplateFileForMergeTokens } from "@/lib/scanTemplateFileTokens";
 import MergeFieldPicker from "@/components/settings/MergeFieldPicker";
+import { STANDARD_CHANGE_ORDER_TEMPLATE } from "@/lib/changeOrderDocument";
+
+// Contract Templates and Change Order Templates share this editor; the rows
+// are contract_templates split by template_type (044). Rows from before 044
+// have no type and count as contracts.
+const TYPE_COPY = {
+  contract: {
+    title: "Contract Templates",
+    noun: "Contract Template",
+    intro: "Write the contract in-app and search or drag merge fields straight into the text, or upload a Word/PDF file with tokens typed in and map them below.",
+    empty: "No contract templates yet. Add one to reuse from a deal's Contracts tab.",
+    placeholder: "e.g. Standard Pool Contract",
+    bodyLabel: "Contract Body",
+  },
+  change_order: {
+    title: "Change Order Templates",
+    noun: "Change Order Template",
+    intro: "The document a customer signs for a change order, sent from a project's Change Orders tab. Use the Change Order merge fields, e.g. {{change_order.description}}, and they fill in from what's typed on the change order. The first template here is picked automatically when sending.",
+    empty: "No change order templates yet. Start from the standard change order and edit it to fit, or upload your own.",
+    placeholder: "e.g. Standard Change Order",
+    bodyLabel: "Change Order Body",
+  },
+};
+const typeOf = (t) => t.template_type || "contract";
 
 function blankMergeField() {
   return { id: Math.random().toString(36).slice(2, 10), anchor: anchorForSource(MERGE_SOURCES[0]), source: MERGE_SOURCES[0].value };
@@ -31,7 +55,8 @@ const EMPTY_TEMPLATE = {
   is_active: true,
 };
 
-export default function ContractTemplatesTab() {
+export default function ContractTemplatesTab({ templateType = "contract" }) {
+  const copy = TYPE_COPY[templateType] || TYPE_COPY.contract;
   const [templates, setTemplates] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -53,16 +78,16 @@ export default function ContractTemplatesTab() {
       base44.entities.ContractTemplate.list("sort_order").catch(() => []),
       base44.entities.CompanyProfile.list("name").catch(() => []),
     ]);
-    setTemplates(t || []);
+    setTemplates((t || []).filter((x) => typeOf(x) === templateType));
     setCompanies(c || []);
     setLoading(false);
   };
 
   const companyName = (id) => companies.find((c) => c.id === id)?.name || "Unassigned";
 
-  const openNew = () => {
+  const openNew = (starter) => {
     setEditing(null);
-    setForm({ ...EMPTY_TEMPLATE, company_id: companies[0]?.id || "" });
+    setForm({ ...EMPTY_TEMPLATE, company_id: companies[0]?.id || "", ...(starter || {}) });
     setScanMessage("");
     setDialogOpen(true);
   };
@@ -209,6 +234,7 @@ export default function ContractTemplatesTab() {
             .map((m) => ({ anchor: m.anchor.trim(), source: m.source }))
         : [],
       is_active: form.is_active !== false,
+      template_type: templateType,
     };
     if (editing) {
       await base44.entities.ContractTemplate.update(editing.id, payload);
@@ -220,7 +246,7 @@ export default function ContractTemplatesTab() {
   };
 
   const handleDelete = async (id) => {
-    if (confirm("Delete this contract template?")) {
+    if (confirm(`Delete this ${copy.noun.toLowerCase()}?`)) {
       await base44.entities.ContractTemplate.delete(id);
       load();
     }
@@ -232,16 +258,22 @@ export default function ContractTemplatesTab() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Contract Templates</h2>
+          <h2 className="text-lg font-semibold text-slate-900">{copy.title}</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Write the contract in-app and search or drag merge fields straight into the text, or upload a Word/PDF
-            file with tokens typed in and map them below. See the <span className="font-medium text-slate-600">Merge Fields</span> tab
+            {copy.intro} See the <span className="font-medium text-slate-600">Merge Fields</span> tab
             for the full list of what each field pulls in.
           </p>
         </div>
-        <Button onClick={openNew} size="sm" className="bg-gradient-to-r from-amber-500 to-orange-500 text-white gap-1">
-          <Plus className="w-4 h-4" /> Add Contract Template
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {templateType === "change_order" && (
+            <Button onClick={() => openNew({ name: "Standard Change Order", body: STANDARD_CHANGE_ORDER_TEMPLATE })} size="sm" variant="outline" className="gap-1">
+              <FileText className="w-4 h-4" /> Start from standard
+            </Button>
+          )}
+          <Button onClick={() => openNew()} size="sm" className="bg-gradient-to-r from-amber-500 to-orange-500 text-white gap-1">
+            <Plus className="w-4 h-4" /> Add {copy.noun}
+          </Button>
+        </div>
       </div>
 
       {loading ? (
@@ -251,7 +283,7 @@ export default function ContractTemplatesTab() {
       ) : templates.length === 0 ? (
         <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-white py-16 text-center text-slate-500">
           <FileSignature className="w-8 h-8 text-slate-200 mx-auto mb-2" />
-          No contract templates yet. Add one to reuse from a deal's Contracts tab.
+          {copy.empty}
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
@@ -301,13 +333,13 @@ export default function ContractTemplatesTab() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editing ? "Edit Contract Template" : "Add Contract Template"}</DialogTitle>
+            <DialogTitle>{editing ? `Edit ${copy.noun}` : `Add ${copy.noun}`}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs">Name *</Label>
-                <Input value={form.name} onChange={(e) => ff("name", e.target.value)} required className="mt-1 h-9 text-sm" placeholder="e.g. Standard Pool Contract" />
+                <Input value={form.name} onChange={(e) => ff("name", e.target.value)} required className="mt-1 h-9 text-sm" placeholder={copy.placeholder} />
               </div>
               <div>
                 <Label className="text-xs">Company</Label>
@@ -339,7 +371,7 @@ export default function ContractTemplatesTab() {
             {form.body_type === "text" ? (
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <Label className="text-xs">Contract Body</Label>
+                  <Label className="text-xs">{copy.bodyLabel}</Label>
                   {invalidTokens.length > 0 && (
                     <p className="text-[11px] text-amber-600">
                       Not a recognized field: {invalidTokens.map((t) => `{{${t}}}`).join(", ")}
@@ -398,7 +430,7 @@ export default function ContractTemplatesTab() {
             ) : (
               <>
                 <div>
-                  <Label className="text-xs">Contract File *</Label>
+                  <Label className="text-xs">{templateType === "change_order" ? "Change Order File *" : "Contract File *"}</Label>
                   <div className="mt-1 flex items-center gap-2">
                     <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" onChange={handleFileChange} className="hidden" id="contract-file-input" />
                     <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="gap-1.5">

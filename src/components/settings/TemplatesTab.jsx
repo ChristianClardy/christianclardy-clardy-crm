@@ -9,6 +9,7 @@ import AllowancesTemplatesTab from "@/components/settings/AllowancesTemplatesTab
 const SUB_TABS = [
   { key: "scope",      label: "Scope Templates" },
   { key: "contract",   label: "Contract Templates" },
+  { key: "changeOrder", label: "Change Order Templates" },
   { key: "payment",    label: "Payment Schedule" },
   { key: "allowances", label: "Allowances" },
   { key: "merge",      label: "Merge Fields" },
@@ -19,13 +20,13 @@ export default function TemplatesTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 border-b border-slate-200">
+      <div className="flex gap-2 border-b border-slate-200 overflow-x-auto">
         {SUB_TABS.map(({ key, label }) => (
           <button
             key={key}
             onClick={() => setSub(key)}
             className={cn(
-              "px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+              "shrink-0 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
               sub === key ? "border-amber-500 text-amber-700" : "border-transparent text-slate-500 hover:text-slate-800"
             )}
           >
@@ -34,7 +35,8 @@ export default function TemplatesTab() {
         ))}
       </div>
       {sub === "scope"      && <ScopeTemplatesTab />}
-      {sub === "contract"   && <ContractTemplatesTab />}
+      {sub === "contract"   && <ContractTemplatesTab key="contract" templateType="contract" />}
+      {sub === "changeOrder" && <ContractTemplatesTab key="changeOrder" templateType="change_order" />}
       {sub === "payment"    && <PaymentScheduleTemplatesTab />}
       {sub === "allowances" && <AllowancesTemplatesTab />}
       {sub === "merge"      && <MergeFieldsLibraryTab />}

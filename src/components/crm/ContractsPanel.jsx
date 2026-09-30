@@ -102,7 +102,8 @@ export default function ContractsPanel({ lead, deal = null }) {
       setDraws(resolvedDraws || []);
       setChangeOrders(resolvedChangeOrders || []);
       setPayments(resolvedPayments || []);
-      setContractTemplates((templates || []).filter((t) => t.is_active !== false));
+      // Change order templates are sent from a project's Change Orders tab.
+      setContractTemplates((templates || []).filter((t) => t.is_active !== false && (t.template_type || "contract") === "contract"));
       setDocuments(docs || []);
       setEstimates(ests || []);
       setSigners([{ name: contactClient?.name || "", email: contactClient?.email || "" }]);

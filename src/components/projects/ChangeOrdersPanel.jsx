@@ -333,11 +333,20 @@ function SendChangeOrderDialog({ project, client, company, changeOrder, priorTot
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  // Change order templates (Settings → Templates → Change Order Templates)
+  // first, and the first one is picked automatically.
   useEffect(() => {
     base44.entities.ContractTemplate.list("sort_order")
-      .then((t) => setTemplates((t || []).filter((x) => x.is_active !== false)))
+      .then((t) => {
+        const active = (t || []).filter((x) => x.is_active !== false);
+        setTemplates(active);
+        const first = active.find((x) => x.template_type === "change_order");
+        if (first) setTemplateId(first.id);
+      })
       .catch(() => {});
   }, []);
+  const coTemplates = templates.filter((t) => t.template_type === "change_order");
+  const otherTemplates = templates.filter((t) => t.template_type !== "change_order");
 
   const ctx = { client, company, project, changeOrder, changeOrderPriorTotal: priorTotal, changeOrders, payments };
   const template = templates.find((t) => t.id === templateId) || null;
@@ -411,11 +420,20 @@ function SendChangeOrderDialog({ project, client, company, changeOrder, priorTot
         <div>
           <Label>Document</Label>
           <select value={templateId} onChange={(e) => setTemplateId(e.target.value)} className="mt-1 h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm">
+            {coTemplates.length > 0 && (
+              <optgroup label="Change order templates">
+                {coTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}{t.body_type === "text" ? "" : " (uploaded file)"}</option>)}
+              </optgroup>
+            )}
             <option value={BUILT_IN}>Standard change order (built in)</option>
-            {templates.map((t) => <option key={t.id} value={t.id}>{t.name}{t.body_type === "text" ? "" : " (uploaded file)"}</option>)}
+            {otherTemplates.length > 0 && (
+              <optgroup label="Contract templates">
+                {otherTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}{t.body_type === "text" ? "" : " (uploaded file)"}</option>)}
+              </optgroup>
+            )}
           </select>
           <p className="text-xs text-slate-500 mt-1">
-            Any contract template can use the Change Order merge fields, e.g. <code className="font-mono">{"{{change_order.description}}"}</code>. See Settings → Templates → Merge Fields.
+            Make your own in Settings → Templates → Change Order Templates. Change Order merge fields like <code className="font-mono">{"{{change_order.description}}"}</code> fill in from this change order.
           </p>
         </div>
 

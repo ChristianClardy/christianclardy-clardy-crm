@@ -4,8 +4,8 @@
 // renderContractTemplate(), and "**signature**" is where DocuSign places the
 // owner's signature. Sections with nothing to show (no line items) are left
 // out rather than printed empty.
-export function defaultChangeOrderBody(changeOrder) {
-  const hasItems = (changeOrder?.line_items || []).some((li) => (li.description || "").trim() || Number(li.amount));
+export function defaultChangeOrderBody(changeOrder, { alwaysShowItems = false } = {}) {
+  const hasItems = alwaysShowItems || (changeOrder?.line_items || []).some((li) => (li.description || "").trim() || Number(li.amount));
   return [
     "CHANGE ORDER {{change_order.number}}",
     "{{company.name}}",
@@ -35,3 +35,7 @@ export function defaultChangeOrderBody(changeOrder) {
     "Owner signature: **signature**",
   ].join("\n");
 }
+
+// Starting text for a new template in Settings → Templates → Change Order
+// Templates: the same document, with the line items section always present.
+export const STANDARD_CHANGE_ORDER_TEMPLATE = defaultChangeOrderBody(null, { alwaysShowItems: true });
