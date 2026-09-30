@@ -15,6 +15,7 @@ import {
   FileText,
   Droplets,
   FilePen,
+  FileSignature,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +49,7 @@ import ProjectAccounting from "@/components/accounting/ProjectAccounting";
 import PermitTracker from "@/components/projects/PermitTracker";
 import PoolSelectionsPanel from "@/components/projects/PoolSelectionsPanel";
 import ChangeOrdersPanel from "@/components/projects/ChangeOrdersPanel";
+import ContractsPanel from "@/components/crm/ContractsPanel";
 import AppointmentsPanel from "@/components/scheduling/AppointmentsPanel";
 import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
 
@@ -76,8 +78,11 @@ export default function ProjectDetail() {
   // "sheet" and "timeline" were the old schedule tabs; old links land on Schedule.
   const tabAlias = { sheet: "schedule", timeline: "schedule" };
   const initialTab = tabAlias[requestedTab] || requestedTab;
-  const [activeTab, setActiveTab] = useState(["overview", "schedule", "changeorders", "appointments", "permits", "selections", "photos", "files", "collaboration", "cashflow", "financials", "accounting"].includes(initialTab) ? initialTab : "overview");
+  const [activeTab, setActiveTab] = useState(["overview", "schedule", "contracts", "changeorders", "appointments", "permits", "selections", "photos", "files", "collaboration", "cashflow", "financials", "accounting"].includes(initialTab) ? initialTab : "overview");
   const [subcontractors, setSubcontractors] = useState([]);
+  // Set by a change order's "Send for signature": the Contracts tab opens
+  // with that change order and a change order template picked.
+  const [sendChangeOrderId, setSendChangeOrderId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [formData, setFormData] = useState({});
@@ -280,6 +285,18 @@ export default function ProjectDetail() {
           Schedule
         </button>
         <button
+          onClick={() => { setSendChangeOrderId(null); setActiveTab("contracts"); }}
+          className={cn(
+            "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+            activeTab === "contracts"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-500 hover:text-slate-700"
+          )}
+        >
+          <FileSignature className="w-4 h-4" />
+          Contracts
+        </button>
+        <button
           onClick={() => setActiveTab("changeorders")}
           className={cn(
             "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
@@ -293,11 +310,24 @@ export default function ProjectDetail() {
         </button>
         </div>
 
+      {activeTab === "contracts" && (
+        <div className="bg-white rounded-2xl border border-slate-200">
+          <div className="px-6 pt-5">
+            <h2 className="text-lg font-semibold text-slate-900">Contracts</h2>
+            <p className="text-xs text-slate-500">Send contracts, change orders, documents and estimates for this project in one DocuSign package. Signed copies are filed in Files → Contracts; a signed change order is marked approved on the Change Orders tab.</p>
+          </div>
+          <ContractsPanel
+            key={sendChangeOrderId || "contracts"}
+            project={project}
+            initialChangeOrderId={sendChangeOrderId}
+          />
+        </div>
+      )}
+
       {activeTab === "changeorders" && (
         <ChangeOrdersPanel
           project={project}
-          client={client}
-          company={companies.find((c) => c.id === project.company_id) || companies[0] || null}
+          onSend={(co) => { setSendChangeOrderId(co.id); setActiveTab("contracts"); }}
         />
       )}
 

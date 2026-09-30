@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { base44, getCurrentOrgId } from "@/api/base44Client";
+import { useEffect, useState } from "react";
+import { base44 } from "@/api/base44Client";
 import { Plus, Trash2, Send, Loader2, Eye, Pencil, CheckCircle2, FileText, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,20 +7,15 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/lib/AuthContext";
-import { apiFetch } from "@/lib/apiFetch";
 import DocuSignEnvelopes from "@/components/docusign/DocuSignEnvelopes";
-import { renderContractTemplate, resolveContractMergeValue } from "@/lib/contractMergeSources";
-import { generateContractPdf } from "@/lib/generateContractPdf";
-import { defaultChangeOrderBody } from "@/lib/changeOrderDocument";
 
 // A project's Change Orders tab. Each change order has a title, the
 // description of the change, optional line items, and its schedule impact.
-// "Send for signature" builds the DocuSign package from the built-in change
-// order document or any contract template, with {{change_order.*}} merge
-// fields (src/lib/contractMergeSources.js) filled in from what's typed here.
-// Once signed, api/_lib/docusign.js marks the change order approved and files
-// the signed PDF in the project's Files → Contracts.
+// "Send for signature" opens the project's Contracts tab (ContractsPanel, the
+// same sender as the CRM) with this change order and the first change order
+// template picked, so {{change_order.*}} merge fields fill in from what's
+// typed here. Once signed, api/_lib/docusign.js marks the change order
+// approved and files the signed PDF in the project's Files → Contracts.
 //
 // Status: draft → sent → approved (or declined). Voiding the envelope in
 // DocuSign puts it back to draft so it can be edited and re-sent.
@@ -42,11 +37,9 @@ const today = () => new Date().toLocaleDateString("en-CA");
 const itemsTotal = (items) => (items || []).reduce((s, li) => s + (Number(li.amount) || 0), 0);
 const hasItems = (items) => (items || []).some((li) => (li.description || "").trim() || Number(li.amount));
 
-export default function ChangeOrdersPanel({ project, client, company }) {
+export default function ChangeOrdersPanel({ project, onSend }) {
   const [orders, setOrders] = useState(null);
-  const [payments, setPayments] = useState([]);
   const [editing, setEditing] = useState(null); // null | "new" | change order
-  const [sending, setSending] = useState(null); // change order
 
   const load = async () => {
     const rows = await base44.entities.ChangeOrder.filter({ project_id: project.id }).catch(() => []);
@@ -54,18 +47,11 @@ export default function ChangeOrdersPanel({ project, client, company }) {
     setOrders(rows);
   };
   useEffect(() => { load(); }, [project.id]);
-  useEffect(() => {
-    base44.entities.Payment.filter({ linked_job_id: project.id }).then(setPayments).catch(() => setPayments([]));
-  }, [project.id]);
+
 
   const approvedTotal = (orders || []).filter((o) => o.status === "approved").reduce((s, o) => s + Number(o.amount || 0), 0);
   const pendingTotal = (orders || []).filter((o) => o.status === "draft" || o.status === "sent").reduce((s, o) => s + Number(o.amount || 0), 0);
   const original = Number(project.contract_value || 0);
-
-  // Contract value plus every other approved change order.
-  const priorTotalFor = (co) => original + (orders || [])
-    .filter((o) => o.status === "approved" && o.id !== co.id)
-    .reduce((s, o) => s + Number(o.amount || 0), 0);
 
   const setStatus = async (co, status) => {
     const patch = { status };
@@ -132,12 +118,12 @@ export default function ChangeOrdersPanel({ project, client, company }) {
                       <a href={co.signed_document_url} target="_blank" rel="noopener noreferrer" className="text-xs text-amber-700 hover:underline">Signed PDF</a>
                     )}
                     {!locked && co.status !== "void" && (
-                      <Button size="sm" onClick={() => setSending(co)} className="bg-slate-900 text-white h-8">
+                      <Button size="sm" onClick={() => onSend(co)} className="bg-slate-900 text-white h-8">
                         <Send className="w-4 h-4 mr-1" /> Send for signature
                       </Button>
                     )}
                     {co.status === "sent" && (
-                      <Button size="sm" variant="outline" className="h-8" onClick={() => setSending(co)}>
+                      <Button size="sm" variant="outline" className="h-8" onClick={() => onSend(co)}>
                         <Send className="w-4 h-4 mr-1" /> Resend
                       </Button>
                     )}
@@ -172,23 +158,10 @@ export default function ChangeOrdersPanel({ project, client, company }) {
           changeOrder={editing === "new" ? null : editing}
           nextNumber={Math.max(0, ...orders.map((o) => Number(o.number) || 0)) + 1}
           onClose={() => setEditing(null)}
-          onSaved={(saved, andSend) => { setEditing(null); load(); if (andSend) setSending(saved); }}
+          onSaved={(saved, andSend) => { setEditing(null); load(); if (andSend && saved) onSend(saved); }}
         />
       )}
 
-      {sending && (
-        <SendChangeOrderDialog
-          project={project}
-          client={client}
-          company={company}
-          changeOrder={sending}
-          priorTotal={priorTotalFor(sending)}
-          changeOrders={orders}
-          payments={payments}
-          onClose={() => setSending(null)}
-          onSent={() => { setSending(null); load(); }}
-        />
-      )}
     </div>
   );
 }
@@ -317,172 +290,6 @@ function ChangeOrderEditor({ project, changeOrder, nextNumber, onClose, onSaved 
               </Button>
             </>
           )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-const BUILT_IN = "__built_in__";
-
-function SendChangeOrderDialog({ project, client, company, changeOrder, priorTotal, changeOrders, payments, onClose, onSent }) {
-  const { user } = useAuth();
-  const [templates, setTemplates] = useState([]);
-  const [templateId, setTemplateId] = useState(BUILT_IN);
-  const [signers, setSigners] = useState([{ name: client?.name || "", email: client?.email || "" }]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  // Change order templates (Settings → Templates → Change Order Templates)
-  // first, and the first one is picked automatically.
-  useEffect(() => {
-    base44.entities.ContractTemplate.list("sort_order")
-      .then((t) => {
-        const active = (t || []).filter((x) => x.is_active !== false);
-        setTemplates(active);
-        const first = active.find((x) => x.template_type === "change_order");
-        if (first) setTemplateId(first.id);
-      })
-      .catch(() => {});
-  }, []);
-  const coTemplates = templates.filter((t) => t.template_type === "change_order");
-  const otherTemplates = templates.filter((t) => t.template_type !== "change_order");
-
-  const ctx = { client, company, project, changeOrder, changeOrderPriorTotal: priorTotal, changeOrders, payments };
-  const template = templates.find((t) => t.id === templateId) || null;
-  const isText = !template || template.body_type === "text";
-
-  const prepared = useMemo(() => {
-    if (!template) return { body: renderContractTemplate(defaultChangeOrderBody(changeOrder), ctx), title: `Change Order CO-${changeOrder.number || ""} - ${project.name}` };
-    if (template.body_type === "text") return { body: renderContractTemplate(template.body, ctx, template.field_defaults), title: `${template.name} - CO-${changeOrder.number || ""}` };
-    return { mergeFields: (template.merge_fields || []).map((mf) => ({ ...mf, value: resolveContractMergeValue(mf.source, ctx) })) };
-  }, [templateId, templates, changeOrder, client, company, project, priorTotal, changeOrders, payments]);
-
-  const preview = () => {
-    const file = generateContractPdf(prepared.body, { title: prepared.title });
-    const url = URL.createObjectURL(file);
-    window.open(url, "_blank");
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-  };
-
-  const updateSigner = (i, patch) => setSigners((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
-
-  const send = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      const valid = signers.filter((s) => s.name.trim() && s.email.trim());
-      if (!valid.length) throw new Error("Add at least one signer with a name and email.");
-      let doc;
-      if (isText) {
-        const file = generateContractPdf(prepared.body, { title: prepared.title });
-        const { file_url } = await base44.integrations.Core.UploadFile({ file });
-        doc = { file_url, file_name: file.name };
-      } else {
-        doc = {
-          file_url: template.file_url,
-          file_name: template.file_name || `${template.name}.pdf`,
-          merge_fields: prepared.mergeFields.map((mf) => ({ anchor: mf.anchor, value: mf.value })),
-        };
-      }
-      const res = await apiFetch("/api/docusign-send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          documents: [doc],
-          subject: `Change Order CO-${changeOrder.number || ""}: ${changeOrder.title || ""} (${project.name})`,
-          signers: valid,
-          organization_id: getCurrentOrgId() || undefined,
-          entity_type: "change_order",
-          entity_id: changeOrder.id,
-          sent_by: user?.id,
-          review: true,
-          return_url: `${window.location.origin}/DocuSignSenderReturn`,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not open the change order in DocuSign.");
-      await base44.entities.ChangeOrder.update(changeOrder.id, { status: "sent" });
-      window.open(data.sender_view_url, "_blank");
-      onSent();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Send CO-{changeOrder.number} for signature</DialogTitle></DialogHeader>
-
-        <div>
-          <Label>Document</Label>
-          <select value={templateId} onChange={(e) => setTemplateId(e.target.value)} className="mt-1 h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm">
-            {coTemplates.length > 0 && (
-              <optgroup label="Change order templates">
-                {coTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}{t.body_type === "text" ? "" : " (uploaded file)"}</option>)}
-              </optgroup>
-            )}
-            <option value={BUILT_IN}>Standard change order (built in)</option>
-            {otherTemplates.length > 0 && (
-              <optgroup label="Contract templates">
-                {otherTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}{t.body_type === "text" ? "" : " (uploaded file)"}</option>)}
-              </optgroup>
-            )}
-          </select>
-          <p className="text-xs text-slate-500 mt-1">
-            Make your own in Settings → Templates → Change Order Templates. Change Order merge fields like <code className="font-mono">{"{{change_order.description}}"}</code> fill in from this change order.
-          </p>
-        </div>
-
-        <div className="rounded-lg border border-slate-200 p-3 space-y-1">
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">What the customer will see</p>
-            {isText && (
-              <button type="button" onClick={preview} className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 hover:text-amber-700">
-                <Eye className="h-3.5 w-3.5" /> Preview PDF
-              </button>
-            )}
-          </div>
-          {isText ? (
-            <div className="max-h-64 overflow-y-auto text-sm text-slate-700 whitespace-pre-line">{prepared.body.replace("**signature**", "________________")}</div>
-          ) : prepared.mergeFields.length ? (
-            prepared.mergeFields.map((mf) => (
-              <div key={mf.anchor} className="flex items-center justify-between gap-2 text-xs">
-                <span className="font-mono text-slate-500 truncate">{mf.anchor}</span>
-                <span className={cn("truncate", mf.value ? "text-slate-800 font-medium" : "text-slate-300 italic")}>{mf.value || "blank"}</span>
-              </div>
-            ))
-          ) : (
-            <p className="text-xs text-slate-400">No merge fields mapped on this template.</p>
-          )}
-        </div>
-
-        <div>
-          <Label>Signers</Label>
-          <div className="space-y-2 mt-1">
-            {signers.map((s, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <Input value={s.name} onChange={(e) => updateSigner(i, { name: e.target.value })} placeholder="Name" />
-                <Input type="email" value={s.email} onChange={(e) => updateSigner(i, { email: e.target.value })} placeholder="Email" />
-                {signers.length > 1 && (
-                  <button type="button" onClick={() => setSigners((p) => p.filter((_, idx) => idx !== i))} className="p-1.5 text-slate-300 hover:text-rose-500"><Trash2 className="h-4 w-4" /></button>
-                )}
-              </div>
-            ))}
-          </div>
-          <button type="button" onClick={() => setSigners((p) => [...p, { name: "", email: "" }])} className="mt-1.5 text-xs font-medium text-amber-600 hover:text-amber-700">+ Add signer</button>
-        </div>
-
-        {error && <p className="rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-sm text-rose-700">{error}</p>}
-
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={send} disabled={busy} className="bg-amber-500 hover:bg-amber-600 text-white">
-            {busy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Send className="w-4 h-4 mr-1" />} Review & send in DocuSign
-          </Button>
         </div>
       </DialogContent>
     </Dialog>

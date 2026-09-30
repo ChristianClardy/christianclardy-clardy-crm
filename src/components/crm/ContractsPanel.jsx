@@ -9,6 +9,13 @@ import DocuSignEnvelopes from "@/components/docusign/DocuSignEnvelopes";
 import { resolveContractMergeValue, renderContractTemplate } from "@/lib/contractMergeSources";
 import { generateContractPdf } from "@/lib/generateContractPdf";
 import { apiFetch } from "@/lib/apiFetch";
+import { defaultChangeOrderBody } from "@/lib/changeOrderDocument";
+
+// The built-in change order document, listed with the change order templates
+// on a project so a change order can be sent with no template set up.
+const BUILT_IN_CO = "__built_in_change_order__";
+const BUILT_IN_CO_TEMPLATE = { id: BUILT_IN_CO, name: "Standard Change Order (built in)", body_type: "text", template_type: "change_order", builtIn: true };
+const isChangeOrderTemplate = (t) => t?.template_type === "change_order";
 
 // ─── Contracts Panel ────────────────────────────────────────────────────────
 // Bundles any number of Contract Templates (merge-field mapped) + selected
@@ -27,7 +34,16 @@ import { apiFetch } from "@/lib/apiFetch";
 // if one exists. deal.* sources are blank when there's no deal yet —
 // resolveContractMergeValue handles a null deal gracefully.
 
-export default function ContractsPanel({ lead, deal = null }) {
+// From a project (ProjectDetail's Contracts tab) pass `project` instead: the
+// client, project, selections, draws, change orders and payments all come
+// from that project, and the envelope is filed to it. On a project the
+// change order templates are listed too, with a picker for which change
+// order they merge ({{change_order.*}}). A package with a change order
+// template is tracked on that change order, so signing it marks the change
+// order approved (api/_lib/docusign.js). `initialChangeOrderId` comes from
+// the Change Orders tab's "Send for signature": it preselects that change
+// order and the first change order template.
+export default function ContractsPanel({ lead = null, deal = null, project: fixedProject = null, initialChangeOrderId = null, onSent }) {
   const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
@@ -44,6 +60,7 @@ export default function ContractsPanel({ lead, deal = null }) {
   const [estimateVersion, setEstimateVersion] = useState(null);
 
   const [selectedTemplateIds, setSelectedTemplateIds] = useState([]);
+  const [selectedChangeOrderId, setSelectedChangeOrderId] = useState("");
   const [selectedDocIds, setSelectedDocIds] = useState([]);
   const [selectedEstimateIds, setSelectedEstimateIds] = useState([]);
   const [signers, setSigners] = useState([{ name: "", email: "" }]);
@@ -61,16 +78,17 @@ export default function ContractsPanel({ lead, deal = null }) {
         base44.entities.CompanyProfile.list().catch(() => []),
       ]);
       let resolvedClient = null;
-      if (lead?.linked_contact_id) {
-        const matches = await base44.entities.Client.filter({ id: lead.linked_contact_id }).catch(() => []);
+      const clientId = fixedProject ? fixedProject.client_id : lead?.linked_contact_id;
+      if (clientId) {
+        const matches = await base44.entities.Client.filter({ id: clientId }).catch(() => []);
         resolvedClient = matches[0] || null;
       }
       let ests = [];
-      let resolvedProject = null;
+      let resolvedProject = fixedProject;
       if (resolvedClient?.id) {
         [ests, resolvedProject] = await Promise.all([
           base44.entities.Estimate.filter({ client_id: resolvedClient.id }, "-created_date").catch(() => []),
-          base44.entities.Project.filter({ client_id: resolvedClient.id }, "-created_date").then((rows) => rows?.[0] || null).catch(() => null),
+          fixedProject || base44.entities.Project.filter({ client_id: resolvedClient.id }, "-created_date").then((rows) => rows?.[0] || null).catch(() => null),
         ]);
       }
       const [resolvedSelections, resolvedDraws, resolvedChangeOrders, resolvedPayments] = resolvedProject?.id
@@ -82,7 +100,8 @@ export default function ContractsPanel({ lead, deal = null }) {
           ])
         : [null, [], [], []];
       if (cancelled) return;
-      const resolvedCompany = (lead?.company_id && comps.find((c) => c.id === lead.company_id)) || comps[0] || null;
+      const companyId = fixedProject?.company_id || lead?.company_id;
+      const resolvedCompany = (companyId && comps.find((c) => c.id === companyId)) || comps[0] || null;
       // The Lead is the main contact — its name/email/phone/address win over
       // the linked Client's, so an edit made on the Lead (e.g. switching the
       // signer to a spouse) shows up here even if the Client record lags.
@@ -102,15 +121,25 @@ export default function ContractsPanel({ lead, deal = null }) {
       setDraws(resolvedDraws || []);
       setChangeOrders(resolvedChangeOrders || []);
       setPayments(resolvedPayments || []);
-      // Change order templates are sent from a project's Change Orders tab.
-      setContractTemplates((templates || []).filter((t) => t.is_active !== false && (t.template_type || "contract") === "contract"));
+      const active = (templates || []).filter((t) => t.is_active !== false);
+      if (fixedProject) {
+        const coTemplates = [...active.filter(isChangeOrderTemplate), BUILT_IN_CO_TEMPLATE];
+        setContractTemplates([...active.filter((t) => !isChangeOrderTemplate(t)), ...coTemplates]);
+        if (initialChangeOrderId && (resolvedChangeOrders || []).some((c) => c.id === initialChangeOrderId)) {
+          setSelectedChangeOrderId(initialChangeOrderId);
+          setSelectedTemplateIds([coTemplates[0].id]);
+        }
+      } else {
+        // Change order templates are sent from a project.
+        setContractTemplates(active.filter((t) => !isChangeOrderTemplate(t)));
+      }
       setDocuments(docs || []);
       setEstimates(ests || []);
       setSigners([{ name: contactClient?.name || "", email: contactClient?.email || "" }]);
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [deal?.id, lead?.id, lead?.full_name, lead?.email, lead?.phone, lead?.property_address]);
+  }, [deal?.id, lead?.id, lead?.full_name, lead?.email, lead?.phone, lead?.property_address, fixedProject?.id]);
 
   // Merge fields for estimate.* sources use whichever estimate is checked in
   // the picker below, falling back to the client's most recent estimate.
@@ -128,7 +157,16 @@ export default function ContractsPanel({ lead, deal = null }) {
     return () => { cancelled = true; };
   }, [mergeEstimate?.id]);
 
-  const mergeCtx = { deal: deal || null, client, company, project, estimate: mergeEstimate, estimateVersion, selections, draws, changeOrders, payments };
+  const changeOrder = changeOrders.find((c) => c.id === selectedChangeOrderId) || null;
+  // Contract value plus every other approved change order.
+  const changeOrderPriorTotal = Number(project?.contract_value || 0) + changeOrders
+    .filter((c) => c.status === "approved" && c.id !== changeOrder?.id)
+    .reduce((sum, c) => sum + Number(c.amount || 0), 0);
+  const sendableChangeOrders = changeOrders
+    .filter((c) => c.status !== "void")
+    .sort((a, b) => (a.number || 0) - (b.number || 0));
+
+  const mergeCtx = { deal: deal || null, client, company, project, estimate: mergeEstimate, estimateVersion, selections, draws, changeOrders, payments, changeOrder, changeOrderPriorTotal };
 
   // Templates resolve in the order they were checked, and that's the order
   // they stack into the envelope — ahead of documents, then estimates.
@@ -137,16 +175,25 @@ export default function ContractsPanel({ lead, deal = null }) {
     .filter(Boolean)
     .map((template) => {
       const isText = template.body_type === "text";
+      const body = template.builtIn ? defaultChangeOrderBody(changeOrder) : template.body;
       return {
         template,
         isText,
-        body: isText ? renderContractTemplate(template.body, mergeCtx, template.field_defaults) : "",
+        pdfTitle: template.builtIn ? `Change Order CO-${changeOrder?.number || ""} - ${project?.name || ""}` : template.name,
+        body: isText ? renderContractTemplate(body, mergeCtx, template.field_defaults) : "",
         mergeFields: isText ? [] : (template.merge_fields || []).map((mf) => ({
           ...mf,
           value: resolveContractMergeValue(mf.source, mergeCtx),
         })),
       };
     });
+
+  const sendsChangeOrder = preparedTemplates.some((p) => isChangeOrderTemplate(p.template));
+
+  // Where the envelope is tracked and the signed copy filed.
+  const entity = fixedProject
+    ? (sendsChangeOrder && changeOrder ? { type: "change_order", id: changeOrder.id } : { type: "project", id: fixedProject.id })
+    : deal ? { type: "deal", id: deal.id } : { type: "lead", id: lead?.id };
 
   const toggleTemplate = (id) => setSelectedTemplateIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
   const toggleDoc = (id) => setSelectedDocIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
@@ -160,7 +207,7 @@ export default function ContractsPanel({ lead, deal = null }) {
   // no upload, no DocuSign call — so it's free to check before signers are
   // even filled in.
   const handlePreviewPdf = (prepared) => {
-    const pdfFile = generateContractPdf(prepared.body, { title: prepared.template.name });
+    const pdfFile = generateContractPdf(prepared.body, { title: prepared.pdfTitle });
     const url = URL.createObjectURL(pdfFile);
     window.open(url, "_blank");
     setTimeout(() => URL.revokeObjectURL(url), 60000);
@@ -171,10 +218,11 @@ export default function ContractsPanel({ lead, deal = null }) {
     setSendError("");
     setSendOk(false);
     try {
+      if (sendsChangeOrder && !changeOrder) throw new Error("Pick which change order to send with the change order template.");
       const docs = [];
       for (const p of preparedTemplates) {
         if (p.isText) {
-          const pdfFile = generateContractPdf(p.body, { title: p.template.name });
+          const pdfFile = generateContractPdf(p.body, { title: p.pdfTitle });
           const { file_url } = await base44.integrations.Core.UploadFile({ file: pdfFile });
           docs.push({ file_url, file_name: pdfFile.name });
         } else {
@@ -206,11 +254,13 @@ export default function ContractsPanel({ lead, deal = null }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           documents: docs,
-          subject: `Contract package: ${deal?.title || lead?.full_name || "New contract"}`,
+          subject: entity.type === "change_order"
+            ? `Change Order CO-${changeOrder.number || ""}: ${changeOrder.title || ""} (${fixedProject.name})`
+            : `Contract package: ${deal?.title || lead?.full_name || fixedProject?.name || client?.name || "New contract"}`,
           signers: validSigners,
           organization_id: getCurrentOrgId() || undefined,
-          entity_type: deal ? "deal" : "lead",
-          entity_id: deal ? deal.id : lead.id,
+          entity_type: entity.type,
+          entity_id: entity.id,
           sent_by: user?.id,
           review: true,
           return_url: `${window.location.origin}/DocuSignSenderReturn`,
@@ -219,7 +269,11 @@ export default function ContractsPanel({ lead, deal = null }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to open the contract for review.");
       window.open(data.sender_view_url, "_blank");
+      if (entity.type === "change_order") {
+        await base44.entities.ChangeOrder.update(changeOrder.id, { status: "sent" }).catch(() => {});
+      }
       setSendOk(true);
+      onSent?.();
     } catch (err) {
       setSendError(err.message);
     } finally {
@@ -242,6 +296,11 @@ export default function ContractsPanel({ lead, deal = null }) {
           This deal has no associated lead, so there's no linked client to pull merge-field info from. Merge tokens will render blank.
         </p>
       )}
+      {fixedProject && !client && (
+        <p className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
+          This project has no client set, so client.* merge fields will be blank and there's no signer to fill in. Set the client on the project first.
+        </p>
+      )}
       {lead && !client && (
         <p className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
           No contact-book record found for this lead yet — client.* merge tokens will render blank.
@@ -253,24 +312,59 @@ export default function ContractsPanel({ lead, deal = null }) {
         <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
           <FileSignature className="h-3.5 w-3.5" /> Contract Templates
         </label>
-        {contractTemplates.length === 0 ? (
-          <p className="text-[11px] text-slate-400">No contract templates yet — add one in Settings → Templates → Contract Templates.</p>
-        ) : (
-          <div className="max-h-32 overflow-y-auto space-y-1 rounded-md border border-slate-200 p-2">
-            {contractTemplates.map((t) => {
-              const order = selectedTemplateIds.indexOf(t.id);
-              return (
-                <label key={t.id} className="flex items-center gap-2 text-xs text-slate-700 py-0.5 cursor-pointer">
-                  <input type="checkbox" checked={order !== -1} onChange={() => toggleTemplate(t.id)} className="rounded" />
-                  <span className="truncate flex-1">{t.name}</span>
-                  {order !== -1 && (
-                    <span className="flex-shrink-0 rounded bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-700">#{order + 1}</span>
-                  )}
-                </label>
-              );
-            })}
-          </div>
-        )}
+        {(() => {
+          const renderList = (list) => (
+            <div className="max-h-32 overflow-y-auto space-y-1 rounded-md border border-slate-200 p-2">
+              {list.map((t) => {
+                const order = selectedTemplateIds.indexOf(t.id);
+                return (
+                  <label key={t.id} className="flex items-center gap-2 text-xs text-slate-700 py-0.5 cursor-pointer">
+                    <input type="checkbox" checked={order !== -1} onChange={() => toggleTemplate(t.id)} className="rounded" />
+                    <span className="truncate flex-1">{t.name}</span>
+                    {order !== -1 && (
+                      <span className="flex-shrink-0 rounded bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-700">#{order + 1}</span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+          );
+          const contracts = contractTemplates.filter((t) => !isChangeOrderTemplate(t));
+          const coTemplates = contractTemplates.filter(isChangeOrderTemplate);
+          return (
+            <>
+              {contracts.length === 0 ? (
+                <p className="text-[11px] text-slate-400">No contract templates yet — add one in Settings → Templates → Contract Templates.</p>
+              ) : renderList(contracts)}
+              {fixedProject && (
+                <div className="mt-3">
+                  <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+                    <FileSignature className="h-3.5 w-3.5" /> Change Order Templates
+                  </label>
+                  {renderList(coTemplates)}
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-xs text-slate-600 flex-shrink-0">Change order:</span>
+                    <select
+                      value={selectedChangeOrderId}
+                      onChange={(e) => setSelectedChangeOrderId(e.target.value)}
+                      className={cn("h-8 flex-1 min-w-0 rounded-md border bg-white px-2 text-xs", sendsChangeOrder && !changeOrder ? "border-rose-300" : "border-slate-200")}
+                    >
+                      <option value="">{sendableChangeOrders.length ? "Pick a change order…" : "No change orders on this project yet"}</option>
+                      {sendableChangeOrders.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          CO-{c.number || "?"} {c.title || ""} · ${Number(c.amount || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · {c.status || "draft"}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    Fills the Change Order merge fields. Signing a package with a change order template marks that change order approved.
+                  </p>
+                </div>
+              )}
+            </>
+          );
+        })()}
         {selectedTemplateIds.length > 1 && (
           <p className="mt-1 text-[11px] text-slate-400">Templates stack into the envelope in the order you check them.</p>
         )}
@@ -384,7 +478,7 @@ export default function ContractsPanel({ lead, deal = null }) {
 
       <div className="border-t border-slate-100 pt-3">
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Sent Envelopes</p>
-        <DocuSignEnvelopes entityType={deal ? "deal" : "lead"} entityId={deal ? deal.id : lead.id} />
+        <DocuSignEnvelopes entityType={entity.type} entityId={entity.id} />
       </div>
     </div>
   );

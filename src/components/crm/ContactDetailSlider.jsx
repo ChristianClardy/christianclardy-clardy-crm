@@ -3,8 +3,10 @@ import { base44 } from "@/api/base44Client";
 import {
   X, Phone, Mail, Calendar, StickyNote, CheckSquare,
   MessageSquare, Edit2, Check, ChevronRight, User,
-  MapPin, Briefcase, UserRound, ExternalLink, TrendingUp,
+  MapPin, Briefcase, UserRound, ExternalLink, TrendingUp, FileSignature,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import ContractsPanel from "@/components/crm/ContractsPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -256,6 +258,7 @@ export default function ContactDetailSlider({ lead, onClose, onUpdate }) {
   const [followUpDate, setFollowUpDate] = useState("");
   const [quickLogType, setQuickLogType] = useState(null); // null | "call" | "email" | "note" | "meeting"
   const [converting, setConverting] = useState(false);
+  const [contractsOpen, setContractsOpen] = useState(false);
 
   const nameInputRef = useRef(null);
 
@@ -379,6 +382,16 @@ export default function ContactDetailSlider({ lead, onClose, onUpdate }) {
         onClick={onClose}
       />
 
+      {/* Contracts: the same sender as the lead page and deal cards */}
+      {lead && contractsOpen && (
+        <Dialog open onOpenChange={(o) => { if (!o) setContractsOpen(false); }}>
+          <DialogContent className="max-w-2xl p-0">
+            <DialogHeader className="px-6 pt-6"><DialogTitle>Contracts: {lead.full_name}</DialogTitle></DialogHeader>
+            <ContractsPanel lead={lead} />
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* Slide panel */}
       <div
         className={cn(
@@ -445,6 +458,9 @@ export default function ContactDetailSlider({ lead, onClose, onUpdate }) {
                 >
                   <TrendingUp className="mr-2 h-4 w-4" />
                   {converting ? "Promoting..." : isProspect ? "Prospect" : "Promote to Prospect"}
+                </Button>
+                <Button className="w-full mt-2" size="sm" variant="outline" onClick={() => setContractsOpen(true)}>
+                  <FileSignature className="mr-2 h-4 w-4" /> Contracts
                 </Button>
               </div>
 
