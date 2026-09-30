@@ -12,6 +12,7 @@ import SubSchedule from "@/components/builder/SubSchedule";
 import SubAcknowledgmentDialog from "@/components/builder/SubAcknowledgmentDialog";
 import SubAccessDialog from "@/components/builder/SubAccessDialog";
 import { downloadSubAgreementPdf } from "@/lib/subAgreementPdf";
+import { subTradeLabels } from "@/lib/subTrades";
 
 const STAFF_TABS = [
   { key: "today", label: "Today" },
@@ -341,7 +342,7 @@ export default function BuilderPortal({ portal = null }) {
                 return (
                   <li key={s.id} className="flex flex-col sm:flex-row sm:items-center gap-2 px-4 py-3">
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-slate-900">{s.name}{s.trade ? <span className="text-slate-500 font-normal"> · {s.trade}</span> : null}</p>
+                      <p className="font-medium text-slate-900">{s.name}{subTradeLabels(s) ? <span className="text-slate-500 font-normal"> · {subTradeLabels(s)}</span> : null}</p>
                       <p className="text-xs text-slate-500">
                         {ack ? `Signed ${fmtDate(ack.signed_date)}${ack.authorized_representative ? ` by ${ack.authorized_representative}` : ""}${ack.project_id ? ` · ${projectById[ack.project_id]?.name || "project"}` : " · all projects"}` : "No signed agreement on file"}
                         {lastOnSite && ` · Last on site ${fmtDate(lastOnSite.log_date)}`}

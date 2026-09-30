@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import moment from "moment";
 import SubAccessDialog from "@/components/builder/SubAccessDialog";
 import { goToSettingsTab } from "@/lib/settingsNav";
+import { TRADE_LABELS, tradeLabel, subTrades, subTradeLabels } from "@/lib/subTrades";
 
 // Subcontractor directory: contact info, compliance paperwork (insurance,
 // license, W-9, pool barrier policy), pay terms, and Subcontractor Portal access.
@@ -24,27 +25,7 @@ import { goToSettingsTab } from "@/lib/settingsNav";
 // 038_subcontractor_details.sql); until 038 is applied, base44Client drops the
 // new columns on save so the basics still work.
 
-export const TRADE_LABELS = {
-  general: "General",
-  pool: "Pool / Spa",
-  plaster: "Pool Plaster / Finish",
-  fencing: "Fencing / Barriers",
-  concrete: "Concrete",
-  decking: "Decking",
-  pavers: "Pavers / Hardscape",
-  masonry: "Masonry / Stone",
-  excavation: "Excavation",
-  electrical: "Electrical",
-  plumbing: "Plumbing",
-  gas: "Gas",
-  landscaping: "Landscaping",
-  irrigation: "Irrigation",
-  carpentry: "Carpentry / Framing",
-  roofing: "Roofing",
-  painting: "Painting",
-  tile: "Tile",
-  other: "Other",
-};
+export { TRADE_LABELS };
 
 const STATUS = {
   active: { label: "Active", cls: "bg-emerald-100 text-emerald-700" },
@@ -54,7 +35,7 @@ const STATUS = {
 
 const EMPTY_FORM = {
   name: "", contact_person: "", email: "", phone: "", address: "",
-  trade: "general", status: "active",
+  trade: "general", trades: ["general"], status: "active",
   license_number: "", license_exp: "", insurance_exp: "", workers_comp_exp: "",
   coi_url: "", w9_on_file: false,
   hourly_rate: "", payment_terms: "", notes: "",
@@ -156,7 +137,7 @@ export default function SubcontractorsTab() {
 
   const visible = rows.filter(({ sub, issues, logins }) => {
     if (!showInactive && sub.status === "inactive") return false;
-    if (trade !== "all" && (sub.trade || "other") !== trade) return false;
+    if (trade !== "all" && !(subTrades(sub).length ? subTrades(sub) : ["other"]).includes(trade)) return false;
     const q = search.trim().toLowerCase();
     if (q && ![sub.name, sub.contact_person, sub.email, sub.phone].some((v) => v?.toLowerCase().includes(q))) return false;
     if (filter === "attention") return issues.some((i) => i.level === "bad");
@@ -166,7 +147,7 @@ export default function SubcontractorsTab() {
     return true;
   });
 
-  const tradesInUse = [...new Set(subs.map((s) => s.trade || "other"))].sort();
+  const tradesInUse = [...new Set(subs.flatMap((s) => (subTrades(s).length ? subTrades(s) : ["other"])))].sort();
 
   const setStatus = async (sub, status) => {
     await base44.entities.Subcontractor.update(sub.id, { status });
@@ -344,7 +325,7 @@ function SubRow({ row, signed, onEdit, onAccess, onStatus, onDelete }) {
         <div className="min-w-0">
           <p className="font-semibold text-slate-900 truncate hover:underline">{sub.name}</p>
           <p className="text-xs text-slate-500 truncate">
-            {TRADE_LABELS[sub.trade] || sub.trade || "Other"}{sub.contact_person ? ` · ${sub.contact_person}` : ""}
+            {subTradeLabels(sub) || "Other"}{sub.contact_person ? ` · ${sub.contact_person}` : ""}
           </p>
         </div>
       </button>
@@ -441,7 +422,8 @@ function SubFormDialog({ sub, allSubs, onClose, onSaved }) {
     if (!sub) return EMPTY_FORM;
     const f = { ...EMPTY_FORM };
     for (const k of Object.keys(EMPTY_FORM)) if (sub[k] !== null && sub[k] !== undefined) f[k] = sub[k];
-    f.trade = sub.trade || "other";
+    f.trades = subTrades(sub).length ? subTrades(sub) : ["other"];
+    f.trade = f.trades[0];
     f.hourly_rate = sub.hourly_rate ?? "";
     return f;
   });
@@ -474,10 +456,12 @@ function SubFormDialog({ sub, allSubs, onClose, onSaved }) {
       setError(dup.name?.trim().toLowerCase() === name ? `"${dup.name}" already exists.` : `${dup.name} already uses ${dup.email}.`);
       return;
     }
+    if (!form.trades.length) { setError("Pick at least one trade."); return; }
     setSaving(true);
     try {
       const data = {
         ...form,
+        trade: form.trades[0],
         name: form.name.trim(),
         email: form.email.trim(),
         hourly_rate: form.hourly_rate === "" ? null : Number(form.hourly_rate),
@@ -503,11 +487,26 @@ function SubFormDialog({ sub, allSubs, onClose, onSaved }) {
               <Field label="Company name *" className="sm:col-span-2">
                 <Input required {...bind("name")} className="h-9 text-sm" />
               </Field>
-              <Field label="Trade">
-                <select {...bind("trade")} className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm">
-                  {Object.entries(TRADE_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-                  {form.trade && !TRADE_LABELS[form.trade] && <option value={form.trade}>{form.trade}</option>}
-                </select>
+              <Field label="Trades (pick all that apply)" className="sm:col-span-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {[...Object.keys(TRADE_LABELS), ...form.trades.filter((t) => !TRADE_LABELS[t])].map((k) => {
+                    const on = form.trades.includes(k);
+                    return (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => set("trades")(on ? form.trades.filter((t) => t !== k) : [...form.trades, k])}
+                        className={cn(
+                          "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+                          on ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                        )}
+                      >
+                        {on && <Check className="inline w-3 h-3 mr-1 -mt-0.5" />}{tradeLabel(k)}
+                      </button>
+                    );
+                  })}
+                </div>
+                {form.trades.length > 1 && <p className="text-xs text-slate-500 mt-1">First picked ({tradeLabel(form.trades[0])}) is their main trade.</p>}
               </Field>
               <Field label="Status">
                 <select {...bind("status")} className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm">

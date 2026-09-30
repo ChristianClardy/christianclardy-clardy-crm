@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { base44 } from "@/api/base44Client";
+import { subTradeLabels } from "@/lib/subTrades";
 import { Check, X, Minus, Loader2, Trash2, AlertTriangle, ShieldCheck, Fence, Hammer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import PhotoPicker from "@/components/app/PhotoPicker";
@@ -215,7 +216,7 @@ export default function DailyLogDialog({ open, onOpenChange, log, projects, subc
                 <button key={s.id} type="button" onClick={() => toggleSub(s.id)}
                   className={cn("px-3 py-1 rounded-full text-sm border transition-colors",
                     on ? "bg-amber-500 text-white border-amber-500" : "bg-white text-slate-600 border-slate-200 hover:border-amber-400")}>
-                  {s.name}{s.trade ? ` · ${s.trade}` : ""}
+                  {s.name}{subTradeLabels(s) ? ` · ${subTradeLabels(s)}` : ""}
                 </button>
               );
             })}

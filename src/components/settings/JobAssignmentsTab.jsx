@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
+import { subTrades, subTradeLabels } from "@/lib/subTrades";
 import { supabase } from "@/lib/supabase";
 import { Loader2, Search, X, Link2, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -69,7 +70,7 @@ export default function JobAssignmentsTab() {
 
   const visibleSubs = useMemo(() => {
     const q = subSearch.trim().toLowerCase();
-    return subs.filter((s) => !q || `${s.name} ${s.trade || ""}`.toLowerCase().includes(q));
+    return subs.filter((s) => !q || `${s.name} ${subTradeLabels(s)} ${subTrades(s).join(" ")}`.toLowerCase().includes(q));
   }, [subs, subSearch]);
 
   const subsByJob = useMemo(() => {
@@ -185,7 +186,7 @@ export default function JobAssignmentsTab() {
             return (
               <Row key={s.id} checked={selectedSubs.has(s.id)} onToggle={() => toggle(selectedSubs, setSelectedSubs, s.id)}
                 title={s.name}
-                subtitle={`${s.trade ? `${s.trade} · ` : ""}${jobs} job${jobs !== 1 ? "s" : ""} · ${logins} app login${logins !== 1 ? "s" : ""}`} />
+                subtitle={`${subTradeLabels(s) ? `${subTradeLabels(s)} · ` : ""}${jobs} job${jobs !== 1 ? "s" : ""} · ${logins} app login${logins !== 1 ? "s" : ""}`} />
             );
           })}
         </Column>
