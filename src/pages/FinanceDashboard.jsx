@@ -11,7 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 import QbArAging from "@/components/quickbooks/QbArAging";
-import { projectedProfit as profitFor, PROFIT_BASIS_LABEL } from "@/lib/projectProfit";
+import { projectedProfit as profitFor, PROFIT_BASIS_LABEL, withApprovedChangeOrders } from "@/lib/projectProfit";
 import ProjectedProfitDialog from "@/components/financials/ProjectedProfitDialog";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -99,14 +99,16 @@ export default function FinanceDashboard() {
   const load = async () => {
     setLoading(true);
     try {
-      const [p, d, si, pay, inv] = await Promise.all([
+      const [p, d, si, pay, inv, cos] = await Promise.all([
         base44.entities.Project.list("-updated_at", 2000),
         base44.entities.Draw.list("-created_at", 2000),
         base44.entities.SubInvoice.list("-created_at", 2000).catch(() => []),
         base44.entities.Payment.list("-payment_date", 2000),
         base44.entities.Invoice.list("-due_date", 2000),
+        base44.entities.ChangeOrder.list("-created_date", 5000).catch(() => []),
       ]);
-      setProjects(p);
+      // Approved change orders count toward the 30% projected profit.
+      setProjects(withApprovedChangeOrders(p, cos));
       setDraws(d);
       setSubInvoices(si);
       setPayments(pay);

@@ -30,7 +30,10 @@ const fmt = (n) => `$${(Number(n) || 0).toLocaleString("en-US", { maximumFractio
 //                      negotiated-down price)
 // Opened from the Job Cost tab and the Finance dashboard's job table.
 export default function ProjectedProfitDialog({ project, open, onClose, onSaved }) {
-  const contract = Number(project?.contract_value) || 0;
+  const baseContract = Number(project?.contract_value) || 0;
+  const changeOrders = Number(project?.approved_change_orders_total) || 0;
+  // The 30% option and the margin use the contract plus approved change orders.
+  const contract = baseContract + changeOrders;
   const [mode, setMode] = useState("margin");
   const [fee, setFee] = useState("");
   const [custom, setCustom] = useState("");
@@ -82,14 +85,17 @@ export default function ProjectedProfitDialog({ project, open, onClose, onSaved 
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-md">
         <DialogHeader><DialogTitle>Projected profit: {project?.name}</DialogTitle></DialogHeader>
-        <p className="text-sm text-slate-500 -mt-1">Contract value {fmt(contract)}</p>
+        <p className="text-sm text-slate-500 -mt-1">
+          Contract value {fmt(baseContract)}
+          {changeOrders !== 0 && <> + {fmt(changeOrders)} approved change orders = {fmt(contract)}</>}
+        </p>
         <div className="space-y-2">
           <Option value="fee" mode={mode} setMode={setMode} title="Flat builder fee">
             <Label className="text-xs">Builder fee ($)</Label>
             <Input type="number" min="0" step="0.01" value={fee} onChange={(e) => setFee(e.target.value)} className="mt-1 h-9" autoFocus />
             {suggestedFee != null && <p className="text-xs text-amber-700 mt-1">Found {fmt(suggestedFee)} in this project's builder fee draw schedule.</p>}
           </Option>
-          <Option value="margin" mode={mode} setMode={setMode} title={`${Math.round(DEFAULT_MARGIN * 100)}% of contract (${fmt(contract * DEFAULT_MARGIN)})`} />
+          <Option value="margin" mode={mode} setMode={setMode} title={`${Math.round(DEFAULT_MARGIN * 100)}% of contract${changeOrders ? " + change orders" : ""} (${fmt(contract * DEFAULT_MARGIN)})`} />
           <Option value="custom" mode={mode} setMode={setMode} title="Custom amount">
             <Label className="text-xs">Projected profit ($)</Label>
             <Input type="number" step="0.01" value={custom} onChange={(e) => setCustom(e.target.value)} className="mt-1 h-9" placeholder="e.g. after a concession" autoFocus />

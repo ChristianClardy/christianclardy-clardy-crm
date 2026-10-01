@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import QbJobActuals from "@/components/quickbooks/QbJobActuals";
-import { projectedProfit as profitFor, PROFIT_BASIS_LABEL } from "@/lib/projectProfit";
+import { projectedProfit as profitFor, PROFIT_BASIS_LABEL, approvedChangeOrderTotals } from "@/lib/projectProfit";
 import ProjectedProfitDialog from "@/components/financials/ProjectedProfitDialog";
 
 function fmt(n) {
@@ -287,8 +287,16 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
   const totalBudgeted = sections.reduce((s, sec) => s + sec.items.reduce((a, i) => a + (Number(i.budgeted) || 0), 0), 0);
   const totalActual   = sections.reduce((s, sec) => s + sec.items.reduce((a, i) => a + (Number(i.actual)   || 0), 0), 0);
   const totalVariance = totalBudgeted - totalActual;
-  // Builder fee, else 30% of contract, unless overridden (src/lib/projectProfit.js).
-  const profit = profitFor(project);
+  // Approved change orders count toward the 30% projected profit.
+  const [profitOpen, setProfitOpen] = useState(false);
+  const [approvedCoTotal, setApprovedCoTotal] = useState(0);
+  useEffect(() => {
+    base44.entities.ChangeOrder.filter({ project_id: project.id })
+      .then((cos) => setApprovedCoTotal(approvedChangeOrderTotals(cos)[project.id] || 0))
+      .catch(() => setApprovedCoTotal(0));
+  }, [project.id, project.updated_at]);
+  // Builder fee, else 30% of contract + approved change orders, unless overridden (src/lib/projectProfit.js).
+  const profit = profitFor({ ...project, approved_change_orders_total: approvedCoTotal });
   const projectedProfit = profit.amount;
 
   const openKpiEdit = () => {
@@ -322,7 +330,6 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
     if (onUpdateProject) onUpdateProject();
   };
 
-  const [profitOpen, setProfitOpen] = useState(false);
 
   const kpis = [
     { label: "Contract Total",        value: contractTotal,     field: "contract_value", color: "text-slate-800",    editable: true },
@@ -439,7 +446,7 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
         </button>
       </div>
 
-      <ProjectedProfitDialog project={project} open={profitOpen} onClose={() => setProfitOpen(false)} onSaved={onUpdateProject} />
+      <ProjectedProfitDialog project={{ ...project, approved_change_orders_total: approvedCoTotal }} open={profitOpen} onClose={() => setProfitOpen(false)} onSaved={onUpdateProject} />
 
       {/* KPI Edit Dialog */}
       <Dialog open={kpiEditOpen} onOpenChange={setKpiEditOpen}>

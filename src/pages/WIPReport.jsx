@@ -40,7 +40,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
-import { projectedProfit as profitFor } from "@/lib/projectProfit";
+import { projectedProfit as profitFor, withApprovedChangeOrders } from "@/lib/projectProfit";
 
 const formatCurrency = (value) => {
   if (value === undefined || value === null) return "$0";
@@ -75,11 +75,12 @@ export default function WIPReport() {
 
   const loadData = async () => {
     try {
-      const [projectsData, clientsData] = await Promise.all([
+      const [projectsData, clientsData, changeOrders] = await Promise.all([
         base44.entities.Project.list("-created_date"),
         base44.entities.Client.list(),
+        base44.entities.ChangeOrder.list("-created_date", 5000).catch(() => []),
       ]);
-      setProjects(projectsData);
+      setProjects(withApprovedChangeOrders(projectsData, changeOrders));
       setClients(clientsData);
       // Expand all clients by default
       setExpandedClients(new Set(clientsData.map((c) => c.id)));
