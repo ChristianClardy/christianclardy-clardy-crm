@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import QbJobActuals from "@/components/quickbooks/QbJobActuals";
 import { projectedProfit as profitFor, PROFIT_BASIS_LABEL } from "@/lib/projectProfit";
+import ProjectedProfitDialog from "@/components/financials/ProjectedProfitDialog";
 
 function fmt(n) {
   const num = Number(n) || 0;
@@ -321,12 +322,7 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
     if (onUpdateProject) onUpdateProject();
   };
 
-  // Blank = back to automatic (builder fee / 30% of contract).
-  const setProfitOverride = async (value) => {
-    const v = String(value ?? "").trim();
-    await base44.entities.Project.update(project.id, { projected_profit_override: v === "" ? null : parseFloat(v) || 0 });
-    if (onUpdateProject) onUpdateProject();
-  };
+  const [profitOpen, setProfitOpen] = useState(false);
 
   const kpis = [
     { label: "Contract Total",        value: contractTotal,     field: "contract_value", color: "text-slate-800",    editable: true },
@@ -420,15 +416,12 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
             <div key={kpi.label} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm group/kpi">
               <p className="text-xs text-slate-500 uppercase tracking-wider font-medium mb-1">{kpi.label}</p>
               {kpi.profit ? (
-                <div className="relative">
-                  <EditableCell value={kpi.value} onChange={setProfitOverride} type="number" className={cn("text-xl font-bold w-full", kpi.color)} />
-                  <span className="absolute top-0 right-0 text-[9px] text-slate-300 group-hover/kpi:text-amber-400 transition-colors">✎</span>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    {PROFIT_BASIS_LABEL[profit.basis]} · {profit.margin.toFixed(1)}% margin
-                    {profit.basis === "override" && (
-                      <button type="button" onClick={() => setProfitOverride("")} className="ml-1.5 text-amber-600 hover:underline">Reset</button>
-                    )}
-                  </p>
+                <div>
+                  <p className={cn("text-xl font-bold px-2 py-1", kpi.color)}>{fmt(kpi.value)}</p>
+                  <p className="text-[11px] text-slate-400 px-2">{PROFIT_BASIS_LABEL[profit.basis]} · {profit.margin.toFixed(1)}% margin</p>
+                  <button type="button" onClick={() => setProfitOpen(true)} className="mt-1.5 ml-2 inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600 hover:border-amber-300 hover:text-amber-700">
+                    <Pencil className="w-3 h-3" /> Edit
+                  </button>
                 </div>
               ) : kpi.editable ? (
                 <div className="relative">
@@ -445,6 +438,8 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
           <Pencil className="w-3 h-3" /> Edit Financials
         </button>
       </div>
+
+      <ProjectedProfitDialog project={project} open={profitOpen} onClose={() => setProfitOpen(false)} onSaved={onUpdateProject} />
 
       {/* KPI Edit Dialog */}
       <Dialog open={kpiEditOpen} onOpenChange={setKpiEditOpen}>

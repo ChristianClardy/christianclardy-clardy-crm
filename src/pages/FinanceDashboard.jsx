@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 import QbArAging from "@/components/quickbooks/QbArAging";
 import { projectedProfit as profitFor, PROFIT_BASIS_LABEL } from "@/lib/projectProfit";
+import ProjectedProfitDialog from "@/components/financials/ProjectedProfitDialog";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -82,6 +83,7 @@ export default function FinanceDashboard() {
   const [paymentsRaw, setPayments]       = useState([]);
   const [invoicesRaw, setInvoices]       = useState([]);
   const [loading, setLoading]         = useState(true);
+  const [profitProject, setProfitProject] = useState(null);
 
   // Scoped to the active company-scope switcher selection
   const projects    = useMemo(() => scopeFilter(projectsRaw, companyScope),    [projectsRaw, companyScope]);
@@ -248,6 +250,7 @@ export default function FinanceDashboard() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-6 lg:p-8">
+      <ProjectedProfitDialog project={profitProject} open={!!profitProject} onClose={() => setProfitProject(null)} onSaved={load} />
 
       {/* Header */}
       <div>
@@ -364,7 +367,10 @@ export default function FinanceDashboard() {
                     <td className="px-4 py-3 text-right text-slate-500">{fmt(p.ctc)}</td>
                     <td className={cn("px-4 py-3 text-right font-semibold", p.projProfit >= 0 ? "text-emerald-600" : "text-rose-600")}>
                       {fmt(p.projProfit)}
-                      <span className="block text-[10px] font-normal text-slate-400">{PROFIT_BASIS_LABEL[p.profitBasis]}</span>
+                      <span className="block text-[10px] font-normal text-slate-400">
+                        {PROFIT_BASIS_LABEL[p.profitBasis]}
+                        <button type="button" onClick={(e) => { e.stopPropagation(); setProfitProject(p); }} className="ml-1 font-medium text-amber-600 hover:underline">Edit</button>
+                      </span>
                     </td>
                     <td className={cn("px-4 py-3 text-right font-semibold", p.margin >= 0 ? "text-emerald-600" : "text-rose-600")}>{p.margin.toFixed(1)}%</td>
                     <td className="px-4 py-3">
