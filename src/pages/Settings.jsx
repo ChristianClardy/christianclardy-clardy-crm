@@ -30,6 +30,8 @@ import QuickBooksTab from "@/components/settings/QuickBooksTab";
 import PmLoginsSection from "@/components/settings/PmLoginsSection";
 import PmInviteDialog from "@/components/settings/PmInviteDialog";
 import RemoveEmployeeDialog from "@/components/settings/RemoveEmployeeDialog";
+import JobPicker from "@/components/settings/JobPicker";
+import { savePmJobs, loadPmJobIds } from "@/lib/jobAssignments";
 import { apiFetch } from "@/lib/apiFetch";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -90,6 +92,9 @@ function TeamTab() {
   const [editing, setEditing]     = useState(null);
   const [form, setForm]           = useState(EMPTY_EMPLOYEE);
   const [dupError, setDupError]   = useState("");
+  // A project manager's jobs (projects.project_manager), picked in the form.
+  const [initialJobs, setInitialJobs] = useState([]);
+  const [jobs, setJobs]               = useState([]);
   const [pmLogins, setPmLogins]   = useState([]);
   const [portalFor, setPortalFor] = useState(null); // employee whose Builder Portal access is open
   const [removing, setRemoving]   = useState(null); // employee being removed
@@ -107,10 +112,12 @@ function TeamTab() {
   };
   const loginFor = (emp) => pmLogins.find((l) => l.employee_id === emp.id);
 
-  const openNew  = () => { setEditing(null); setForm(EMPTY_EMPLOYEE); setDupError(""); setDialogOpen(true); };
+  const openNew  = () => { setEditing(null); setForm(EMPTY_EMPLOYEE); setDupError(""); setInitialJobs([]); setJobs([]); setDialogOpen(true); };
   const openEdit = (emp) => {
     setDupError("");
     setEditing(emp);
+    setInitialJobs([]); setJobs([]);
+    loadPmJobIds(emp.full_name).then((ids) => { setInitialJobs(ids); setJobs(ids); });
     setForm({
       full_name:  emp.full_name  || "",
       email:      emp.email      || "",
@@ -142,6 +149,10 @@ function TeamTab() {
     }
     if (editing) await base44.entities.Employee.update(editing.id, form);
     else         await base44.entities.Employee.create(form);
+    // Their jobs follow their name, so a rename carries the jobs with it.
+    if (form.role === "project_manager" || initialJobs.length) {
+      await savePmJobs(form.full_name, initialJobs, form.role === "project_manager" ? jobs : initialJobs, { renamedFrom: editing?.full_name });
+    }
     setDialogOpen(false);
     load();
   };
@@ -238,7 +249,7 @@ function TeamTab() {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[92vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editing ? "Edit Team Member" : "Add Team Member"}</DialogTitle></DialogHeader>
           <form onSubmit={handleSave} className="space-y-3">
             <div><Label className="text-xs">Full Name *</Label>
@@ -268,6 +279,13 @@ function TeamTab() {
                 </select>
               </div>
             </div>
+            {form.role === "project_manager" && (
+              <div>
+                <Label className="text-xs">Jobs they manage</Label>
+                <p className="text-[11px] text-slate-500 mb-1.5">Makes them the project manager on these jobs. A Builder Portal login sees exactly these jobs.</p>
+                <JobPicker mode="pm" personName={form.full_name} value={jobs} onChange={setJobs} initialIds={initialJobs} />
+              </div>
+            )}
             <div><Label className="text-xs">Department</Label>
               <Input value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))} className="mt-1 h-9 text-sm" placeholder="e.g. Field, Office, Sales" /></div>
             <div><Label className="text-xs">Notes</Label>

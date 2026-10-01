@@ -18,6 +18,8 @@ import moment from "moment";
 import SubAccessDialog from "@/components/builder/SubAccessDialog";
 import { goToSettingsTab } from "@/lib/settingsNav";
 import { TRADE_LABELS, tradeLabel, subTrades, subTradeLabels } from "@/lib/subTrades";
+import JobPicker from "@/components/settings/JobPicker";
+import { saveSubJobs, loadSubJobIds } from "@/lib/jobAssignments";
 
 // Subcontractor directory: contact info, compliance paperwork (insurance,
 // license, W-9, pool barrier policy), pay terms, and Subcontractor Portal access.
@@ -430,6 +432,13 @@ function SubFormDialog({ sub, allSubs, onClose, onSaved }) {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  // Jobs: what was assigned when the form opened, and what's picked now.
+  const [initialJobs, setInitialJobs] = useState([]);
+  const [jobs, setJobs] = useState([]);
+  useEffect(() => {
+    if (!sub?.id) return;
+    loadSubJobIds(sub.id).then((ids) => { setInitialJobs(ids); setJobs(ids); });
+  }, [sub?.id]);
 
   const set = (k) => (v) => { setError(""); setForm((f) => ({ ...f, [k]: v })); };
   const bind = (k) => ({ value: form[k] ?? "", onChange: (e) => set(k)(e.target.value) });
@@ -466,8 +475,9 @@ function SubFormDialog({ sub, allSubs, onClose, onSaved }) {
         email: form.email.trim(),
         hourly_rate: form.hourly_rate === "" ? null : Number(form.hourly_rate),
       };
-      if (sub) await base44.entities.Subcontractor.update(sub.id, data);
-      else await base44.entities.Subcontractor.create(data);
+      const saved = sub ? await base44.entities.Subcontractor.update(sub.id, data) : await base44.entities.Subcontractor.create(data);
+      const subId = sub?.id || saved?.id;
+      if (subId) await saveSubJobs(subId, initialJobs, jobs);
       onSaved();
     } catch (err) {
       setError(err.message || "Could not save.");
@@ -516,6 +526,10 @@ function SubFormDialog({ sub, allSubs, onClose, onSaved }) {
                 </select>
               </Field>
             </div>
+          </Section>
+
+          <Section title="Jobs" hint="Assign them to jobs now. They'll see these in the Subcontractor Portal once they've signed the agreement. You can change this later here or in Job Assignments.">
+            <JobPicker value={jobs} onChange={setJobs} initialIds={initialJobs} />
           </Section>
 
           <Section title="Main contact" hint="The mobile number is what text invites to the Subcontractor Portal go to.">

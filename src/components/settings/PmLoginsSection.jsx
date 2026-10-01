@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { sendInvite, createTextInviteLink } from "@/lib/sendInvite";
 import { TextLinkPanel } from "@/components/builder/SubAccessDialog";
+import JobPicker from "@/components/settings/JobPicker";
+import { savePmJobs, loadPmJobIds } from "@/lib/jobAssignments";
 
 // Builder Portal-only logins for project managers (040_pm_portal_logins.sql).
 // A PM login runs its jobs (schedule, logs, punch list, inspections, sub
@@ -20,6 +22,8 @@ export default function PmLoginsSection() {
   const [busy, setBusy] = useState(null); // "email" | "text" | user_id
   const [message, setMessage] = useState(null);
   const [textLink, setTextLink] = useState(null);
+  const [initialJobs, setInitialJobs] = useState([]);
+  const [jobs, setJobs] = useState([]);
 
   const load = async () => {
     const [e, l] = await Promise.all([
@@ -34,6 +38,9 @@ export default function PmLoginsSection() {
   const pickEmployee = (id) => {
     const e = employees.find((x) => x.id === id);
     setForm((f) => ({ ...f, employee_id: id, full_name: e?.full_name || f.full_name, email: e?.email || f.email, phone: e?.phone || f.phone }));
+    // Start from the jobs they already manage.
+    setInitialJobs([]); setJobs([]);
+    if (e?.full_name) loadPmJobIds(e.full_name).then((ids) => { setInitialJobs(ids); setJobs(ids); });
   };
 
   // The login is matched to jobs by its employee's name, so make sure one exists.
@@ -56,6 +63,8 @@ export default function PmLoginsSection() {
     try {
       const employee_id = await ensureEmployee();
       const name = form.full_name.trim() || employees.find((x) => x.id === employee_id)?.full_name || "";
+      // Same name ensureEmployee() gives a new employee: jobs match on it.
+      const employeeName = employees.find((x) => x.id === employee_id)?.full_name || name || form.email.split("@")[0];
       const args = { email: form.email.trim(), fullName: name, pm: { employee_id, all_jobs: form.all_jobs } };
       if (how === "email") {
         const r = await sendInvite(args);
@@ -64,7 +73,11 @@ export default function PmLoginsSection() {
         const { url, days } = await createTextInviteLink(args);
         setTextLink({ url, days, name, phone: form.phone.trim(), portal: "pm" });
       }
+      // Make them PM on the jobs picked (their login sees exactly these).
+      const { added } = await savePmJobs(employeeName, initialJobs, jobs);
+      if (added) setMessage((m) => ({ ok: true, text: `${m?.text ? `${m.text} ` : ""}Assigned ${added} job${added === 1 ? "" : "s"}.` }));
       setForm({ employee_id: "", full_name: "", email: "", phone: "", all_jobs: false });
+      setInitialJobs([]); setJobs([]);
       load();
     } catch (err) {
       setMessage({ ok: false, text: err.message });
@@ -126,6 +139,11 @@ export default function PmLoginsSection() {
             <Label className="text-xs">Mobile (for text)</Label>
             <Input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="mt-1 h-9 text-sm" />
           </div>
+        </div>
+        <div>
+          <Label className="text-xs">Jobs they manage</Label>
+          <p className="text-xs text-slate-500 mb-1.5">Makes them the project manager on these jobs, so their login sees them right away.</p>
+          <JobPicker mode="pm" personName={form.full_name} value={jobs} onChange={setJobs} initialIds={initialJobs} />
         </div>
         <label className="flex items-start gap-2 text-sm text-slate-700">
           <input type="checkbox" className="mt-0.5" checked={form.all_jobs} onChange={(e) => setForm({ ...form, all_jobs: e.target.checked })} />

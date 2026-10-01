@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Loader2, Send, MessageSquare, UserX, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { sendInvite, createTextInviteLink } from "@/lib/sendInvite";
 import { TextLinkPanel } from "@/components/builder/SubAccessDialog";
+import JobPicker from "@/components/settings/JobPicker";
+import { savePmJobs, loadPmJobIds } from "@/lib/jobAssignments";
 
 // Builder Portal access for one employee, opened from their row in
 // Team & Subcontractors → Employees (like a sub's Invite button). Shows their
@@ -19,6 +21,11 @@ export default function PmInviteDialog({ employee, login, onClose, onChanged }) 
   const [busy, setBusy] = useState(null);
   const [message, setMessage] = useState(null);
   const [textLink, setTextLink] = useState(null);
+  const [initialJobs, setInitialJobs] = useState([]);
+  const [jobs, setJobs] = useState([]);
+  useEffect(() => {
+    loadPmJobIds(employee.full_name).then((ids) => { setInitialJobs(ids); setJobs(ids); });
+  }, [employee.full_name]);
 
   const link = (url, days) => setTextLink({ url, days, name: employee.full_name || "", phone, portal: "pm" });
 
@@ -35,6 +42,8 @@ export default function PmInviteDialog({ employee, login, onClose, onChanged }) 
         const { url, days } = await createTextInviteLink(args);
         link(url, days);
       }
+      await savePmJobs(employee.full_name, initialJobs, jobs);
+      setInitialJobs(jobs);
       onChanged();
     } catch (err) {
       setMessage({ ok: false, text: err.message });
@@ -107,6 +116,10 @@ export default function PmInviteDialog({ employee, login, onClose, onChanged }) 
                 <Label className="text-xs">Mobile (for text)</Label>
                 <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="mt-1 h-9 text-sm bg-white" />
               </div>
+            </div>
+            <div>
+              <Label className="text-xs">Jobs they manage</Label>
+              <JobPicker mode="pm" personName={employee.full_name} value={jobs} onChange={setJobs} initialIds={initialJobs} />
             </div>
             <label className="flex items-center gap-2 text-sm text-slate-700">
               <input type="checkbox" checked={allJobs} onChange={(e) => setAllJobs(e.target.checked)} /> Can see all jobs, not just ones they manage
