@@ -59,6 +59,7 @@ import ContractsPanel from "@/components/crm/ContractsPanel";
 import AppointmentsPanel from "@/components/scheduling/AppointmentsPanel";
 import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
 import { reconcileDraws } from "@/lib/draws";
+import { rescaleDraws } from "@/lib/drawSchedule";
 
 const statusStyles = {
   planning: { label: "Planning", class: "bg-slate-100 text-slate-700" },
@@ -165,14 +166,19 @@ export default function ProjectDetail() {
       sync_locked: true,
     });
 
-    // If contract value changed, recalculate % -based draw amounts
-    if (newContractValue !== (project?.contract_value || 0) && newContractValue > 0) {
-      const draws = await base44.entities.Draw.filter({ project_id: projectId });
-      for (const draw of draws) {
-        if (draw.percent_of_contract > 0) {
-          const newAmount = (draw.percent_of_contract / 100) * newContractValue;
-          await base44.entities.Draw.update(draw.id, { amount: newAmount });
-        }
+    // Contract value or builder fee changed: recalculate the draw schedule.
+    // Builder fee shares stay fixed (re-split if the fee itself changed);
+    // only the cost share scales (src/lib/drawSchedule.js rescaleDraws).
+    const oldFee = project?.builder_fee != null ? Number(project.builder_fee) : null;
+    const newFee = formData.builder_fee === "" || formData.builder_fee == null ? null : parseFloat(formData.builder_fee) || 0;
+    const contractChanged = newContractValue !== (Number(project?.contract_value) || 0);
+    const feeChanged = (newFee ?? 0) !== (oldFee ?? 0);
+    if ((contractChanged || feeChanged) && newContractValue > 0) {
+      const draws = await base44.entities.Draw.filter({ project_id: projectId }, "draw_number");
+      const updates = rescaleDraws(draws, { oldContract: Number(project?.contract_value) || 0, newContract: newContractValue, oldFee, newFee });
+      for (const u of updates) {
+        const { id, ...patch } = u;
+        await base44.entities.Draw.update(id, patch);
       }
       // New draw amounts: re-check which are paid by the payments on file.
       await reconcileDraws(projectId);

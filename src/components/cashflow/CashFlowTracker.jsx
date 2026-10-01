@@ -227,6 +227,7 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
         amount: d.amount,
         status: "pending",
         draw_number: startDrawNumber + i,
+        builder_fee_amount: d.fee_amount || 0,
         ...(d.notes ? { notes: d.notes } : {}),
       });
     }

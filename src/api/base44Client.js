@@ -96,7 +96,7 @@ const TABLE_OPTIONAL_FIELDS = {
   projects: new Set(['collected_to_date','remaining_balance','linked_estimate_ids','actual_completion_date','baseline_end_date','builder_fee','projected_profit_override']),
   barrier_daily_logs: new Set(['weather','temperature_f','crew_count','delays']),
   permit_inspection_tasks: new Set(['result','inspector','result_date','schedule_row_id','photos']),
-  draws: new Set(['retainage_percent','retainage_held','retainage_released','percent_of_contract','linked_task_id','amount_paid']),
+  draws: new Set(['retainage_percent','retainage_held','retainage_released','percent_of_contract','linked_task_id','amount_paid','builder_fee_amount']),
   sub_invoices: new Set(['job_cost_item_id']),
   todo_items: new Set(['created_by','assigned_to','notes']),
   materials: new Set(['is_active','item_code','manufacturer','manufacturer_part','cost_method','standard_cost','average_cost','last_purchase_price','waste_factor','lead_time_days','min_stock_qty','reorder_point','on_hand_qty','location_code','weight_per_unit','weight_unit','vendor_prices','gl_account','tax_category','taxable','cost_center','price_history','cost_code_id']),
