@@ -126,7 +126,8 @@ export function costEntries(item) {
 export const sumCosts = (costs) => round2((costs || []).reduce((s, c) => s + (Number(c.amount) || 0), 0));
 
 // Not in the estimate: lines/sections added by hand on a project that has one.
-export const isExtra = (item, hasEstimate) => hasEstimate && !item?.source_item_id;
+// (AP invoices not yet assigned to a line aren't extra, just unassigned.)
+export const isExtra = (item, hasEstimate) => hasEstimate && !item?.source_item_id && !item?.ap_invoice_id;
 
 // actual includes extra costs; extra is the part that wasn't in the estimate.
 export const sectionTotals = (section, hasEstimate = false) => {

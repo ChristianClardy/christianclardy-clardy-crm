@@ -71,12 +71,14 @@ function CostEntriesDialog({ item, onClose, onSave }) {
     return [...existing, { id: newId(), amount: "", date: new Date().toLocaleDateString("en-CA"), note: "" }];
   });
   const setRow = (id, patch) => setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  const filled = rows.filter((r) => Number(r.amount));
+  const filled = rows.filter((r) => Number(r.amount) || r.sub_invoice_id);
   const total = sumCosts(filled);
   const budget = Number(item.budgeted) || 0;
 
   const save = () => {
-    const costs = filled.map((r) => ({ id: r.id, amount: Math.round(Number(r.amount) * 100) / 100, date: r.date || "", note: (r.note || "").trim() }));
+    const costs = filled.map((r) => (r.sub_invoice_id
+      ? { ...costEntries(item).find((c) => c.id === r.id) }
+      : { id: r.id, amount: Math.round(Number(r.amount) * 100) / 100, date: r.date || "", note: (r.note || "").trim() }));
     onSave({ costs, actual: sumCosts(costs) });
     onClose();
   };
@@ -90,7 +92,13 @@ function CostEntriesDialog({ item, onClose, onSave }) {
           <div className="grid grid-cols-12 gap-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-1">
             <span className="col-span-3">Amount</span><span className="col-span-4">Date</span><span className="col-span-4">Vendor / invoice # / note</span>
           </div>
-          {rows.map((r, idx) => (
+          {rows.map((r, idx) => r.sub_invoice_id ? (
+            <div key={r.id} className="grid grid-cols-12 gap-2 items-center rounded-md bg-slate-50 py-1" title="From the AP & Cash tab. Edit or delete it there.">
+              <span className="col-span-3 px-2 text-sm text-right font-medium text-slate-800">{fmt(r.amount)}</span>
+              <span className="col-span-4 px-2 text-sm text-slate-500">{r.date || "—"}</span>
+              <span className="col-span-5 px-2 text-sm text-slate-600 truncate">{r.note} <span className="text-[10px] text-slate-400">· edit on AP &amp; Cash</span></span>
+            </div>
+          ) : (
             <div key={r.id} className="grid grid-cols-12 gap-2 items-center">
               <input type="number" step="0.01" value={r.amount} autoFocus={idx === rows.length - 1} onChange={(e) => setRow(r.id, { amount: e.target.value })} placeholder="0.00"
                 className="col-span-3 h-9 rounded-md border border-slate-200 px-2 text-sm text-right outline-none focus:ring-1 focus:ring-amber-400" />
@@ -136,11 +144,12 @@ function CostCell({ item, over, tone, onEdit }) {
   );
 }
 
-function SectionCard({ section, hasEstimate, estimateLabel, onToggle, onUpdateItem, onAddItem, onDeleteItem, onDeleteSection, onRename }) {
+function SectionCard({ section, hasEstimate, estimateLabel, lineOptions = [], onAssignApInvoice, onToggle, onUpdateItem, onAddItem, onDeleteItem, onDeleteSection, onRename }) {
   const isMaterial = section.sectionType === "material";
   const t = sectionTotals(section, hasEstimate);
   const used = t.budgeted > 0 ? Math.min(100, (t.actual / t.budgeted) * 100) : 0;
-  const custom = !section.estimate_sourced;
+  const apUnassigned = !!section.ap_unassigned;
+  const custom = !section.estimate_sourced && !apUnassigned;
   const [costsFor, setCostsFor] = useState(null);
 
   return (
@@ -158,6 +167,7 @@ function SectionCard({ section, hasEstimate, estimateLabel, onToggle, onUpdateIt
             <span className={cn("text-sm font-semibold truncate", isMaterial ? "text-sky-800" : "text-slate-800")}>{section.name}</span>
           )}
           {isMaterial && <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-sky-200 text-sky-700">Material</span>}
+          {apUnassigned && <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">Assign each to a line</span>}
           {custom && (hasEstimate
             ? <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">Extra costs</span>
             : <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">Added</span>)}
@@ -209,7 +219,9 @@ function SectionCard({ section, hasEstimate, estimateLabel, onToggle, onUpdateIt
                   return (
                     <tr key={item.id} className={cn("border-b border-slate-100 group", extra ? "bg-rose-50/40 hover:bg-rose-50" : isMatRow ? "bg-sky-50/40 hover:bg-sky-50" : "hover:bg-amber-50/20")}>
                       <td className="px-3 py-1.5 min-w-[200px]">
-                        {fromEstimate ? (
+                        {item.ap_invoice_id ? (
+                          <span className="text-sm text-slate-800 px-2">{item.description}</span>
+                        ) : fromEstimate ? (
                           <span className="text-sm text-slate-800 px-2">
                             {item.description || <span className="italic text-slate-300">No description</span>}
                             {item.removed_from_estimate && <span className="ml-1.5 text-[10px] font-semibold text-rose-500">removed from estimate</span>}
@@ -221,7 +233,22 @@ function SectionCard({ section, hasEstimate, estimateLabel, onToggle, onUpdateIt
                           </div>
                         )}
                       </td>
-                      {extra ? (
+                      {item.ap_invoice_id ? (
+                        <td colSpan={4} className="px-2 py-1.5 text-right">
+                          <select
+                            value=""
+                            onChange={(e) => e.target.value && onAssignApInvoice?.(item.ap_invoice_id, e.target.value)}
+                            className="h-8 w-full max-w-sm rounded-md border border-amber-300 bg-white px-2 text-xs text-slate-700"
+                          >
+                            <option value="">Assign to a job cost line…</option>
+                            {[...new Set(lineOptions.map((o) => o.group))].map((g) => (
+                              <optgroup key={g} label={g}>
+                                {lineOptions.filter((o) => o.group === g).map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                              </optgroup>
+                            ))}
+                          </select>
+                        </td>
+                      ) : extra ? (
                         <td colSpan={4} className="px-2 py-1.5 text-xs text-rose-500 text-right"><span className="px-2">Not in the estimate</span></td>
                       ) : (
                         <>
@@ -242,7 +269,7 @@ function SectionCard({ section, hasEstimate, estimateLabel, onToggle, onUpdateIt
                       </td>
                       <td className="px-2 py-1.5 text-right text-sm"><span className="px-2">{extra ? (Number(item.actual) ? <span className="text-rose-600">{fmt(item.actual)} extra</span> : <span className="text-slate-300">—</span>) : <VarianceCell budgeted={item.budgeted} actual={item.actual} />}</span></td>
                       <td className="px-1 py-1.5">
-                        {(!fromEstimate || item.removed_from_estimate) && (
+                        {(!fromEstimate || item.removed_from_estimate) && !item.ap_invoice_id && (
                           <button onClick={() => onDeleteItem(item.id)} className="p-1 rounded text-slate-300 hover:text-rose-500 hover:bg-rose-50 opacity-0 group-hover:opacity-100" title="Remove line">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -254,11 +281,11 @@ function SectionCard({ section, hasEstimate, estimateLabel, onToggle, onUpdateIt
               </tbody>
             </table>
           </div>
-          <div className="px-4 py-2 border-t border-slate-100">
+          {!apUnassigned && <div className="px-4 py-2 border-t border-slate-100">
             <button onClick={onAddItem} className={cn("flex items-center gap-1.5 text-xs font-medium", hasEstimate ? "text-rose-600 hover:text-rose-700" : isMaterial ? "text-sky-600 hover:text-sky-700" : "text-amber-600 hover:text-amber-700")}>
               <Plus className="w-3.5 h-3.5" /> {hasEstimate ? "Add extra cost (not in the estimate)" : "Add cost line"}
             </button>
-          </div>
+          </div>}
         </>
       )}
       {costsFor && (
@@ -272,8 +299,14 @@ function SectionCard({ section, hasEstimate, estimateLabel, onToggle, onUpdateIt
   );
 }
 
-export default function JobCostBreakdown({ sections, estimates = [], onChange }) {
+export default function JobCostBreakdown({ sections, estimates = [], onChange, onAssignApInvoice }) {
   const hasEstimate = estimates.length > 0;
+  // Lines an unassigned AP invoice can go on.
+  const lineOptions = sections.filter((s) => !s.ap_unassigned).flatMap((s) => (s.items || []).map((i) => ({
+    id: i.id,
+    group: s.name,
+    label: `${i.description || "Line"}${Number(i.budgeted) ? ` · est. $${Number(i.budgeted).toLocaleString("en-US", { maximumFractionDigits: 0 })}` : ""}`,
+  })));
   const estLabel = (s) => (estimates.length > 1 && s.estimate_id ? estimates.find((e) => e.id === s.estimate_id)?.estimate_number || "" : "");
   const update = (sectionId, fn) => onChange(sections.map((s) => (s.id === sectionId ? fn(s) : s)));
   const totals = sections.reduce((acc, s) => {
@@ -290,6 +323,8 @@ export default function JobCostBreakdown({ sections, estimates = [], onChange })
           section={section}
           hasEstimate={hasEstimate}
           estimateLabel={estLabel(section)}
+          lineOptions={lineOptions}
+          onAssignApInvoice={onAssignApInvoice}
           onToggle={() => update(section.id, (s) => ({ ...s, collapsed: !s.collapsed }))}
           onRename={(name) => update(section.id, (s) => ({ ...s, name }))}
           onUpdateItem={(itemId, patch) => update(section.id, (s) => ({ ...s, items: s.items.map((i) => (i.id === itemId ? { ...i, ...patch } : i)) }))}

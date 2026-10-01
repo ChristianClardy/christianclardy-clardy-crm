@@ -20,6 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { qbAutoPush, qbStatus } from "@/lib/quickbooks";
+import { syncApToJobCost, jobCostLineOptions } from "@/lib/apJobCost";
 import {
   Plus, Trash2, FileText, AlertTriangle, CheckCircle2,
   Clock, DollarSign, TrendingDown, TrendingUp, ShieldCheck,
@@ -54,6 +55,7 @@ const EMPTY_FORM = {
   vendor_name: "",
   invoice_number: "",
   cost_code: "",
+  job_cost_item_id: "",
   amount: "",
   due_date: "",
   paid_date: "",
@@ -96,6 +98,11 @@ export default function ProjectAccounting({ project }) {
   const [qbConnected, setQbConnected] = useState(false);
   const [qbNote, setQbNote] = useState("");
   const [qbBusy, setQbBusy] = useState(null);
+  // Job Cost lines an invoice can be a cost of (src/lib/apJobCost.js).
+  const [jobLines, setJobLines] = useState([]);
+  const loadJobLines = () => jobCostLineOptions(project.id).then(setJobLines).catch(() => setJobLines([]));
+  useEffect(() => { loadJobLines(); }, [project.id]);
+  const jobLineLabel = (id) => jobLines.find((l) => l.id === id);
   useEffect(() => { qbStatus().then((s) => setQbConnected(!!s.connected)); }, []);
 
   useEffect(() => { load(); }, [project.id]);
@@ -126,12 +133,14 @@ export default function ProjectAccounting({ project }) {
   };
 
   const openDialog = (inv = null) => {
+    loadJobLines();
     if (inv) {
       setEditing(inv);
       setForm({
         vendor_name: inv.vendor_name || "",
         invoice_number: inv.invoice_number || "",
         cost_code: inv.cost_code || "",
+        job_cost_item_id: inv.job_cost_item_id || "",
         amount: inv.amount ?? "",
         due_date: inv.due_date || "",
         paid_date: inv.paid_date || "",
@@ -154,6 +163,7 @@ export default function ProjectAccounting({ project }) {
       vendor_name: form.vendor_name,
       invoice_number: form.invoice_number,
       cost_code: form.cost_code,
+      job_cost_item_id: form.job_cost_item_id || null,
       amount: parseFloat(form.amount) || 0,
       due_date: form.due_date || null,
       paid_date: form.paid_date || null,
@@ -166,6 +176,8 @@ export default function ProjectAccounting({ project }) {
       ? await base44.entities.SubInvoice.update(editing.id, payload)
       : await base44.entities.SubInvoice.create(payload);
     setDialogOpen(false);
+    // The invoice's amount goes into the project's Job Cost actual costs.
+    await syncApToJobCost(project.id).catch(console.error);
     // Bill in QuickBooks, coded to this job (auto, when turned on in Settings).
     const id = editing?.id || saved?.id;
     if (id && (qbBills.has(id) || payload.vendor_name)) {
@@ -182,6 +194,7 @@ export default function ProjectAccounting({ project }) {
       if (r?.error) { alert(`Couldn't delete the bill in QuickBooks, so nothing was deleted: ${r.error}`); return; }
     }
     await base44.entities.SubInvoice.delete(id);
+    await syncApToJobCost(project.id).catch(console.error);
     load();
   };
 
@@ -376,6 +389,9 @@ export default function ProjectAccounting({ project }) {
                             {inv.cost_code
                               ? <span className="inline-block bg-slate-100 text-slate-600 text-xs px-2 py-0.5 rounded-full">{inv.cost_code}</span>
                               : <span className="text-slate-300 italic text-xs">Unassigned</span>}
+                            {jobLineLabel(inv.job_cost_item_id)
+                              ? <p className="text-[11px] text-emerald-700 mt-0.5 truncate max-w-[220px]" title="Job cost line">→ {jobLineLabel(inv.job_cost_item_id).group}: {jobLineLabel(inv.job_cost_item_id).label.split(" · ")[0]}</p>
+                              : jobLines.length > 0 && <p className="text-[11px] text-amber-600 mt-0.5">No job cost line</p>}
                           </td>
                           <td className="px-4 py-3 text-right font-semibold text-slate-900">{fmt(inv.amount)}</td>
                           <td className="px-4 py-3 text-slate-500 text-xs">
@@ -633,6 +649,23 @@ export default function ProjectAccounting({ project }) {
                   className="mt-1.5"
                 />
               </div>
+            </div>
+
+            <div>
+              <Label>Job cost line</Label>
+              <select
+                value={form.job_cost_item_id || ""}
+                onChange={(e) => setForm((f) => ({ ...f, job_cost_item_id: e.target.value }))}
+                className="mt-1.5 h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"
+              >
+                <option value="">{jobLines.length ? "Not assigned yet" : "No job cost breakdown yet: open the Job Cost tab first"}</option>
+                {[...new Set(jobLines.map((l) => l.group))].map((g) => (
+                  <optgroup key={g} label={g}>
+                    {jobLines.filter((l) => l.group === g).map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+              <p className="text-xs text-slate-400 mt-1">The amount is added to that line's actual cost on the Job Cost tab. Unassigned invoices still count toward actual cost.</p>
             </div>
 
             <div>

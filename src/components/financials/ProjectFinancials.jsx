@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -17,6 +17,7 @@ import { projectedProfit as profitFor, PROFIT_BASIS_LABEL, approvedChangeOrderTo
 import ProjectedProfitDialog from "@/components/financials/ProjectedProfitDialog";
 import JobCostBreakdown from "@/components/financials/JobCostBreakdown";
 import { sectionsFromEstimate, rebuildFromEstimates, isLegacyBreakdown } from "@/lib/jobCostFromEstimate";
+import { mergeApInvoices } from "@/lib/apJobCost";
 
 function fmt(n) {
   const num = Number(n) || 0;
@@ -139,6 +140,7 @@ function EstimatePickerDialog({ open, onClose, clientId, alreadyLinkedIds, onLin
 export default function ProjectFinancials({ project, onUpdateProject }) {
   const navigate = useNavigate();
   const [syncedBreakdownId, setSyncedBreakdownId] = useState(null);
+  const apInvoicesRef = useRef([]);
   const [linkedEstimates, setLinkedEstimates] = useState([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [kpiEditOpen, setKpiEditOpen] = useState(false);
@@ -176,15 +178,23 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
         : [];
       setLinkedEstimates(ests);
 
+      // AP & Cash invoices feed actual costs (src/lib/apJobCost.js).
+      const invoices = await base44.entities.SubInvoice.filter({ project_id: project.id }).catch(() => []);
+      apInvoicesRef.current = invoices;
+
       // Mirror the estimate line by line: build it the first time, and convert
       // the old one-line-per-trade breakdown (actual costs are carried over).
       if (ests.length && (!saved || isLegacyBreakdown(saved.sections))) {
         await persist(rebuildFromEstimates(ests, saved?.sections || []), saved?.id || null);
+      } else if (saved && JSON.stringify(mergeApInvoices(saved.sections, invoices)) !== JSON.stringify(saved.sections)) {
+        await persist(saved.sections, saved.id);
       }
     })();
   }, [project.id]);
 
-  const persist = useCallback(async (next, breakdownId = syncedBreakdownId) => {
+  // Every save re-applies the AP invoices, so their cost entries always match.
+  const persist = useCallback(async (input, breakdownId = syncedBreakdownId) => {
+    const next = mergeApInvoices(input, apInvoicesRef.current);
     setSections(next);
     const nextBudgeted = next.reduce((s, sec) => s + sec.items.reduce((a, i) => a + (Number(i.budgeted) || 0), 0), 0);
     const nextActual   = next.reduce((s, sec) => s + sec.items.reduce((a, i) => a + (Number(i.actual)   || 0), 0), 0);
@@ -228,6 +238,13 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
     await base44.entities.Project.update(project.id, { linked_estimate_ids: next });
     setLinkedEstimates(prev => prev.filter(e => e.id !== estId));
     if (onUpdateProject) onUpdateProject();
+  };
+
+  // An AP invoice from the "not assigned" section, assigned to a line here.
+  const assignApInvoice = async (invoiceId, itemId) => {
+    await base44.entities.SubInvoice.update(invoiceId, { job_cost_item_id: itemId || null });
+    apInvoicesRef.current = await base44.entities.SubInvoice.filter({ project_id: project.id }).catch(() => apInvoicesRef.current);
+    await persist(sections);
   };
 
   // Pull the estimate's current lines in, keeping actual costs already entered.
@@ -444,7 +461,7 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
           </p>
         </div>
         <div className="p-4">
-          <JobCostBreakdown sections={sections} estimates={linkedEstimates} onChange={persist} />
+          <JobCostBreakdown sections={sections} estimates={linkedEstimates} onChange={persist} onAssignApInvoice={assignApInvoice} />
         </div>
       </div>
 
