@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 import QbArAging from "@/components/quickbooks/QbArAging";
+import { projectedProfit as profitFor, PROFIT_BASIS_LABEL } from "@/lib/projectProfit";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -125,14 +126,8 @@ export default function FinanceDashboard() {
   const totalBilled    = activeProjects.reduce((s, p) => s + (p.billed_to_date || 0), 0);
   const totalCosts     = activeProjects.reduce((s, p) => s + (p.costs_to_date || 0), 0);
   const totalRemaining = totalContract - totalBilled;
-  const projectedProfit = activeProjects.reduce((s, p) => {
-    const contract = p.contract_value || 0;
-    const costs    = p.costs_to_date  || 0;
-    const budget   = (p.original_costs || 0) + (p.amendment_costs || 0);
-    const pct      = (p.percent_complete || 0) / 100;
-    const ctc      = pct > 0 ? Math.max(0, budget - costs) : budget;
-    return s + (contract - costs - ctc);
-  }, 0);
+  // Builder fee, else 30% of contract, unless set by hand (src/lib/projectProfit.js).
+  const projectedProfit = activeProjects.reduce((s, p) => s + profitFor(p).amount, 0);
 
   const totalRetainage = draws.reduce(
     (s, d) => s + (d.retainage_released ? 0 : (d.retainage_held || 0)), 0
@@ -151,9 +146,8 @@ export default function FinanceDashboard() {
     const contract = p.contract_value || 0;
     const pct      = p.percent_complete || 0;
     const ctc      = pct > 0 ? Math.max(0, budget - actual) : budget;
-    const projProfit = contract - actual - ctc;
-    const margin   = contract > 0 ? (projProfit / contract) * 100 : 0;
-    return { ...p, budget, actual, ctc, projProfit, margin, pct };
+    const { amount: projProfit, margin, basis } = profitFor({ ...p, contract_value: contract });
+    return { ...p, budget, actual, ctc, projProfit, margin, pct, profitBasis: basis };
   }).sort((a, b) => Math.abs(b.projProfit) - Math.abs(a.projProfit)), [activeProjects]);
 
   // ── AP Aging ─────────────────────────────────────────────────────────────────
@@ -368,7 +362,10 @@ export default function FinanceDashboard() {
                     <td className="px-4 py-3 text-right text-slate-600">{fmt(p.budget)}</td>
                     <td className="px-4 py-3 text-right text-blue-700 font-medium">{fmt(p.actual)}</td>
                     <td className="px-4 py-3 text-right text-slate-500">{fmt(p.ctc)}</td>
-                    <td className={cn("px-4 py-3 text-right font-semibold", p.projProfit >= 0 ? "text-emerald-600" : "text-rose-600")}>{fmt(p.projProfit)}</td>
+                    <td className={cn("px-4 py-3 text-right font-semibold", p.projProfit >= 0 ? "text-emerald-600" : "text-rose-600")}>
+                      {fmt(p.projProfit)}
+                      <span className="block text-[10px] font-normal text-slate-400">{PROFIT_BASIS_LABEL[p.profitBasis]}</span>
+                    </td>
                     <td className={cn("px-4 py-3 text-right font-semibold", p.margin >= 0 ? "text-emerald-600" : "text-rose-600")}>{p.margin.toFixed(1)}%</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">

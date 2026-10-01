@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import QbJobActuals from "@/components/quickbooks/QbJobActuals";
+import { projectedProfit as profitFor, PROFIT_BASIS_LABEL } from "@/lib/projectProfit";
 
 function fmt(n) {
   const num = Number(n) || 0;
@@ -285,7 +286,9 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
   const totalBudgeted = sections.reduce((s, sec) => s + sec.items.reduce((a, i) => a + (Number(i.budgeted) || 0), 0), 0);
   const totalActual   = sections.reduce((s, sec) => s + sec.items.reduce((a, i) => a + (Number(i.actual)   || 0), 0), 0);
   const totalVariance = totalBudgeted - totalActual;
-  const projectedProfit = contractTotal - totalActual;
+  // Builder fee, else 30% of contract, unless overridden (src/lib/projectProfit.js).
+  const profit = profitFor(project);
+  const projectedProfit = profit.amount;
 
   const openKpiEdit = () => {
     setKpiForm({
@@ -318,12 +321,19 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
     if (onUpdateProject) onUpdateProject();
   };
 
+  // Blank = back to automatic (builder fee / 30% of contract).
+  const setProfitOverride = async (value) => {
+    const v = String(value ?? "").trim();
+    await base44.entities.Project.update(project.id, { projected_profit_override: v === "" ? null : parseFloat(v) || 0 });
+    if (onUpdateProject) onUpdateProject();
+  };
+
   const kpis = [
     { label: "Contract Total",        value: contractTotal,     field: "contract_value", color: "text-slate-800",    editable: true },
     { label: "Collected",             value: collected,         field: "billed_to_date", color: "text-emerald-600",  editable: true },
     { label: "Costs to Date",         value: costsToDate,       field: "costs_to_date",  color: "text-blue-600",     editable: true },
     { label: "Remaining to Collect",  value: contractTotal - collected, color: (contractTotal - collected) > 0 ? "text-amber-600" : "text-slate-500", editable: false },
-    { label: "Projected Profit",      value: projectedProfit,   color: projectedProfit >= 0 ? "text-emerald-600" : "text-rose-600", editable: false },
+    { label: "Projected Profit",      value: projectedProfit,   color: projectedProfit >= 0 ? "text-emerald-600" : "text-rose-600", profit: true },
   ];
 
   return (
@@ -409,7 +419,18 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
           {kpis.map(kpi => (
             <div key={kpi.label} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm group/kpi">
               <p className="text-xs text-slate-500 uppercase tracking-wider font-medium mb-1">{kpi.label}</p>
-              {kpi.editable ? (
+              {kpi.profit ? (
+                <div className="relative">
+                  <EditableCell value={kpi.value} onChange={setProfitOverride} type="number" className={cn("text-xl font-bold w-full", kpi.color)} />
+                  <span className="absolute top-0 right-0 text-[9px] text-slate-300 group-hover/kpi:text-amber-400 transition-colors">✎</span>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {PROFIT_BASIS_LABEL[profit.basis]} · {profit.margin.toFixed(1)}% margin
+                    {profit.basis === "override" && (
+                      <button type="button" onClick={() => setProfitOverride("")} className="ml-1.5 text-amber-600 hover:underline">Reset</button>
+                    )}
+                  </p>
+                </div>
+              ) : kpi.editable ? (
                 <div className="relative">
                   <EditableCell value={kpi.value} onChange={v => handleKpiInlineUpdate(kpi.field, v)} type="number" className={cn("text-xl font-bold w-full", kpi.color)} />
                   <span className="absolute top-0 right-0 text-[9px] text-slate-300 group-hover/kpi:text-amber-400 transition-colors">✎</span>

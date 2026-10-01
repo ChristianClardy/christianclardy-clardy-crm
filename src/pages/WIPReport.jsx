@@ -40,6 +40,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
+import { projectedProfit as profitFor } from "@/lib/projectProfit";
 
 const formatCurrency = (value) => {
   if (value === undefined || value === null) return "$0";
@@ -132,9 +133,8 @@ export default function WIPReport() {
     // Estimated total cost (using percent complete)
     const estimatedTotalCost = percentComplete > 0 ? (costsToDate / percentComplete) * 100 : costsToDate;
     
-    // Projected profit
-    const projectedProfit = contractValue - estimatedTotalCost;
-    const profitMargin = contractValue > 0 ? (projectedProfit / contractValue) * 100 : 0;
+    // Projected profit: builder fee, else 30% of contract, unless set by hand.
+    const { amount: projectedProfit, margin: profitMargin } = profitFor(project);
 
     return {
       contractValue,
@@ -475,7 +475,7 @@ export default function WIPReport() {
           </div>
           <div>
             <p className="font-medium text-slate-700">Projected Profit</p>
-            <p className="text-slate-500">Contract Value - Estimated Total Cost</p>
+            <p className="text-slate-500">The builder fee on builder-fee jobs, otherwise 30% of the contract value, unless set by hand on the project's Job Cost tab</p>
           </div>
           <div>
             <p className="font-medium text-slate-700">⚠️ Warning Flag</p>
