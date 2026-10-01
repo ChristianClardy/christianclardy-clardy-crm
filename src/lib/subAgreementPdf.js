@@ -14,7 +14,7 @@ const fmtDate = (iso) => {
   return isNaN(d) ? "" : d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 };
 
-export function buildSubAgreementPdf(ack, { subcontractorName, projectName } = {}) {
+export function buildSubAgreementPdf(ack, { subcontractorName } = {}) {
   const terms = ack.agreement_snapshot?.requirements?.length ? ack.agreement_snapshot : agreementSnapshot();
   const doc = new jsPDF("p", "mm", "letter");
   const width = doc.internal.pageSize.getWidth() - M * 2;
@@ -46,7 +46,7 @@ export function buildSubAgreementPdf(ack, { subcontractorName, projectName } = {
 
   para(terms.title, { size: 15, style: "bold", gap: 1 });
   para(`Subcontractor: ${subcontractorName || "—"}`, { gap: 0 });
-  para(`Applies to: ${projectName || "All Principle Outdoor Living projects"}`, { gap: 4 });
+  para("Applies to: All Principle Outdoor Living projects", { gap: 4 });
 
   terms.requirements.forEach((r, i) => {
     room(LINE * 2);

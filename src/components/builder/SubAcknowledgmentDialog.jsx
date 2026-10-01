@@ -9,8 +9,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SUB_REQUIREMENTS, ACKNOWLEDGMENT_TEXT, AGREEMENT_TITLE, agreementSnapshot } from "@/lib/barrierChecklist";
 
-const NO_PROJECT = "__none__";
-
 const emptyAck = (subId, user, portalMode) => ({
   subcontractor_id: subId || "",
   project_id: "",
@@ -26,7 +24,7 @@ const emptyAck = (subId, user, portalMode) => ({
 
 // portalMode: a subcontractor is signing for themselves. The sub is fixed and
 // the Principle countersignature fields are hidden (staff fill those in).
-export default function SubAcknowledgmentDialog({ open, onOpenChange, ack, defaultSubId, subcontractors, projects, user, portalMode = false, onSaved }) {
+export default function SubAcknowledgmentDialog({ open, onOpenChange, ack, defaultSubId, subcontractors, user, portalMode = false, onSaved }) {
   const [form, setForm] = useState(emptyAck(defaultSubId, user));
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -61,13 +59,12 @@ export default function SubAcknowledgmentDialog({ open, onOpenChange, ack, defau
     }
     setSaving(true);
     try {
-      const payload = { ...form };
+      // One agreement per company covers every job, so it's never tied to a project.
+      const payload = { ...form, project_id: null };
       delete payload.id;
       // New signatures keep a copy of the terms they were given for; edits
       // leave the original copy alone.
       if (!ack?.id) payload.agreement_snapshot = agreementSnapshot();
-      const project = projects.find((p) => p.id === form.project_id);
-      if (project?.company_id) payload.company_id = project.company_id;
       const saved = ack?.id ? await base44.entities.SubBarrierAck.update(ack.id, payload) : await base44.entities.SubBarrierAck.create(payload);
       onSaved?.(saved);
       onOpenChange(false);
@@ -83,6 +80,7 @@ export default function SubAcknowledgmentDialog({ open, onOpenChange, ack, defau
           <DialogTitle>{AGREEMENT_TITLE}</DialogTitle>
         </DialogHeader>
 
+        <p className="text-sm text-slate-500 -mt-1">Signed once per company. It covers every Principle Outdoor Living job.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <Label>Subcontractor</Label>
@@ -90,16 +88,6 @@ export default function SubAcknowledgmentDialog({ open, onOpenChange, ack, defau
               <SelectTrigger><SelectValue placeholder="Select subcontractor" /></SelectTrigger>
               <SelectContent>
                 {subcontractors.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>Project (optional)</Label>
-            <Select value={form.project_id || NO_PROJECT} onValueChange={(v) => set({ project_id: v === NO_PROJECT ? "" : v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_PROJECT}>All Principle projects</SelectItem>
-                {projects.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

@@ -189,7 +189,6 @@ export default function BuilderPortal({ portal = null }) {
           ack={null}
           defaultSubId={portal.subcontractor_id}
           subcontractors={subcontractors}
-          projects={[]}
           user={user}
           portalMode
           onSaved={onAckSaved}
@@ -388,7 +387,7 @@ export default function BuilderPortal({ portal = null }) {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-slate-900">{s.name}{subTradeLabels(s) ? <span className="text-slate-500 font-normal"> · {subTradeLabels(s)}</span> : null}</p>
                       <p className="text-xs text-slate-500">
-                        {ack ? `Signed ${fmtDate(ack.signed_date)}${ack.authorized_representative ? ` by ${ack.authorized_representative}` : ""}${ack.project_id ? ` · ${projectById[ack.project_id]?.name || "project"}` : " · all projects"}` : "No signed agreement on file"}
+                        {ack ? `Signed ${fmtDate(ack.signed_date)}${ack.authorized_representative ? ` by ${ack.authorized_representative}` : ""}}` : "No signed agreement on file"}
                         {lastOnSite && ` · Last on site ${fmtDate(lastOnSite.log_date)}`}
                       </p>
                       <p className="text-xs text-slate-500">{jobCount} job{jobCount !== 1 ? "s" : ""} assigned · {loginCount} app login{loginCount !== 1 ? "s" : ""}</p>
@@ -400,7 +399,7 @@ export default function BuilderPortal({ portal = null }) {
                         <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-700">Not signed</span>
                       )}
                       {ack?.document_url && <a href={ack.document_url} target="_blank" rel="noopener noreferrer" className="text-xs text-amber-700 hover:underline">Document</a>}
-                      {ack && <AgreementDownloadButton ack={ack} subcontractorName={s.name} projectName={projectById[ack.project_id]?.name} label="PDF" />}
+                      {ack && <AgreementDownloadButton ack={ack} subcontractorName={s.name} label="PDF" />}
                       <Button size="sm" variant="outline" onClick={() => setAckDialog({ open: true, ack: ack || null, subId: s.id })}>
                         {ack ? "View" : "Record"}
                       </Button>
@@ -426,9 +425,9 @@ export default function BuilderPortal({ portal = null }) {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-semibold text-slate-900 flex items-center gap-1.5"><FileSignature className="w-4 h-4 text-emerald-600" /> Your signed agreement</p>
-                    <p className="text-xs text-slate-500">{subName}{ack.project_id ? ` · ${projectById[ack.project_id]?.name || "project"}` : " · all projects"}</p>
+                    <p className="text-xs text-slate-500">{subName} · covers all jobs</p>
                   </div>
-                  <AgreementDownloadButton ack={ack} subcontractorName={subName} projectName={projectById[ack.project_id]?.name} label="Download PDF" primary />
+                  <AgreementDownloadButton ack={ack} subcontractorName={subName} label="Download PDF" primary />
                 </div>
                 <dl className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
                   <div><dt className="text-xs text-slate-500">Signed by</dt><dd className="text-slate-900">{ack.authorized_representative || "—"}</dd></div>
@@ -475,7 +474,6 @@ export default function BuilderPortal({ portal = null }) {
         ack={ackDialog.ack}
         defaultSubId={ackDialog.subId}
         subcontractors={subcontractors}
-        projects={scopedProjects}
         user={user}
         portalMode={isPortal}
         onSaved={onAckSaved}
@@ -536,12 +534,12 @@ function groupBy(list, keyFn) {
 }
 
 // Builds the signed agreement PDF on the device (src/lib/subAgreementPdf.js).
-function AgreementDownloadButton({ ack, subcontractorName, projectName, label, primary = false }) {
+function AgreementDownloadButton({ ack, subcontractorName, label, primary = false }) {
   const [busy, setBusy] = useState(false);
   const run = async () => {
     setBusy(true);
     try {
-      await downloadSubAgreementPdf(ack, { subcontractorName, projectName });
+      await downloadSubAgreementPdf(ack, { subcontractorName });
     } catch (err) {
       alert(`Could not create the PDF: ${err.message}`);
     } finally {
