@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
-  Plus, Trash2, ChevronDown, ChevronRight, Pencil, Check,
+  Plus, Pencil, Check,
   Search, FileText, Link2, Link2Off, ExternalLink, RefreshCw,
   X, Loader2,
 } from "lucide-react";
@@ -15,6 +15,8 @@ import { cn } from "@/lib/utils";
 import QbJobActuals from "@/components/quickbooks/QbJobActuals";
 import { projectedProfit as profitFor, PROFIT_BASIS_LABEL, approvedChangeOrderTotals } from "@/lib/projectProfit";
 import ProjectedProfitDialog from "@/components/financials/ProjectedProfitDialog";
+import JobCostBreakdown from "@/components/financials/JobCostBreakdown";
+import { sectionsFromEstimate, rebuildFromEstimates, isLegacyBreakdown } from "@/lib/jobCostFromEstimate";
 
 function fmt(n) {
   const num = Number(n) || 0;
@@ -133,46 +135,6 @@ function EstimatePickerDialog({ open, onClose, clientId, alreadyLinkedIds, onLin
   );
 }
 
-// ── Build breakdown sections from an estimate's line items ────────────────────
-function buildSectionsFromEstimate(estimate) {
-  const items = Array.isArray(estimate.line_items) ? estimate.line_items : [];
-  const sectionMargins = estimate.section_margins || {};
-
-  // Normalize trade groups (combine "Masonry" + "Masonry Materials")
-  const normKey = t => (t || "").replace(/\s+materials?$/i, "").trim().toLowerCase();
-  const groupMap = {};
-  for (const item of items) {
-    const key = normKey(item.trade);
-    if (!groupMap[key]) groupMap[key] = { displayName: item.trade, items: [] };
-    if (item.sectionType !== "material") groupMap[key].displayName = item.trade;
-    groupMap[key].items.push(item);
-  }
-
-  return Object.values(groupMap).map(({ displayName, items: tradeItems }) => {
-    const secMargin = sectionMargins[displayName];
-    const globalMargin = estimate.margin_override != null ? Number(estimate.margin_override) : 40;
-
-    const budgeted = tradeItems.reduce((sum, item) => {
-      const cost = Number(item.cost_per_unit) || 0;
-      const qty  = Number(item.quantity) || 0;
-      if (!cost) return sum;
-      if (item.sell_override != null) return sum + (Number(item.sell_override) * qty);
-      const mPct = item.margin_override != null ? Number(item.margin_override)
-        : secMargin != null ? Number(secMargin) : globalMargin;
-      const margin = Math.min(Math.max(mPct, 0), 99.9) / 100;
-      return sum + (cost * qty) / (1 - margin);
-    }, 0);
-
-    return {
-      id: newId(),
-      name: displayName,
-      collapsed: false,
-      estimate_sourced: true,
-      items: [{ id: newId(), description: `${displayName} (from estimate)`, budgeted: Math.round(budgeted * 100) / 100, actual: 0, notes: "" }],
-    };
-  }).filter(s => s.items[0].budgeted > 0);
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 export default function ProjectFinancials({ project, onUpdateProject }) {
   const navigate = useNavigate();
@@ -182,11 +144,11 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
   const [kpiEditOpen, setKpiEditOpen] = useState(false);
   const [kpiForm, setKpiForm] = useState({});
 
-  const [sections, setSections] = useState([
-    { id: newId(), name: "Labor",          collapsed: false, items: [{ id: newId(), description: "General Labor", budgeted: 0, actual: 0, notes: "" }] },
-    { id: newId(), name: "Materials",      collapsed: false, items: [{ id: newId(), description: "Materials",     budgeted: 0, actual: 0, notes: "" }] },
-    { id: newId(), name: "Subcontractors", collapsed: false, items: [{ id: newId(), description: "Sub Work",      budgeted: 0, actual: 0, notes: "" }] },
-  ]);
+  // With no estimate linked, start from simple sections to fill in by hand.
+  const [sections, setSections] = useState(() => ["Labor", "Materials", "Subcontractors"].map((name) => ({
+    id: newId(), name, sectionType: "trade", estimate_sourced: false, collapsed: false,
+    items: [{ id: newId(), description: "", unit: "", quantity: 0, est_cost_per_unit: 0, budgeted: 0, actual: 0, notes: "" }],
+  })));
 
   // Safely parse linked_estimate_ids — Supabase JSONB may return string or array
   const getLinkedIds = () => {
@@ -201,23 +163,28 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
     (async () => {
       // Load breakdown
       const results = await base44.entities.JobCostBreakdown.filter({ project_id: project.id }).catch(() => []);
-      if (results.length && results[0].sections?.length) {
-        setSections(results[0].sections);
-        setSyncedBreakdownId(results[0].id);
+      const saved = results.length && results[0].sections?.length ? results[0] : null;
+      if (saved) {
+        setSections(saved.sections);
+        setSyncedBreakdownId(saved.id);
       }
 
       // Load linked estimates
       const linkedIds = getLinkedIds();
-      if (linkedIds.length) {
-        const ests = await Promise.all(
-          linkedIds.map(id => base44.entities.Estimate.get(id).catch(() => null))
-        );
-        setLinkedEstimates(ests.filter(Boolean));
+      const ests = linkedIds.length
+        ? (await Promise.all(linkedIds.map(id => base44.entities.Estimate.get(id).catch(() => null)))).filter(Boolean)
+        : [];
+      setLinkedEstimates(ests);
+
+      // Mirror the estimate line by line: build it the first time, and convert
+      // the old one-line-per-trade breakdown (actual costs are carried over).
+      if (ests.length && (!saved || isLegacyBreakdown(saved.sections))) {
+        await persist(rebuildFromEstimates(ests, saved?.sections || []), saved?.id || null);
       }
     })();
   }, [project.id]);
 
-  const persist = useCallback(async (next) => {
+  const persist = useCallback(async (next, breakdownId = syncedBreakdownId) => {
     setSections(next);
     const nextBudgeted = next.reduce((s, sec) => s + sec.items.reduce((a, i) => a + (Number(i.budgeted) || 0), 0), 0);
     const nextActual   = next.reduce((s, sec) => s + sec.items.reduce((a, i) => a + (Number(i.actual)   || 0), 0), 0);
@@ -226,8 +193,8 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
       costs_to_date: nextActual,
       sync_locked: true,
     });
-    if (syncedBreakdownId) {
-      await base44.entities.JobCostBreakdown.update(syncedBreakdownId, { sections: next }).catch(console.error);
+    if (breakdownId) {
+      await base44.entities.JobCostBreakdown.update(breakdownId, { sections: next }).catch(console.error);
     } else {
       const created = await base44.entities.JobCostBreakdown.create({ project_id: project.id, sections: next });
       setSyncedBreakdownId(created.id);
@@ -243,10 +210,10 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
     await base44.entities.Project.update(project.id, { linked_estimate_ids: next });
     setLinkedEstimates(prev => [...prev, est]);
 
-    // Build new sections from estimate and append to existing
-    const newSections = buildSectionsFromEstimate(est);
-    const merged = [...sections, ...newSections];
-    await persist(merged);
+    // Add the estimate's sections, line by line (replaces untouched starter sections).
+    const isBlankStarter = (sec) => !sec.estimate_sourced && sec.items.every(i => !Number(i.budgeted) && !Number(i.actual) && !(i.description || "").trim());
+    const kept = sections.filter(sec => sec.estimate_id !== est.id && !isBlankStarter(sec));
+    await persist([...kept.filter(sec => sec.estimate_id), ...sectionsFromEstimate(est, sections), ...kept.filter(sec => !sec.estimate_id)]);
 
     // Set contract value from estimate total if not set
     if (!project.contract_value) {
@@ -263,30 +230,20 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
     if (onUpdateProject) onUpdateProject();
   };
 
+  // Pull the estimate's current lines in, keeping actual costs already entered.
   const handleResyncEstimate = async (est) => {
-    const newSections = buildSectionsFromEstimate(est);
-    // Replace sections that came from this estimate (by name match), keep manually added ones
-    const sourcedNames = new Set(newSections.map(s => s.name));
-    const kept = sections.filter(s => !s.estimate_sourced || !sourcedNames.has(s.name));
-    await persist([...kept, ...newSections]);
+    const fresh = await base44.entities.Estimate.get(est.id).catch(() => est);
+    const rebuilt = sectionsFromEstimate(fresh, sections);
+    const at = sections.findIndex(sec => sec.estimate_id === est.id);
+    const others = sections.filter(sec => sec.estimate_id !== est.id && !(sec.estimate_sourced && !sec.estimate_id));
+    const insertAt = at === -1 ? others.filter(sec => sec.estimate_id).length : Math.min(at, others.length);
+    await persist([...others.slice(0, insertAt), ...rebuilt, ...others.slice(insertAt)]);
   };
-
-  // ── Section/item CRUD ───────────────────────────────────────────────────────
-  const updateSection = (sId, field, val) => persist(sections.map(s => s.id === sId ? { ...s, [field]: val } : s));
-  const toggleSection = (sId) => persist(sections.map(s => s.id === sId ? { ...s, collapsed: !s.collapsed } : s));
-  const addSection    = () => persist([...sections, { id: newId(), name: "New Section", collapsed: false, items: [{ id: newId(), description: "", budgeted: 0, actual: 0, notes: "" }] }]);
-  const deleteSection = (sId) => persist(sections.filter(s => s.id !== sId));
-  const addItem       = (sId) => persist(sections.map(s => s.id === sId ? { ...s, items: [...s.items, { id: newId(), description: "", budgeted: 0, actual: 0, notes: "" }] } : s));
-  const updateItem    = (sId, iId, field, val) => persist(sections.map(s => s.id === sId ? { ...s, items: s.items.map(i => i.id === iId ? { ...i, [field]: val } : i) } : s));
-  const deleteItem    = (sId, iId) => persist(sections.map(s => s.id === sId ? { ...s, items: s.items.filter(i => i.id !== iId) } : s));
 
   // ── KPI ─────────────────────────────────────────────────────────────────────
   const contractTotal = project.contract_value || 0;
   const collected     = project.billed_to_date || 0;
   const costsToDate   = project.costs_to_date  || 0;
-  const totalBudgeted = sections.reduce((s, sec) => s + sec.items.reduce((a, i) => a + (Number(i.budgeted) || 0), 0), 0);
-  const totalActual   = sections.reduce((s, sec) => s + sec.items.reduce((a, i) => a + (Number(i.actual)   || 0), 0), 0);
-  const totalVariance = totalBudgeted - totalActual;
   // Approved change orders count toward the 30% projected profit.
   const [profitOpen, setProfitOpen] = useState(false);
   const [approvedCoTotal, setApprovedCoTotal] = useState(0);
@@ -476,92 +433,18 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
         </DialogContent>
       </Dialog>
 
-      {/* Job Cost Breakdown */}
-      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-semibold text-slate-800">Job Cost Breakdown</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Click any cell to edit. Each linked estimate creates its own sections.</p>
-          </div>
-          <Button size="sm" variant="outline" onClick={addSection}>
-            <Plus className="w-4 h-4 mr-1" /> Add Section
-          </Button>
+      {/* Job Cost Breakdown: laid out like the estimate */}
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm">
+        <div className="px-6 py-4 border-b border-slate-100">
+          <h3 className="text-base font-semibold text-slate-800">Job Cost Breakdown</h3>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {linkedEstimates.length
+              ? "Same sections and line items as the linked estimate. Estimated cost is the estimate's cost (not the price); enter actual costs as they come in. Use the ↻ on an estimate above to pull in changes."
+              : "Link an estimate above to lay this out like the estimate, or enter costs by hand."}
+          </p>
         </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[600px] text-sm">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                <th className="text-left px-4 py-3 w-[40%]">Description</th>
-                <th className="text-right px-4 py-3 w-[18%]">Budgeted</th>
-                <th className="text-right px-4 py-3 w-[18%]">Actual</th>
-                <th className="text-right px-4 py-3 w-[18%]">Variance</th>
-                <th className="w-[6%] px-2 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {sections.map(section => {
-                const secBudgeted = section.items.reduce((a, i) => a + (Number(i.budgeted) || 0), 0);
-                const secActual   = section.items.reduce((a, i) => a + (Number(i.actual)   || 0), 0);
-                const secVariance = secBudgeted - secActual;
-                return (
-                  <>
-                    <tr key={section.id} className="bg-slate-700 text-white group/sh">
-                      <td className="px-4 py-2">
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => toggleSection(section.id)} className="text-slate-300 hover:text-white">
-                            {section.collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                          </button>
-                          <EditableCell value={section.name} onChange={v => updateSection(section.id, "name", v)} className="text-white font-bold text-xs uppercase tracking-widest bg-transparent hover:bg-slate-600 w-full" />
-                          {section.estimate_sourced && <span className="text-[9px] font-semibold bg-amber-500/30 text-amber-300 px-1.5 rounded">from estimate</span>}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2 text-right text-slate-300 text-xs font-medium">{fmt(secBudgeted)}</td>
-                      <td className="px-4 py-2 text-right text-slate-300 text-xs font-medium">{fmt(secActual)}</td>
-                      <td className={cn("px-4 py-2 text-right text-xs font-medium", secVariance >= 0 ? "text-emerald-300" : "text-rose-300")}>{fmt(secVariance)}</td>
-                      <td className="px-2 py-2">
-                        <button className="p-1 rounded hover:bg-slate-600 text-slate-400 hover:text-rose-300 opacity-0 group-hover/sh:opacity-100 transition-opacity" onClick={() => deleteSection(section.id)}>
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                    {!section.collapsed && section.items.map(item => {
-                      const variance = (Number(item.budgeted) || 0) - (Number(item.actual) || 0);
-                      return (
-                        <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50 group/row">
-                          <td className="px-4 py-1 pl-10"><EditableCell value={item.description} onChange={v => updateItem(section.id, item.id, "description", v)} className="text-slate-700" /></td>
-                          <td className="px-4 py-1 text-right"><EditableCell value={item.budgeted} onChange={v => updateItem(section.id, item.id, "budgeted", v)} type="number" className="text-slate-700 text-right justify-end" /></td>
-                          <td className="px-4 py-1 text-right"><EditableCell value={item.actual} onChange={v => updateItem(section.id, item.id, "actual", v)} type="number" className="text-slate-700 text-right justify-end" /></td>
-                          <td className={cn("px-4 py-1 text-right text-sm font-medium", variance >= 0 ? "text-emerald-600" : "text-rose-600")}>{fmt(variance)}</td>
-                          <td className="px-2 py-1">
-                            <button className="p-1 rounded hover:bg-rose-100 text-slate-300 hover:text-rose-500 opacity-0 group-hover/row:opacity-100 transition-opacity" onClick={() => deleteItem(section.id, item.id)}>
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {!section.collapsed && (
-                      <tr key={`add-${section.id}`}>
-                        <td colSpan={5} className="px-4 py-1 pl-10">
-                          <button className="text-xs text-slate-400 hover:text-amber-600 flex items-center gap-1 py-1 hover:bg-amber-50 px-2 rounded transition-colors" onClick={() => addItem(section.id)}>
-                            <Plus className="w-3 h-3" /> Add line item
-                          </button>
-                        </td>
-                      </tr>
-                    )}
-                  </>
-                );
-              })}
-              <tr className="border-t-2 border-slate-300 bg-slate-50">
-                <td className="px-4 py-3 font-bold text-slate-800 text-sm">TOTAL</td>
-                <td className="px-4 py-3 text-right font-bold text-slate-800">{fmt(totalBudgeted)}</td>
-                <td className="px-4 py-3 text-right font-bold text-slate-800">{fmt(totalActual)}</td>
-                <td className={cn("px-4 py-3 text-right font-bold", totalVariance >= 0 ? "text-emerald-600" : "text-rose-600")}>{fmt(totalVariance)}</td>
-                <td />
-              </tr>
-            </tbody>
-          </table>
+        <div className="p-4">
+          <JobCostBreakdown sections={sections} estimates={linkedEstimates} onChange={persist} />
         </div>
       </div>
 
