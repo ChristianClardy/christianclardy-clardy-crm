@@ -6,8 +6,11 @@
 //   GET  /api/cron?action=stage-alerts   → lead stage alert cron
 //   GET  /api/cron?action=docusign-sync  → daily backstop: sync open DocuSign
 //                                          envelopes and save any signed contracts
+//   GET  /api/cron?action=qb-sync        → daily backstop: pull QuickBooks changes
+//                                          (webhooks do it live; see api/_lib/quickbooks.js)
 
 const { syncEnvelope } = require('./_lib/docusign.js');
+const quickbooks = require('./_lib/quickbooks.js');
 
 const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -185,7 +188,14 @@ module.exports = async function handler(req, res) {
     if (action === 'calendar') return await handleCalendar(req, res);
     if (action === 'stage-alerts') return await handleStageAlerts(req, res);
     if (action === 'docusign-sync') return await handleDocusignSync(req, res);
-    return res.status(400).json({ error: 'action query param required: calendar, stage-alerts, or docusign-sync' });
+    if (action === 'qb-sync') {
+      if (process.env.CRON_SECRET && req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      if (!(await quickbooks.getConnection())) return res.status(200).json({ skipped: 'QuickBooks not connected' });
+      return res.status(200).json(await quickbooks.sync({ force: true }));
+    }
+    return res.status(400).json({ error: 'action query param required: calendar, stage-alerts, docusign-sync, or qb-sync' });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

@@ -18,6 +18,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
+import { qbAutoPush, qbStatus } from "@/lib/quickbooks";
 import {
   Plus, Trash2, FileText, AlertTriangle, CheckCircle2,
   Clock, DollarSign, TrendingDown, TrendingUp, ShieldCheck,
@@ -89,6 +91,12 @@ export default function ProjectAccounting({ project }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [activeSection, setActiveSection] = useState("ap");
   const [costCodeOptions, setCostCodeOptions] = useState(COST_CODES);
+  // QuickBooks: which sub invoices are bills there, and any message.
+  const [qbBills, setQbBills] = useState(new Set());
+  const [qbConnected, setQbConnected] = useState(false);
+  const [qbNote, setQbNote] = useState("");
+  const [qbBusy, setQbBusy] = useState(null);
+  useEffect(() => { qbStatus().then((s) => setQbConnected(!!s.connected)); }, []);
 
   useEffect(() => { load(); }, [project.id]);
 
@@ -107,6 +115,10 @@ export default function ProjectAccounting({ project }) {
       ]);
       setInvoices(invData);
       setDraws(drawData);
+      if (invData.length) {
+        const { data: links } = await supabase.from("quickbooks_links").select("entity_id").eq("entity_type", "sub_invoice").in("entity_id", invData.map((i) => i.id));
+        setQbBills(new Set((links || []).map((l) => l.entity_id)));
+      }
     } catch (e) {
       console.error("Accounting load failed", e);
     }
@@ -150,20 +162,35 @@ export default function ProjectAccounting({ project }) {
       lien_waiver_date: form.lien_waiver_date || null,
       notes: form.notes,
     };
-    if (editing) {
-      await base44.entities.SubInvoice.update(editing.id, payload);
-    } else {
-      await base44.entities.SubInvoice.create(payload);
-    }
+    const saved = editing
+      ? await base44.entities.SubInvoice.update(editing.id, payload)
+      : await base44.entities.SubInvoice.create(payload);
     setDialogOpen(false);
+    // Bill in QuickBooks, coded to this job (auto, when turned on in Settings).
+    const id = editing?.id || saved?.id;
+    if (id && (qbBills.has(id) || payload.vendor_name)) {
+      const r = await qbAutoPush("push-bill", { sub_invoice_id: id }, "auto_push_bills");
+      setQbNote(r?.error ? `Saved, but not sent to QuickBooks: ${r.error}` : r ? "Saved and sent to QuickBooks as a bill." : "");
+    }
     load();
   };
 
   const handleDelete = async (id) => {
-    if (confirm("Delete this invoice?")) {
-      await base44.entities.SubInvoice.delete(id);
-      load();
+    if (!confirm(qbBills.has(id) ? "Delete this invoice? Its bill is also deleted in QuickBooks." : "Delete this invoice?")) return;
+    if (qbBills.has(id)) {
+      const r = await qbAutoPush("delete-bill", { sub_invoice_id: id });
+      if (r?.error) { alert(`Couldn't delete the bill in QuickBooks, so nothing was deleted: ${r.error}`); return; }
     }
+    await base44.entities.SubInvoice.delete(id);
+    load();
+  };
+
+  const sendBill = async (id) => {
+    setQbBusy(id); setQbNote("");
+    const r = await qbAutoPush("push-bill", { sub_invoice_id: id });
+    setQbBusy(null);
+    setQbNote(r?.error ? `Not sent to QuickBooks: ${r.error}` : "Sent to QuickBooks as a bill.");
+    load();
   };
 
   // ── AP summary metrics ─────────────────────────────────────────────────────
@@ -293,6 +320,7 @@ export default function ProjectAccounting({ project }) {
                 <Plus className="w-4 h-4 mr-1" /> Add Invoice
               </Button>
             </div>
+            {qbNote && <p className={cn("px-5 py-2 text-xs border-b border-slate-100", qbNote.includes("Not sent") || qbNote.includes("not sent") ? "text-amber-700 bg-amber-50" : "text-emerald-700 bg-emerald-50")}>{qbNote}</p>}
 
             {invoices.length === 0 ? (
               <div className="p-12 text-center text-slate-400">
@@ -328,7 +356,21 @@ export default function ProjectAccounting({ project }) {
                           className={cn("border-b border-slate-50 hover:bg-amber-50 cursor-pointer transition-colors", isPaid && "opacity-60")}
                           onClick={() => openDialog(inv)}
                         >
-                          <td className="px-4 py-3 font-medium text-slate-800">{inv.vendor_name || <span className="text-slate-300 italic">—</span>}</td>
+                          <td className="px-4 py-3 font-medium text-slate-800">
+                            {inv.vendor_name || <span className="text-slate-300 italic">—</span>}
+                            {qbBills.has(inv.id) ? (
+                              <span className="ml-1.5 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700" title="Bill in QuickBooks">QB</span>
+                            ) : qbConnected && inv.vendor_name && (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); sendBill(inv.id); }}
+                                disabled={qbBusy === inv.id}
+                                className="ml-1.5 rounded border border-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 hover:border-emerald-300 hover:text-emerald-700"
+                              >
+                                {qbBusy === inv.id ? "Sending…" : "Send to QB"}
+                              </button>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-slate-500 font-mono text-xs">{inv.invoice_number || "—"}</td>
                           <td className="px-4 py-3">
                             {inv.cost_code

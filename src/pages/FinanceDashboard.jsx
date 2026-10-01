@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
+import QbArAging from "@/components/quickbooks/QbArAging";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -282,6 +283,7 @@ export default function FinanceDashboard() {
       {/* ── OVERVIEW ──────────────────────────────────────────────────────────── */}
       {tab === "overview" && (
         <div className="space-y-6">
+          <QbArAging />
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             <KPI label="Active Jobs"            value={activeProjects.length}             color="text-slate-800" />
             <KPI label="Total Contract Value"   value={fmt(totalContract)}                color="text-slate-800" />

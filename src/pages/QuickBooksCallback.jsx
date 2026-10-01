@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/lib/supabase";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
 import { apiFetch } from "@/lib/apiFetch";
 
 /**
  * OAuth 2.0 callback page for QuickBooks.
  * QuickBooks redirects here with ?code=...&realmId=... after the user authorises the app.
- * This page exchanges the code for tokens, stores them in company_profiles,
- * then redirects back to /Settings?tab=quickbooks.
+ * The server exchanges the code and keeps the tokens (never sent to the
+ * browser), then this page returns to /Settings?tab=quickbooks.
  */
 export default function QuickBooksCallback() {
   const navigate = useNavigate();
@@ -39,41 +38,18 @@ export default function QuickBooksCallback() {
   const exchangeCode = async (code, realmId) => {
     try {
       const redirectUri = `${window.location.origin}/QuickBooksCallback`;
+      const state = new URLSearchParams(window.location.search).get("state");
 
+      // The server exchanges the code and stores the tokens itself; they
+      // never come back to the browser (api/_lib/quickbooks.js).
       const res = await apiFetch("/api/quickbooks", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ action: "callback", code, realm_id: realmId, redirect_uri: redirectUri }),
+        body:    JSON.stringify({ action: "callback", code, realm_id: realmId, state, redirect_uri: redirectUri }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to connect QuickBooks.");
-
-      // Persist tokens in company_profiles.settings.quickbooks (org-scoped)
-      const { data: profile, error: dbError } = await supabase
-        .from("company_profiles")
-        .select("id, settings")
-        .limit(1)
-        .single();
-
-      if (dbError || !profile) throw new Error("Could not load company profile.");
-
-      await supabase
-        .from("company_profiles")
-        .update({
-          settings: {
-            ...(profile.settings || {}),
-            quickbooks: {
-              access_token:  data.access_token,
-              refresh_token: data.refresh_token,
-              expires_at:    new Date(Date.now() + data.expires_in * 1000).toISOString(),
-              realm_id:      data.realm_id,
-              company_name:  data.company_name,
-              connected_at:  new Date().toISOString(),
-            },
-          },
-        })
-        .eq("id", profile.id);
 
       setStatus("success");
       setTimeout(() => navigate("/Settings?tab=quickbooks"), 1500);

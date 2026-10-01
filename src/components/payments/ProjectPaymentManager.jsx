@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Trash2, Pencil, Loader2, Receipt, FileText } from "lucide-react";
 import PaymentReceiptModal from "@/components/payments/PaymentReceiptModal";
 import PaymentSummaryReceiptModal from "@/components/payments/PaymentSummaryReceiptModal";
+import { supabase } from "@/lib/supabase";
+import { qbAutoPush } from "@/lib/quickbooks";
 
 const emptyForm = {
   amount_received: "",
@@ -27,6 +29,8 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [qbNote, setQbNote] = useState("");
+  const [qbLinks, setQbLinks] = useState({}); // payment id → { origin }
 
   useEffect(() => {
     loadPayments();
@@ -37,6 +41,22 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
     const data = await base44.entities.Payment.filter({ linked_job_id: projectId }, "-payment_date", 500);
     setPayments(data);
     setLoading(false);
+    loadQbLinks(data);
+  };
+
+  // Which payments are in QuickBooks, and which came from there.
+  const loadQbLinks = async (list) => {
+    if (!list.length) { setQbLinks({}); return; }
+    const { data } = await supabase.from("quickbooks_links").select("entity_id, origin").eq("entity_type", "payment").in("entity_id", list.map((p) => p.id));
+    setQbLinks(Object.fromEntries((data || []).map((l) => [l.entity_id, l])));
+  };
+
+  // Records the payment in QuickBooks (when connected and turned on in
+  // Settings → QuickBooks). Saving in Clardy never waits on QuickBooks.
+  const pushToQb = async (paymentId) => {
+    const r = await qbAutoPush("push-payment", { payment_id: paymentId }, "auto_push_payments");
+    if (r?.error) setQbNote(`Saved, but not sent to QuickBooks: ${r.error}`);
+    else if (r && !r.skipped) setQbNote(r.unapplied > 0 ? `Sent to QuickBooks. $${Number(r.unapplied).toFixed(2)} wasn't matched to an open invoice and is held as a credit there.` : "Sent to QuickBooks and applied to the job's open invoices.");
   };
 
   const totalReceived = useMemo(() => payments.reduce((sum, payment) => sum + (Number(payment.amount_received) || 0), 0), [payments]);
@@ -83,13 +103,16 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
     };
 
     try {
-      if (editingPayment) {
-        await base44.entities.Payment.update(editingPayment.id, payload);
-      } else {
-        await base44.entities.Payment.create(payload);
-      }
+      setQbNote("");
+      const saved = editingPayment
+        ? await base44.entities.Payment.update(editingPayment.id, payload)
+        : await base44.entities.Payment.create(payload);
+      const savedId = editingPayment?.id || saved?.id;
+      // Payments that came from QuickBooks are edited there, not pushed back.
+      if (savedId && qbLinks[savedId]?.origin !== "qb") await pushToQb(savedId);
       const refreshed = await base44.entities.Payment.filter({ linked_job_id: projectId }, "-payment_date", 500);
       setPayments(refreshed);
+      loadQbLinks(refreshed);
       await syncProjectTotals(refreshed);
       setDialogOpen(false);
     } catch (err) {
@@ -100,7 +123,14 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
   };
 
   const handleDelete = async (paymentId) => {
-    if (!confirm("Delete this payment?")) return;
+    const link = qbLinks[paymentId];
+    if (!confirm(link?.origin === "qb"
+      ? "Delete this payment from Clardy? It was recorded in QuickBooks and stays there; delete it in QuickBooks instead to remove it everywhere."
+      : link ? "Delete this payment? It's also removed from QuickBooks." : "Delete this payment?")) return;
+    if (link?.origin === "app") {
+      const r = await qbAutoPush("delete-payment", { payment_id: paymentId });
+      if (r?.error) { alert(`Couldn't remove it from QuickBooks, so it wasn't deleted: ${r.error}`); return; }
+    }
     await base44.entities.Payment.delete(paymentId);
     const refreshed = await base44.entities.Payment.filter({ linked_job_id: projectId }, "-payment_date", 500);
     setPayments(refreshed);
@@ -113,6 +143,7 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
         <div>
           <h3 className="font-semibold text-slate-900">Payments Received</h3>
           <p className="text-xs text-slate-400 mt-0.5">Track manual and synced payments for this project.</p>
+          {qbNote && <p className={`text-xs mt-1 ${qbNote.startsWith("Saved, but") ? "text-amber-700" : "text-emerald-700"}`}>{qbNote}</p>}
         </div>
         <div className="flex items-center gap-2">
           {payments.length > 0 && (
@@ -158,7 +189,14 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
               {payments.map((payment) => (
                 <tr key={payment.id} className="border-b border-slate-100 hover:bg-amber-50/30">
                   <td className="px-4 py-3 text-slate-700">{payment.payment_date || "—"}</td>
-                  <td className="px-4 py-3 text-slate-600">{payment.payment_method || "Other"}</td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {payment.payment_method || "Other"}
+                    {qbLinks[payment.id] && (
+                      <span className="ml-1.5 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700" title={qbLinks[payment.id].origin === "qb" ? "Recorded in QuickBooks" : "Sent to QuickBooks"}>
+                        QB{qbLinks[payment.id].origin === "qb" ? " ←" : ""}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-slate-600">{payment.reference_number || "—"}</td>
                   <td className="px-4 py-3 text-right font-semibold text-slate-900">${Number(payment.amount_received || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   <td className="px-4 py-3 text-slate-500">{payment.notes || "—"}</td>

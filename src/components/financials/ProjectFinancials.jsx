@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import QbJobActuals from "@/components/quickbooks/QbJobActuals";
 
 function fmt(n) {
   const num = Number(n) || 0;
@@ -327,6 +328,8 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
 
   return (
     <div className="space-y-6">
+      <QbJobActuals projectId={project.id} contractValue={project.contract_value || 0} />
+
       {/* Linked Estimates Panel */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
         <div className="px-5 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">

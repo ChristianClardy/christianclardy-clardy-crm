@@ -5,13 +5,15 @@ import InvoicePreviewCard from "@/components/payments/InvoicePreviewCard";
 import InvoicePdfDownloadButton from "@/components/payments/InvoicePdfDownloadButton";
 import { getInvoiceBranding } from "@/components/payments/invoiceBrandingUtils";
 
+// invoice_status_enum values: draft, sent, paid, overdue, cancelled.
 const statusStyles = {
-  Draft: "bg-slate-100 text-slate-700",
-  Sent: "bg-blue-100 text-blue-700",
-  Partial: "bg-amber-100 text-amber-700",
-  Paid: "bg-emerald-100 text-emerald-700",
-  Overdue: "bg-rose-100 text-rose-700",
+  draft: "bg-slate-100 text-slate-700",
+  sent: "bg-blue-100 text-blue-700",
+  paid: "bg-emerald-100 text-emerald-700",
+  overdue: "bg-rose-100 text-rose-700",
+  cancelled: "bg-slate-100 text-slate-400",
 };
+const statusLabel = (s) => { const v = (s || "draft").toLowerCase(); return v.charAt(0).toUpperCase() + v.slice(1); };
 
 export default function InvoicesTable({ invoices, projectMap, clientMap, companyMap, onEdit, onMarkSent, onDelete, onSendToQB, qbSendingId }) {
   const getInvoicePdfTargetId = (invoiceId) => `invoice-preview-${invoiceId}`;
@@ -70,9 +72,9 @@ export default function InvoicesTable({ invoices, projectMap, clientMap, company
                       <td className="px-5 py-4 text-slate-600">{invoice.due_date || "—"}</td>
                       <td className="px-5 py-4 text-right font-semibold text-slate-900">${Number(invoice.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td className="px-5 py-4">
-                        <Badge className={statusStyles[invoice.invoice_status] || statusStyles.Draft}>{invoice.invoice_status || "Draft"}</Badge>
-                        {invoice.qb_sync_status === "synced" && (
-                          <p className="mt-1 text-xs font-medium text-emerald-600">QB ✓</p>
+                        <Badge className={statusStyles[(invoice.invoice_status || "draft").toLowerCase()] || statusStyles.draft}>{statusLabel(invoice.invoice_status)}</Badge>
+                        {invoice.qb_invoice_id && (
+                          <p className="mt-1 text-xs font-medium text-emerald-600">In QuickBooks</p>
                         )}
                       </td>
                       <td className="px-5 py-4">
@@ -90,30 +92,29 @@ export default function InvoicesTable({ invoices, projectMap, clientMap, company
                           <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-500" onClick={() => onDelete(invoice)}>
                             <Trash2 className="w-3.5 h-3.5" />
                           </Button>
-                          {invoice.qb_invoice_id ? (
+                          {invoice.qb_payment_link && (
                             <Button
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 text-emerald-600"
-                              title="View in QuickBooks"
+                              title="Open the customer's Pay now page"
                               onClick={() => window.open(invoice.qb_payment_link, "_blank")}
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
                             </Button>
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-slate-400"
-                              title="Send to QuickBooks"
-                              disabled={qbSendingId === invoice.id}
-                              onClick={() => onSendToQB && onSendToQB(invoice)}
-                            >
-                              {qbSendingId === invoice.id
-                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                : <Cloud className="w-3.5 h-3.5" />}
-                            </Button>
                           )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={invoice.qb_invoice_id ? "h-8 w-8 text-emerald-600" : "h-8 w-8 text-slate-400"}
+                            title={invoice.qb_invoice_id ? "Email again through QuickBooks" : "Send through QuickBooks (emails the client with a Pay now link)"}
+                            disabled={qbSendingId === invoice.id}
+                            onClick={() => onSendToQB && onSendToQB(invoice)}
+                          >
+                            {qbSendingId === invoice.id
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Cloud className="w-3.5 h-3.5" />}
+                          </Button>
                         </div>
                       </td>
                     </tr>

@@ -13,7 +13,7 @@ import { getInvoiceBranding } from "@/components/payments/invoiceBrandingUtils";
 import { DollarSign, Search, CheckCircle2, Clock, AlertCircle, RefreshCw, Plus, Palette, Cloud, ExternalLink, X } from "lucide-react";
 import { getSelectedCompanyScope, subscribeToCompanyScope } from "@/lib/companyScope";
 import { cn } from "@/lib/utils";
-import { apiFetch } from "@/lib/apiFetch";
+import { qbCall, qbAutoPush } from "@/lib/quickbooks";
 
 const statusStyles = {
   pending: "bg-slate-100 text-slate-600",
@@ -45,6 +45,11 @@ export default function Payments() {
 
   useEffect(() => {
     loadData();
+    // Pick up payments made in QuickBooks (e.g. online Pay now) since the
+    // last sync; the server skips this if it synced in the last 5 minutes.
+    qbAutoPush("sync").then((r) => {
+      if (r && !r.skipped && !r.error && (r.payments_added || r.payments_updated || r.payments_removed || r.invoices_updated)) loadData();
+    });
     const unsubScope = subscribeToCompanyScope(setSelectedCompanyScope);
     return () => unsubScope();
   }, []);
@@ -150,11 +155,16 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
       amount: Number(invoiceForm.amount || 0),
       due_date: invoiceForm.due_date || null,
       notes: invoiceForm.notes || "",
-      invoice_status: editingInvoice?.invoice_status || "Draft",
+      invoice_status: editingInvoice?.invoice_status || "draft",
     };
 
     if (editingInvoice) {
       await base44.entities.Invoice.update(editingInvoice.id, payload);
+      // Already in QuickBooks: keep it matching (doesn't re-email the client).
+      if (editingInvoice.qb_invoice_id) {
+        const r = await qbAutoPush("push-invoice", { invoice_id: editingInvoice.id });
+        if (r?.error) setQbError(`Saved in Clardy, but QuickBooks wasn't updated: ${r.error}`);
+      }
     } else {
       await base44.entities.Invoice.create(payload);
     }
@@ -165,13 +175,16 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
 
   const handleMarkInvoiceSent = async (invoice) => {
     await base44.entities.Invoice.update(invoice.id, {
-      invoice_status: "Sent",
+      invoice_status: "sent",
       date_sent: new Date().toISOString().slice(0, 10),
     });
     await loadData();
   };
 
   const handleDeleteInvoice = async (invoice) => {
+    if (!confirm(invoice.qb_invoice_id
+      ? `Delete ${invoice.invoice_name || "this invoice"} from Clardy? It stays in QuickBooks; void or delete it there too if it shouldn't be collected.`
+      : `Delete ${invoice.invoice_name || "this invoice"}?`)) return;
     await base44.entities.Invoice.delete(invoice.id);
     await loadData();
   };
@@ -186,14 +199,8 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
     setQbError(null);
     setQbResult(null);
     try {
-      const res = await apiFetch("/api/quickbooks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "create-invoice", invoice_id: invoice.id }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to push invoice to QuickBooks.");
-      setQbResult({ invoice_name: invoice.invoice_name, qb_payment_link: data.qb_payment_link });
+      const data = await qbCall("push-invoice", { invoice_id: invoice.id, send: true });
+      setQbResult({ invoice_name: invoice.invoice_name, qb_payment_link: data.pay_link, email: data.email });
       await loadData();
     } catch (err) {
       setQbError(err.message);
@@ -250,13 +257,21 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
         <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
           <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-emerald-900">Invoice pushed to QuickBooks</p>
-            <p className="mt-0.5 text-sm text-emerald-700">{qbResult.invoice_name} — client will receive a payment link via email.</p>
+            <p className="font-semibold text-emerald-900">Sent through QuickBooks</p>
+            <p className="mt-0.5 text-sm text-emerald-700">
+              {qbResult.invoice_name} was emailed to {qbResult.email || "the client"}.
+              {qbResult.qb_payment_link ? " It includes a Pay now link (card or bank transfer)." : " No Pay now link: turn on QuickBooks Payments in QuickBooks to let clients pay online."}
+            </p>
             {qbResult.qb_payment_link && (
-              <a href={qbResult.qb_payment_link} target="_blank" rel="noopener noreferrer"
-                className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-emerald-700 underline">
-                <ExternalLink className="h-3.5 w-3.5" /> View in QuickBooks
-              </a>
+              <div className="mt-1 flex flex-wrap gap-3">
+                <a href={qbResult.qb_payment_link} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700 underline">
+                  <ExternalLink className="h-3.5 w-3.5" /> Open Pay now page
+                </a>
+                <button type="button" onClick={() => navigator.clipboard?.writeText(qbResult.qb_payment_link)} className="text-sm font-medium text-emerald-700 underline">
+                  Copy pay link
+                </button>
+              </div>
             )}
           </div>
           <button onClick={() => setQbResult(null)} className="text-emerald-500 hover:text-emerald-700"><X className="h-4 w-4" /></button>
@@ -266,7 +281,7 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
         <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 shadow-sm">
           <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />
           <div className="flex-1">
-            <p className="font-semibold text-rose-900">QuickBooks send failed</p>
+            <p className="font-semibold text-rose-900">QuickBooks</p>
             <p className="mt-0.5 text-sm text-rose-700">{qbError}</p>
           </div>
           <button onClick={() => setQbError(null)} className="text-rose-400 hover:text-rose-600"><X className="h-4 w-4" /></button>
