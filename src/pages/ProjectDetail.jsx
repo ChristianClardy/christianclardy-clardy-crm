@@ -58,6 +58,7 @@ import ChangeOrdersPanel from "@/components/projects/ChangeOrdersPanel";
 import ContractsPanel from "@/components/crm/ContractsPanel";
 import AppointmentsPanel from "@/components/scheduling/AppointmentsPanel";
 import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
+import { reconcileDraws } from "@/lib/draws";
 
 const statusStyles = {
   planning: { label: "Planning", class: "bg-slate-100 text-slate-700" },
@@ -173,6 +174,8 @@ export default function ProjectDetail() {
           await base44.entities.Draw.update(draw.id, { amount: newAmount });
         }
       }
+      // New draw amounts: re-check which are paid by the payments on file.
+      await reconcileDraws(projectId);
     }
 
     setIsEditDialogOpen(false);

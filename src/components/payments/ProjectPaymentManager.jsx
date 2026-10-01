@@ -10,8 +10,10 @@ import PaymentReceiptModal from "@/components/payments/PaymentReceiptModal";
 import PaymentSummaryReceiptModal from "@/components/payments/PaymentSummaryReceiptModal";
 import { supabase } from "@/lib/supabase";
 import { qbAutoPush } from "@/lib/quickbooks";
+import { reconcileDraws, drawRemaining } from "@/lib/draws";
 
 const emptyForm = {
+  draw_id: "",
   amount_received: "",
   payment_date: "",
   payment_method: "Other",
@@ -19,7 +21,10 @@ const emptyForm = {
   notes: "",
 };
 
-export default function ProjectPaymentManager({ projectId, contractValue = 0, acculynxJobId = "", onUpdated }) {
+// Payments drive the draw schedule: each save/delete re-runs
+// reconcileDraws(), and onDrawsChanged lets the Billing tab reload its draws.
+// requestPaymentFor (a draw) opens the dialog prefilled to pay that draw.
+export default function ProjectPaymentManager({ projectId, contractValue = 0, acculynxJobId = "", onUpdated, onDrawsChanged, requestPaymentFor, onRequestHandled }) {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -30,6 +35,7 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [qbNote, setQbNote] = useState("");
+  const [draws, setDraws] = useState([]);
   const [qbLinks, setQbLinks] = useState({}); // payment id → { origin }
 
   useEffect(() => {
@@ -38,10 +44,31 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
 
   const loadPayments = async () => {
     setLoading(true);
-    const data = await base44.entities.Payment.filter({ linked_job_id: projectId }, "-payment_date", 500);
+    const [data, drawRows] = await Promise.all([
+      base44.entities.Payment.filter({ linked_job_id: projectId }, "-payment_date", 500),
+      base44.entities.Draw.filter({ project_id: projectId }, "draw_number").catch(() => []),
+    ]);
     setPayments(data);
+    setDraws(drawRows);
     setLoading(false);
     loadQbLinks(data);
+  };
+
+  // "Record payment" on a draw in the Billing tab.
+  useEffect(() => {
+    if (!requestPaymentFor) return;
+    setSaveError("");
+    setEditingPayment(null);
+    setForm({ ...emptyForm, draw_id: requestPaymentFor.id, amount_received: drawRemaining(requestPaymentFor) || "", payment_date: new Date().toISOString().slice(0, 10) });
+    setDialogOpen(true);
+    onRequestHandled?.();
+  }, [requestPaymentFor]);
+
+  const afterPaymentChange = async () => {
+    await reconcileDraws(projectId);
+    const drawRows = await base44.entities.Draw.filter({ project_id: projectId }, "draw_number").catch(() => []);
+    setDraws(drawRows);
+    onDrawsChanged?.();
   };
 
   // Which payments are in QuickBooks, and which came from there.
@@ -77,6 +104,7 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
       setEditingPayment(payment);
       setForm({
         amount_received: payment.amount_received ?? "",
+        draw_id: payment.draw_id || "",
         payment_date: payment.payment_date || "",
         payment_method: payment.payment_method || "Other",
         reference_number: payment.reference_number || "",
@@ -95,6 +123,7 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
     setSaveError("");
     const payload = {
       linked_job_id: projectId,
+      draw_id: form.draw_id || null,
       amount_received: parseFloat(form.amount_received) || 0,
       payment_date: form.payment_date,
       payment_method: form.payment_method,
@@ -113,6 +142,7 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
       const refreshed = await base44.entities.Payment.filter({ linked_job_id: projectId }, "-payment_date", 500);
       setPayments(refreshed);
       loadQbLinks(refreshed);
+      await afterPaymentChange();
       await syncProjectTotals(refreshed);
       setDialogOpen(false);
     } catch (err) {
@@ -134,6 +164,7 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
     await base44.entities.Payment.delete(paymentId);
     const refreshed = await base44.entities.Payment.filter({ linked_job_id: projectId }, "-payment_date", 500);
     setPayments(refreshed);
+    await afterPaymentChange();
     await syncProjectTotals(refreshed);
   };
 
@@ -242,6 +273,25 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
             <DialogTitle>{editingPayment ? "Edit Payment" : "Add Payment"}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <Label>Apply to draw</Label>
+              <select
+                value={form.draw_id}
+                onChange={(e) => {
+                  const d = draws.find((x) => x.id === e.target.value);
+                  setForm((f) => ({ ...f, draw_id: e.target.value, amount_received: f.amount_received || (d ? drawRemaining(d) : "") }));
+                }}
+                className="mt-1.5 h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"
+              >
+                <option value="">Automatic: oldest unpaid draw first</option>
+                {draws.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    #{d.draw_number} {d.title}{d.status === "paid" && d.id !== form.draw_id ? " (paid)" : ` ($${drawRemaining(d).toLocaleString("en-US", { maximumFractionDigits: 2 })} left)`}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-400 mt-1">The draw schedule updates from payments: a draw is marked paid once payments cover it, and anything extra goes to the next draw.</p>
+            </div>
             <div>
               <Label>Amount *</Label>
               <Input type="number" min="0" step="0.01" value={form.amount_received} onChange={(e) => setForm(f => ({ ...f, amount_received: e.target.value }))} className="mt-1.5" required />

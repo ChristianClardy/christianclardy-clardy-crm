@@ -390,6 +390,8 @@ async function recomputeProjectPaid(projectId) {
   const rows = await sbList('payments', { select: 'amount_received', filters: { linked_job_id: `eq.${projectId}` } });
   const received = money(rows.reduce((s, r) => s + (Number(r.amount_received) || 0), 0));
   await sbUpdate('projects', projectId, { billed_to_date: received }).catch(() => {});
+  // Payments drive the draw schedule (050_payments_drive_draws.sql).
+  await sbFetch('rpc/reconcile_project_draws', { method: 'POST', body: JSON.stringify({ p_project_id: projectId }) }).catch(() => {});
 }
 
 // Records an app payment in QuickBooks, applied to the job's oldest open

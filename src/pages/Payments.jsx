@@ -14,6 +14,7 @@ import { DollarSign, Search, CheckCircle2, Clock, AlertCircle, RefreshCw, Plus, 
 import { getSelectedCompanyScope, subscribeToCompanyScope } from "@/lib/companyScope";
 import { cn } from "@/lib/utils";
 import { qbCall, qbAutoPush } from "@/lib/quickbooks";
+import { isPartlyPaid, drawRemaining } from "@/lib/draws";
 
 const statusStyles = {
   pending: "bg-slate-100 text-slate-600",
@@ -349,7 +350,14 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
                       <td className="px-5 py-4 text-slate-600">{client?.name || "—"}</td>
                       <td className="px-5 py-4 text-right font-semibold text-slate-900">${Number(draw.amount || 0).toLocaleString()}</td>
                       <td className="px-5 py-4 text-center">
-                        <Badge className={cn("capitalize", statusStyles[draw.status] || statusStyles.pending)}>{draw.status || "pending"}</Badge>
+                        {isPartlyPaid(draw) ? (
+                          <>
+                            <Badge className="bg-amber-100 text-amber-800">Partially paid</Badge>
+                            <p className="mt-1 text-xs text-slate-500">${Number(draw.amount_paid).toLocaleString()} paid · ${drawRemaining(draw).toLocaleString()} left</p>
+                          </>
+                        ) : (
+                          <Badge className={cn("capitalize", statusStyles[draw.status] || statusStyles.pending)}>{draw.status || "pending"}</Badge>
+                        )}
                       </td>
                       <td className="px-5 py-4 text-slate-500">{draw.due_date || "—"}</td>
                       <td className="px-5 py-4 text-slate-500">{draw.paid_date || "—"}</td>

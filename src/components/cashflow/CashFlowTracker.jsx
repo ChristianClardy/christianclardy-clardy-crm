@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { Plus, Edit2, Trash2, DollarSign, TrendingUp, CheckCircle2, Clock, AlertCircle, Link2, ThumbsUp, ThumbsDown, Send, LayoutList } from "lucide-react";
 import ProjectPaymentManager from "@/components/payments/ProjectPaymentManager";
 import { buildDraws, hasBuilderFee } from "@/lib/drawSchedule";
+import { reconcileDraws, drawRemaining, isPartlyPaid } from "@/lib/draws";
 
 const statusConfig = {
   pending:   { label: "Pending",   class: "bg-slate-100 text-slate-600",   icon: Clock },
@@ -57,6 +58,8 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
   const [selectedTemplateId, setSelectedTemplateId] = useState(null);
   const [applyingTemplate, setApplyingTemplate] = useState(false);
   const [builderFee, setBuilderFee] = useState("");
+  // Draw whose "Record payment" was clicked; ProjectPaymentManager opens its dialog for it.
+  const [payForDraw, setPayForDraw] = useState(null);
 
   useEffect(() => {
     loadDraws();
@@ -142,9 +145,9 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
       title: form.title,
       percent_of_contract: parseFloat(form.percent_of_contract) || 0,
       amount: drawAmt,
-      status: newStatus,
+      // 'paid' and the paid date come from payments (reconcileDraws).
+      status: newStatus === "paid" && editingDraw?.status !== "paid" ? "pending" : newStatus,
       due_date: form.due_date || null,
-      paid_date: form.paid_date || null,
       notes: form.notes,
       linked_task_id: form.linked_task_id || null,
       draw_number: editingDraw ? editingDraw.draw_number : (draws.length + 1),
@@ -169,6 +172,7 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
     }
 
     setDialogOpen(false);
+    await reconcileDraws(projectId);
     loadDraws();
   };
 
@@ -182,6 +186,7 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
   const handleDelete = async (drawId) => {
     if (confirm("Delete this draw?")) {
       await base44.entities.Draw.delete(drawId);
+      await reconcileDraws(projectId);
       loadDraws();
     }
   };
@@ -230,6 +235,7 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
       await base44.entities.Project.update(projectId, { builder_fee: feeValue }).catch(() => {});
       onProjectUpdated?.();
     }
+    await reconcileDraws(projectId);
     setApplyingTemplate(false);
     setTemplateDialogOpen(false);
     loadDraws();
@@ -237,7 +243,8 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
 
   const totalPercent = draws.reduce((s, d) => s + (d.percent_of_contract || 0), 0);
   const totalAmount = draws.reduce((s, d) => s + (d.amount || 0), 0);
-  const paidAmount = draws.filter(d => d.status === "paid").reduce((s, d) => s + (d.amount || 0), 0);
+  // Collected against the schedule (partial payments included).
+  const paidAmount = draws.reduce((s, d) => s + (d.amount_paid != null ? Number(d.amount_paid) || 0 : (d.status === "paid" ? d.amount || 0 : 0)), 0);
   const outstandingAmount = totalAmount - paidAmount;
   const totalRetainageHeld = draws.reduce((s, d) => s + (d.retainage_released ? 0 : (d.retainage_held || 0)), 0);
   const totalRetainageReleased = draws.reduce((s, d) => s + (d.retainage_released ? (d.retainage_held || 0) : 0), 0);
@@ -376,10 +383,19 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
                         <span className="font-semibold text-slate-900">{fmt(draw.amount)}</span>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <Badge className={cn("text-xs font-medium gap-1 whitespace-nowrap", sc.class)}>
-                          <Icon className="w-3 h-3" />
-                          {sc.label}
-                        </Badge>
+                        {isPartlyPaid(draw) ? (
+                          <>
+                            <Badge className="text-xs font-medium gap-1 whitespace-nowrap bg-amber-100 text-amber-800">
+                              <Clock className="w-3 h-3" /> Partially paid
+                            </Badge>
+                            <p className="text-[11px] text-slate-500 mt-0.5">{fmt(draw.amount_paid)} paid · {fmt(drawRemaining(draw))} left</p>
+                          </>
+                        ) : (
+                          <Badge className={cn("text-xs font-medium gap-1 whitespace-nowrap", sc.class)}>
+                            <Icon className="w-3 h-3" />
+                            {sc.label}
+                          </Badge>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right">
                         {draw.retainage_held > 0 ? (
@@ -416,6 +432,11 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
                               </Button>
                             </>
                           )}
+                          {draw.status !== "paid" && drawRemaining(draw) > 0 && (
+                            <Button size="sm" variant="outline" className="h-7 px-2 text-xs text-emerald-700 border-emerald-200 hover:bg-emerald-50" onClick={() => setPayForDraw(draw)}>
+                              <DollarSign className="w-3 h-3 mr-1" /> Record payment
+                            </Button>
+                          )}
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-rose-400" onClick={() => handleDelete(draw.id)}>
                             <Trash2 className="w-3 h-3" />
                           </Button>
@@ -445,6 +466,9 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
         contractValue={contractValue}
         acculynxJobId={acculynxJobId}
         onUpdated={onProjectUpdated}
+        onDrawsChanged={loadDraws}
+        requestPaymentFor={payForDraw}
+        onRequestHandled={() => setPayForDraw(null)}
         project={project}
         client={client}
         company={company}
@@ -647,15 +671,19 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
                   </span>
                 )}
               </Label>
-              <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
-                <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="submitted">Submitted</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
-                  <SelectItem value="paid">Paid</SelectItem>
-                </SelectContent>
-              </Select>
+              {editingDraw?.status === "paid" ? (
+                <p className="mt-1.5 text-sm text-emerald-700">Paid{editingDraw.paid_date ? ` ${editingDraw.paid_date}` : ""}, from payments recorded on this project.</p>
+              ) : (
+                <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
+                  <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="submitted">Submitted</SelectItem>
+                    <SelectItem value="approved">Approved</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+              <p className="text-xs text-slate-400 mt-1">Draws are marked paid automatically when payments cover them. Use Record payment on the draw.</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -663,10 +691,7 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
                 <Label>Due Date</Label>
                 <Input type="date" value={form.due_date} onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))} className="mt-1.5" />
               </div>
-              <div>
-                <Label>Paid Date</Label>
-                <Input type="date" value={form.paid_date} onChange={e => setForm(f => ({ ...f, paid_date: e.target.value }))} className="mt-1.5" />
-              </div>
+
             </div>
 
             <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 space-y-3">
