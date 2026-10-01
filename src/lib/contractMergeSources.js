@@ -51,6 +51,9 @@ export const MERGE_SOURCES = [
   { value: "project.manager",      label: "Project — Manager",         group: "Project",  description: "Assigned project manager." },
   { value: "project.contract_value", label: "Project — Contract Value ($)", group: "Project", description: "Total contract value on the project record, formatted as currency." },
   { value: "project.start_date",   label: "Project — Start Date",      group: "Project",  description: "Planned or actual start date." },
+  { value: "project.builder_fee",  label: "Project — Builder Fee ($)", group: "Project",  description: "The flat builder fee included in the contract value. Set when a builder fee payment schedule is applied on the Billing tab, or in the project's Edit dialog." },
+  { value: "project.builder_fee_words", label: "Project — Builder Fee in Words", group: "Project", description: "The builder fee written out, e.g. \"Fifteen Thousand and 00/100 Dollars\"." },
+  { value: "project.cost_of_construction", label: "Project — Cost of Construction ($)", group: "Project", description: "Contract value minus the builder fee: the amount the milestone percentages split." },
   { value: "project.end_date",     label: "Project — End Date",        group: "Project",  description: "Planned or actual end date." },
 
   { value: "estimate.number",      label: "Estimate — Number",         group: "Estimate", description: "Estimate number, if the client has an estimate on file." },
@@ -349,6 +352,9 @@ export function resolveContractMergeValue(source, { deal, client, company, proje
     case "project.manager":          return project?.project_manager || "";
     case "project.contract_value":   return project?.contract_value != null ? formatCurrency(project.contract_value) : "";
     case "project.start_date":       return project?.start_date || "";
+    case "project.builder_fee":            return project?.builder_fee != null ? formatMoney(project.builder_fee) : "";
+    case "project.builder_fee_words":      return project?.builder_fee != null ? moneyInWords(project.builder_fee) : "";
+    case "project.cost_of_construction":   return project ? formatMoney(Number(project.contract_value || 0) - Number(project.builder_fee || 0)) : "";
     case "project.end_date":         return project?.end_date || "";
 
     case "estimate.number":          return estimate?.estimate_number || "";
@@ -503,6 +509,7 @@ export const SAMPLE_CONTEXT = {
     status: "in_progress",
     project_manager: "Alex Manager",
     contract_value: 45000,
+    builder_fee: 6750,
     start_date: "2026-11-01",
     end_date: "2027-02-01",
   },

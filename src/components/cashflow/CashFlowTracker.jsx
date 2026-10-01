@@ -197,7 +197,7 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
     const { data } = await query;
     setAvailableTemplates(data || []);
     setSelectedTemplateId(null);
-    setBuilderFee("");
+    setBuilderFee(project?.builder_fee ? String(project.builder_fee) : "");
     setTemplateDialogOpen(true);
   };
 
@@ -224,6 +224,11 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
         draw_number: startDrawNumber + i,
         ...(d.notes ? { notes: d.notes } : {}),
       });
+    }
+    // Remember the fee on the project ({{project.builder_fee}} merge fields).
+    if (selectedHasFee) {
+      await base44.entities.Project.update(projectId, { builder_fee: feeValue }).catch(() => {});
+      onProjectUpdated?.();
     }
     setApplyingTemplate(false);
     setTemplateDialogOpen(false);

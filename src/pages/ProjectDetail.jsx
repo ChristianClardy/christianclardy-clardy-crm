@@ -155,6 +155,7 @@ export default function ProjectDetail() {
     await base44.entities.Project.update(projectId, {
       ...formData,
       contract_value: newContractValue,
+      builder_fee: formData.builder_fee === "" || formData.builder_fee == null ? null : parseFloat(formData.builder_fee) || 0,
       costs_to_date: parseFloat(formData.costs_to_date) || 0,
       original_costs: parseFloat(formData.original_costs) || 0,
       amendment_costs: parseFloat(formData.amendment_costs) || 0,
@@ -566,14 +567,26 @@ export default function ProjectDetail() {
                 />
               </div>
             </div>
-            <div>
-              <Label>Contract Value ($)</Label>
-              <Input
-                type="number"
-                value={formData.contract_value || ""}
-                onChange={(e) => setFormData({ ...formData, contract_value: e.target.value })}
-                className="mt-1.5"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Contract Value ($)</Label>
+                <Input
+                  type="number"
+                  value={formData.contract_value || ""}
+                  onChange={(e) => setFormData({ ...formData, contract_value: e.target.value })}
+                  className="mt-1.5"
+                />
+              </div>
+              <div>
+                <Label>Builder Fee ($)</Label>
+                <Input
+                  type="number"
+                  value={formData.builder_fee ?? ""}
+                  onChange={(e) => setFormData({ ...formData, builder_fee: e.target.value })}
+                  placeholder="Flat fee included in the contract"
+                  className="mt-1.5"
+                />
+              </div>
             </div>
 
             {/* Original Costs */}

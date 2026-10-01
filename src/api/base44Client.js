@@ -93,7 +93,7 @@ const TABLE_OPTIONAL_FIELDS = {
   estimates: new Set(['section_margins','is_locked','locked_at','locked_by','amendment_of','amendment_number']),
   leads: new Set(['property_address', 'estimated_budget', 'lost_reason', 'lost_reason_notes', 'assigned_designer']),
   payments: new Set(['acculynx_job_id','acculynx_payment_id','payment_id','source','collected_to_date','remaining_balance']),
-  projects: new Set(['collected_to_date','remaining_balance','linked_estimate_ids','actual_completion_date','baseline_end_date']),
+  projects: new Set(['collected_to_date','remaining_balance','linked_estimate_ids','actual_completion_date','baseline_end_date','builder_fee']),
   barrier_daily_logs: new Set(['weather','temperature_f','crew_count','delays']),
   permit_inspection_tasks: new Set(['result','inspector','result_date','schedule_row_id','photos']),
   draws: new Set(['retainage_percent','retainage_held','retainage_released','percent_of_contract','linked_task_id']),
