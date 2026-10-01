@@ -140,7 +140,12 @@ export default function BuilderPortal({ portal = null }) {
 
   const openLog = (log = null, projectId = null) => setLogDialog({ open: true, log, projectId });
   const onLogSaved = (saved) => setLogs((prev) => [saved, ...prev.filter((l) => l.id !== saved.id)].sort((a, b) => (b.log_date || "").localeCompare(a.log_date || "")));
-  const onAckSaved = (saved) => setAcks((prev) => [saved, ...prev.filter((a) => a.id !== saved.id)]);
+  // A sub's jobs, logs and schedule stay closed until the agreement is signed
+  // (047_require_sub_agreement.sql), so reload everything once they sign.
+  const onAckSaved = (saved) => {
+    setAcks((prev) => [saved, ...prev.filter((a) => a.id !== saved.id)]);
+    if (isPortal) load();
+  };
 
   const deleteLog = async (log) => {
     if (!confirm(`Delete the ${fmtDate(log.log_date)} log for ${projectById[log.project_id]?.name || "this project"}?`)) return;
@@ -153,6 +158,45 @@ export default function BuilderPortal({ portal = null }) {
       <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
     </div>
   );
+
+  // Unsigned subcontractor: the agreement is the only thing they can see.
+  if (isPortal && !latestAckBySub[portal.subcontractor_id]) {
+    return (
+      <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-4">
+        <div className="rounded-2xl border bg-white p-5 space-y-2" style={{ borderColor: "#ddd5c8" }}>
+          <h1 className="text-xl font-bold flex items-center gap-2" style={{ color: "#3d3530" }}>
+            <FileSignature className="w-6 h-6" style={{ color: "#b5965a" }} /> Sign the Subcontractor Agreement
+          </h1>
+          <p className="text-sm" style={{ color: "#7a6e66" }}>
+            Welcome{subcontractors[0]?.name ? `, ${subcontractors[0].name}` : ""}. Before you can see your jobs, schedule or daily logs,
+            your company needs to read and sign the Principle Outdoor Living Subcontractor Agreement below.
+          </p>
+          <Button onClick={() => setAckDialog({ open: true, ack: null, subId: portal.subcontractor_id })} className="w-full sm:w-auto" style={{ backgroundColor: "#b5965a", color: "#f5f0eb" }}>
+            <FileSignature className="w-4 h-4 mr-1" /> Read and sign the agreement
+          </Button>
+        </div>
+        <div className="rounded-2xl border bg-white p-5 space-y-3" style={{ borderColor: "#ddd5c8" }}>
+          <h2 className="font-semibold text-slate-900">{AGREEMENT_TITLE}</h2>
+          <ol className="space-y-2 list-decimal list-inside">
+            {SUB_REQUIREMENTS.map(([title, body]) => (
+              <li key={title} className="text-sm text-slate-600"><span className="font-medium text-slate-800">{title}.</span> {body}</li>
+            ))}
+          </ol>
+        </div>
+        <SubAcknowledgmentDialog
+          open={ackDialog.open}
+          onOpenChange={(open) => setAckDialog((d) => ({ ...d, open }))}
+          ack={null}
+          defaultSubId={portal.subcontractor_id}
+          subcontractors={subcontractors}
+          projects={[]}
+          user={user}
+          portalMode
+          onSaved={onAckSaved}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6">
