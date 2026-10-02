@@ -4,6 +4,8 @@ import { Calendar, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import moment from "moment";
 import ClientWorkflowControl from "@/components/clients/ClientWorkflowControl";
+import ProjectStatusPicker from "@/components/projects/ProjectStatusPicker";
+import { useEffect, useState } from "react";
 
 const statusStyles = {
   planning:        { label: "Planning",     bg: "#ede6dd", color: "#5a4f48" },
@@ -22,7 +24,10 @@ const typeColors = {
 };
 
 // showMoney=false hides the contract value (roles without money access).
-export default function ProjectCard({ project, client, showMoney = true }) {
+export default function ProjectCard({ project: initialProject, client, showMoney = true }) {
+  // The status badge changes the status in place (ProjectStatusPicker).
+  const [project, setProject] = useState(initialProject);
+  useEffect(() => setProject(initialProject), [initialProject]);
   const status = statusStyles[project.status] || statusStyles.planning;
   const accentColor = typeColors[project.project_type] || typeColors.residential;
   const clientName = client?.name || "";
@@ -58,12 +63,12 @@ export default function ProjectCard({ project, client, showMoney = true }) {
                 </p>
               )}
             </div>
-            <span
+            <ProjectStatusPicker
+              project={project}
+              onChange={(updated) => setProject((p) => ({ ...p, status: updated.status }))}
               className="text-xs font-medium px-2.5 py-1 rounded-sm whitespace-nowrap tracking-wide flex-shrink-0"
               style={{ backgroundColor: status.bg, color: status.color, letterSpacing: "0.04em" }}
-            >
-              {status.label}
-            </span>
+            />
           </div>
 
           {/* Progress */}

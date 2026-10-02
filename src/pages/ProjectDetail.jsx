@@ -26,7 +26,6 @@ import {
   ShieldOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -64,6 +63,7 @@ import { reconcileDraws } from "@/lib/draws";
 import { rescaleDraws } from "@/lib/drawSchedule";
 import { useRolePermissions } from "@/lib/useRolePermissions";
 import { PROJECT_TAB_MODULE } from "@/lib/permissions";
+import ProjectStatusPicker from "@/components/projects/ProjectStatusPicker";
 
 const statusStyles = {
   planning: { label: "Planning", class: "bg-slate-100 text-slate-700" },
@@ -245,7 +245,11 @@ export default function ProjectDetail() {
             <h1 className="text-2xl lg:text-3xl font-bold text-slate-900 tracking-tight">
               {client?.name || project.name}
             </h1>
-            <Badge className={cn("font-medium", status.class)}>{status.label}</Badge>
+            <ProjectStatusPicker
+              project={project}
+              onChange={(updated) => setProject((p) => ({ ...p, status: updated.status }))}
+              className={cn("rounded-md px-2.5 py-0.5 text-xs font-medium", status.class)}
+            />
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             {project.name && project.name !== client?.name && (
