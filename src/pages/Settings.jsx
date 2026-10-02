@@ -345,13 +345,15 @@ function PermissionsTab() {
         </div>
       </div>
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        {/* Sized to the screen so the side-to-side scrollbar is always in view;
+            role names stay pinned on top and module names on the left. */}
+        <div className="overflow-auto max-h-[calc(100vh-13rem)] min-h-[320px]">
+          <table className="w-full text-sm border-separate border-spacing-0">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 w-52">Module</th>
+                <th className="sticky top-0 left-0 z-30 bg-slate-50 border-b border-r border-slate-200 px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 w-52 min-w-[13rem]">Module</th>
                 {ROLES.map(role => (
-                  <th key={role.key} title={role.blurb} className="px-3 py-3 text-center min-w-[104px] align-bottom">
+                  <th key={role.key} title={role.blurb} className="sticky top-0 z-20 bg-slate-50 border-b border-slate-200 px-3 py-3 text-center min-w-[104px] align-bottom">
                     <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", role.color)}>{role.label}</span>
                   </th>
                 ))}
@@ -361,11 +363,13 @@ function PermissionsTab() {
               {MODULE_GROUPS.map((group) => (
                 <Fragment key={group.label}>
                   <tr className="bg-slate-100/80 border-b border-slate-200">
-                    <td colSpan={ROLES.length + 1} className="px-5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">{group.label}</td>
+                    <td colSpan={ROLES.length + 1} className="py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                      <span className="sticky left-0 px-5">{group.label}</span>
+                    </td>
                   </tr>
                   {group.modules.map((mod, i) => (
                     <tr key={mod.key} className={cn("border-b border-slate-100", i % 2 === 0 ? "bg-white" : "bg-slate-50/50")}>
-                      <td className="px-5 py-3">
+                      <td className={cn("sticky left-0 z-10 border-r border-b border-slate-100 px-5 py-3", i % 2 === 0 ? "bg-white" : "bg-slate-50")}>
                         <p className="font-medium text-slate-800 text-sm">{mod.label}</p>
                         <p className="text-xs text-slate-400 mt-0.5">{mod.description}</p>
                       </td>
@@ -373,7 +377,7 @@ function PermissionsTab() {
                         const allowed = permissions[role.key]?.[mod.key] ?? false;
                         const isAdmin = role.key === "admin";
                         return (
-                          <td key={role.key} className="px-4 py-3 text-center">
+                          <td key={role.key} className="px-4 py-3 text-center border-b border-slate-100">
                             <button
                               onClick={() => toggle(role.key, mod.key)}
                               disabled={isAdmin || !canEdit}
