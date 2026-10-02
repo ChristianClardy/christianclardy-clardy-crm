@@ -2,29 +2,33 @@ import { useState } from "react";
 import { FolderKanban, AlertTriangle, TrendingDown, DollarSign, TrendingUp, Users, CheckCircle2, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// money: only shown to roles with money access (job costs or billing).
 const ALL_KPIS = [
   { key: "active_projects", label: "Active Projects", icon: FolderKanban, color: "#b5965a" },
   { key: "nearing_deadline", label: "Nearing Deadline", icon: AlertTriangle, color: "#f59e0b" },
-  { key: "over_budget", label: "Over Budget", icon: TrendingDown, color: "#ef4444" },
+  { key: "over_budget", label: "Over Budget", icon: TrendingDown, color: "#ef4444", money: true },
   { key: "total_clients", label: "Total Clients", icon: Users, color: "#6366f1" },
-  { key: "contract_value", label: "Contract Value", icon: DollarSign, color: "#10b981" },
-  { key: "billed_to_date", label: "Billed to Date", icon: TrendingUp, color: "#3b82f6" },
+  { key: "contract_value", label: "Contract Value", icon: DollarSign, color: "#10b981", money: true },
+  { key: "billed_to_date", label: "Collected to Date", icon: TrendingUp, color: "#3b82f6", money: true },
   { key: "completed_projects", label: "Completed Projects", icon: CheckCircle2, color: "#22c55e" },
   { key: "on_hold", label: "On Hold", icon: FolderKanban, color: "#94a3b8" },
 ];
 
 const DEFAULT_KPIS = ["active_projects", "nearing_deadline", "over_budget", "contract_value"];
 
-function computeKPIValue(key, projects, clients) {
+// Planning = signed and being set up; still an active job.
+const ACTIVE_STATUSES = new Set(["planning", "in_progress"]);
+
+function computeKPIValue(key, projects, clientCount) {
   const today = new Date();
   const in14Days = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
   switch (key) {
     case "active_projects":
-      return { value: projects.filter(p => p.status === "in_progress").length, sub: `of ${projects.length} total` };
+      return { value: projects.filter(p => ACTIVE_STATUSES.has(p.status)).length, sub: `of ${projects.length} total` };
     case "nearing_deadline":
       return {
         value: projects.filter(p => {
-          if (!p.end_date || p.status === "completed") return false;
+          if (!p.end_date || !ACTIVE_STATUSES.has(p.status)) return false;
           const end = new Date(p.end_date);
           return end >= today && end <= in14Days;
         }).length,
@@ -35,10 +39,11 @@ function computeKPIValue(key, projects, clients) {
       return { value: ob, sub: "costs exceed contract" };
     }
     case "total_clients":
-      return { value: clients.length, sub: "active accounts" };
+      return { value: clientCount ?? "–", sub: "in this company" };
     case "contract_value": {
-      const total = projects.reduce((s, p) => s + (p.contract_value || 0), 0);
-      return { value: `$${total >= 1000000 ? (total / 1000000).toFixed(1) + "M" : (total / 1000).toFixed(0) + "K"}`, sub: "all projects" };
+      const open = projects.filter(p => ACTIVE_STATUSES.has(p.status));
+      const total = open.reduce((s, p) => s + (p.contract_value || 0), 0);
+      return { value: `$${total >= 1000000 ? (total / 1000000).toFixed(1) + "M" : (total / 1000).toFixed(0) + "K"}`, sub: "active projects" };
     }
     case "billed_to_date": {
       const billed = projects.reduce((s, p) => s + (p.billed_to_date || 0), 0);
@@ -54,9 +59,10 @@ function computeKPIValue(key, projects, clients) {
   }
 }
 
-export default function KPIGrid({ projects, clients }) {
-  const stored = localStorage.getItem("dashboard_kpis");
-  const [selected, setSelected] = useState(stored ? JSON.parse(stored) : DEFAULT_KPIS);
+export default function KPIGrid({ projects, clientCount, showMoney = true }) {
+  const [selected, setSelected] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("dashboard_kpis")) || DEFAULT_KPIS; } catch { return DEFAULT_KPIS; }
+  });
   const [editing, setEditing] = useState(false);
 
   const toggle = (key) => {
@@ -64,10 +70,11 @@ export default function KPIGrid({ projects, clients }) {
       ? selected.filter(k => k !== key)
       : [...selected, key];
     setSelected(next);
-    localStorage.setItem("dashboard_kpis", JSON.stringify(next));
+    try { localStorage.setItem("dashboard_kpis", JSON.stringify(next)); } catch { /* private window */ }
   };
 
-  const visibleKPIs = ALL_KPIS.filter(k => selected.includes(k.key));
+  const offered = ALL_KPIS.filter(k => showMoney || !k.money);
+  const visibleKPIs = offered.filter(k => selected.includes(k.key));
 
   return (
     <div>
@@ -89,7 +96,7 @@ export default function KPIGrid({ projects, clients }) {
         <div className="mb-4 p-3 rounded-lg border border-amber-200 bg-amber-50">
           <p className="text-xs text-amber-700 font-medium mb-2">Select KPIs to display:</p>
           <div className="flex flex-wrap gap-2">
-            {ALL_KPIS.map(kpi => (
+            {offered.map(kpi => (
               <button
                 key={kpi.key}
                 onClick={() => toggle(kpi.key)}
@@ -110,7 +117,7 @@ export default function KPIGrid({ projects, clients }) {
 
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {visibleKPIs.map(kpi => {
-          const { value, sub } = computeKPIValue(kpi.key, projects, clients);
+          const { value, sub } = computeKPIValue(kpi.key, projects, clientCount);
           const isAlert = (kpi.key === "nearing_deadline" && value > 0) || (kpi.key === "over_budget" && value > 0);
           return (
             <div

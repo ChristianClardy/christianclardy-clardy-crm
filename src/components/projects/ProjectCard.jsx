@@ -21,7 +21,8 @@ const typeColors = {
   infrastructure:  "#8a7a6a",
 };
 
-export default function ProjectCard({ project, client }) {
+// showMoney=false hides the contract value (roles without money access).
+export default function ProjectCard({ project, client, showMoney = true }) {
   const status = statusStyles[project.status] || statusStyles.planning;
   const accentColor = typeColors[project.project_type] || typeColors.residential;
   const clientName = client?.name || "";
@@ -96,7 +97,7 @@ export default function ProjectCard({ project, client }) {
           </div>
 
           {/* Contract value */}
-          {project.contract_value > 0 && (
+          {showMoney && project.contract_value > 0 && (
             <div className="mt-4 pt-4" style={{ borderTop: "1px solid #ede6dd" }}>
               <div className="flex items-center justify-between">
                 <span className="text-sm" style={{ color: "#7a6e66" }}>Contract Value</span>

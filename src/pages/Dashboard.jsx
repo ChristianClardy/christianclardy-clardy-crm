@@ -16,7 +16,10 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  Lock,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { useRolePermissions } from "@/lib/useRolePermissions";
 import ProjectCard from "@/components/projects/ProjectCard";
 import TimelineChart from "@/components/timeline/TimelineChart";
 import DeadlineAlerts from "@/components/dashboard/DeadlineAlerts";
@@ -31,10 +34,24 @@ import { getSelectedCompanyScope, subscribeToCompanyScope } from "@/lib/companyS
 export default function Dashboard() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
-  const [clients, setClients] = useState([]);
+  const [clients, setClients] = useState([]); // just the clients of the projects shown
+  const [clientCount, setClientCount] = useState(null);
   const [sheets, setSheets] = useState([]);
   const [selectedCompanyScope, setSelectedCompanyScope] = useState(getSelectedCompanyScope());
   const [loading, setLoading] = useState(true);
+  // Dollar amounts follow the same rule as a project's page; a view-only
+  // login doesn't get the New Project button.
+  const { can, readOnly } = useRolePermissions();
+  const showMoney = can("job_costs") || can("project_billing");
+  const canCreateProject = can("projects") && !readOnly;
+
+  // Total Clients counts every client in the selected company, not just
+  // the ones loaded for the project cards.
+  useEffect(() => {
+    let query = supabase.from("clients").select("id", { count: "exact", head: true });
+    if (selectedCompanyScope !== "all") query = query.eq("company_id", selectedCompanyScope);
+    query.then(({ count, error }) => setClientCount(error ? null : count));
+  }, [selectedCompanyScope]);
 
   useEffect(() => {
     loadData();
@@ -43,11 +60,16 @@ export default function Dashboard() {
   }, []);
 
   const loadData = async () => {
-    const [projectsData, clientsData, sheetsData] = await Promise.all([
-      base44.entities.Project.list("-created_date", 50),
-      base44.entities.Client.list("-created_date", 50),
-      base44.entities.ProjectSheet.list("-created_date", 100),
+    const [projectsData, sheetsData] = await Promise.all([
+      base44.entities.Project.list("-created_date", 500),
+      base44.entities.ProjectSheet.list("-created_date", 500),
     ]);
+    // The projects' own clients, however old (a "newest 50 clients" list
+    // left older clients' projects showing "Unknown Client").
+    const clientIds = [...new Set(projectsData.map((p) => p.client_id).filter(Boolean))];
+    const clientsData = clientIds.length
+      ? (await supabase.from("clients").select("*").in("id", clientIds)).data || []
+      : [];
 
     // Build a map of project_id -> sheet dates derived from rows
     const sheetDatesByProject = {};
@@ -92,11 +114,11 @@ export default function Dashboard() {
   const [timelineView, setTimelineView] = useState("gantt"); // "gantt" | "bars"
   const [notesOpen, setNotesOpen] = useState(true);
   const featureCards = [
-    { title: "Lead Pipeline", description: "Prospects and workflow stages", href: createPageUrl("CRM?tab=prospects"), icon: Users },
-    { title: "Estimate Tracking", description: "Quotes, status, and totals", href: createPageUrl("Estimates"), icon: Receipt },
-    { title: "Project Tracker", description: "Schedules, progress, and status", href: createPageUrl("Projects"), icon: FolderKanban },
-    { title: "Payment Tracker", description: "Draws, approvals, and paid amounts", href: createPageUrl("Payments"), icon: DollarSign },
-    { title: "Document Storage", description: "Project and task files", href: createPageUrl("Documents"), icon: Paperclip },
+    { title: "Lead Pipeline", description: "Prospects and workflow stages", href: createPageUrl("CRM?tab=prospects"), icon: Users, module: "crm" },
+    { title: "Estimate Tracking", description: "Quotes, status, and totals", href: createPageUrl("Estimates"), icon: Receipt, module: "estimates" },
+    { title: "Project Tracker", description: "Schedules, progress, and status", href: createPageUrl("Projects"), icon: FolderKanban, module: "projects" },
+    { title: "Payment Tracker", description: "Draws, approvals, and paid amounts", href: createPageUrl("Payments"), icon: DollarSign, module: "payments" },
+    { title: "Document Storage", description: "Project and task files", href: createPageUrl("Documents"), icon: Paperclip, module: "documents" },
     { title: "Task Dashboard", description: "Personal and assigned task view", href: createPageUrl("MyTodos"), icon: CheckSquare },
   ];
 
@@ -120,7 +142,7 @@ export default function Dashboard() {
             <p className="text-sm" style={{ color: "#7a6e66" }}>Welcome back. Here's your project overview.</p>
           </div>
         </div>
-        <button
+        {canCreateProject && <button
           onClick={() => navigate(createPageUrl("Projects") + "?new=true")}
           className="flex items-center gap-2 px-5 py-2.5 rounded text-sm font-semibold tracking-wide transition-all duration-200"
           style={{ backgroundColor: "#3d3530", color: "#f5f0eb" }}
@@ -129,14 +151,14 @@ export default function Dashboard() {
         >
           <Plus className="w-4 h-4" />
           New Project
-        </button>
+        </button>}
       </div>
 
       {/* Divider */}
       <div className="h-px" style={{ backgroundColor: "#ddd5c8" }} />
 
       {/* KPI Grid */}
-      <KPIGrid projects={visibleProjects} clients={clients} />
+      <KPIGrid projects={visibleProjects} clientCount={clientCount} showMoney={showMoney} />
 
       <PriorityQueuePanel />
 
@@ -147,15 +169,16 @@ export default function Dashboard() {
           <h2 className="text-lg font-semibold" style={{ color: "#3d3530", fontFamily: "'Georgia', serif" }}>Integrated Workflows</h2>
         </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {featureCards.map(({ title, description, href, icon: Icon }) => (
+          {featureCards.map(({ title, description, href, icon: Icon, module }) => (
             <Link
               key={title}
               to={href}
-              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+              state={{ picked: true }}
+              className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${module && !can(module) ? "opacity-60" : ""}`}
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h3 className="font-semibold text-slate-900">{title}</h3>
+                  <h3 className="font-semibold text-slate-900 flex items-center gap-1.5">{title}{module && !can(module) && <Lock className="w-3.5 h-3.5 text-slate-400" aria-label="No access" />}</h3>
                   <p className="mt-1 text-sm text-slate-500">{description}</p>
                 </div>
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-700">
@@ -211,7 +234,7 @@ export default function Dashboard() {
             </div>
           </div>
           {timelineView === "gantt" ? (
-            <DashboardGantt projects={timelineProjects} clientMap={clientMap} />
+            <DashboardGantt projects={timelineProjects} clientMap={clientMap} showMoney={showMoney} />
           ) : (
             <TimelineChart 
               projects={timelineProjects}
@@ -241,6 +264,7 @@ export default function Dashboard() {
                 key={project.id} 
                 project={project}
                 client={clientMap[project.client_id] || { name: "Unknown Client" }}
+                showMoney={showMoney}
               />
             ))}
           </div>
@@ -250,8 +274,8 @@ export default function Dashboard() {
               <FolderKanban className="w-7 h-7" style={{ color: "#b5965a" }} />
             </div>
             <h3 className="font-semibold mb-1" style={{ color: "#3d3530", fontFamily: "'Georgia', serif" }}>No projects yet</h3>
-            <p className="text-sm mb-5" style={{ color: "#7a6e66" }}>Create your first project to get started</p>
-            <button
+            <p className="text-sm mb-5" style={{ color: "#7a6e66" }}>{canCreateProject ? "Create your first project to get started" : "Projects will show here once they're added."}</p>
+            {canCreateProject && <button
               onClick={() => navigate(createPageUrl("Projects") + "?new=true")}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded text-sm font-semibold tracking-wide transition-all duration-200"
               style={{ backgroundColor: "#3d3530", color: "#f5f0eb" }}
@@ -260,7 +284,7 @@ export default function Dashboard() {
             >
               <Plus className="w-4 h-4" />
               Create Project
-            </button>
+            </button>}
           </div>
         )}
       </div>

@@ -24,7 +24,7 @@ function startOfMonth(date) { return new Date(date.getFullYear(), date.getMonth(
 function endOfMonth(date)   { return new Date(date.getFullYear(), date.getMonth() + 1, 0); }
 function daysBetween(a, b)  { return Math.round((b - a) / 86400000); }
 
-function Tooltip({ project, clientName, visible, x, y }) {
+function Tooltip({ project, clientName, visible, x, y, showMoney }) {
   if (!visible) return null;
   const colors = STATUS_COLORS[project.status] || STATUS_COLORS.planning;
   return (
@@ -60,7 +60,7 @@ function Tooltip({ project, clientName, visible, x, y }) {
           />
         </div>
       </div>
-      {project.contract_value > 0 && (
+      {showMoney && project.contract_value > 0 && (
         <p className="text-[11px] mt-2" style={{ color: "#7a6e66" }}>
           Value: <span style={{ color: "#3d3530" }}>${(project.contract_value / 1000).toFixed(0)}K</span>
         </p>
@@ -69,7 +69,7 @@ function Tooltip({ project, clientName, visible, x, y }) {
   );
 }
 
-export default function DashboardGantt({ projects, clientMap }) {
+export default function DashboardGantt({ projects, clientMap, showMoney = true }) {
   const navigate = useNavigate();
   const scrollRef = useRef();
   const [dayPx, setDayPx] = useState(5);
@@ -131,6 +131,7 @@ export default function DashboardGantt({ projects, clientMap }) {
     <>
       {tooltip.visible && tooltip.project && (
         <Tooltip
+          showMoney={showMoney}
           project={tooltip.project}
           clientName={clientMap[tooltip.project.client_id]?.name}
           visible={tooltip.visible}

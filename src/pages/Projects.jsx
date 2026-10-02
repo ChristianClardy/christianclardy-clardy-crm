@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import { useRolePermissions } from "@/lib/useRolePermissions";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
@@ -36,6 +37,8 @@ import { getSelectedCompanyScope, subscribeToCompanyScope } from "@/lib/companyS
 import { cn } from "@/lib/utils";
 
 export default function Projects() {
+  // Contract values only for roles with money access (as on a project page).
+  const { can } = useRolePermissions();
   const navigate = useNavigate();
   const urlParams = new URLSearchParams(window.location.search);
   const [projects, setProjects] = useState([]);
@@ -263,6 +266,7 @@ export default function Projects() {
                 key={project.id}
                 project={project}
                 client={clientMap[project.client_id]}
+                showMoney={can("job_costs") || can("project_billing")}
               />
             ))}
           </div>
