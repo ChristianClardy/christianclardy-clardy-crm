@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { supabase } from "@/lib/supabase";
 import {
@@ -34,42 +34,10 @@ import JobPicker from "@/components/settings/JobPicker";
 import { savePmJobs, loadPmJobIds } from "@/lib/jobAssignments";
 import { apiFetch } from "@/lib/apiFetch";
 import { loadSavedRolePermissions, isAdmin } from "@/lib/useRolePermissions";
+import { ROLES, MODULE_GROUPS, DEFAULT_PERMISSIONS } from "@/lib/permissions";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const ROLES = [
-  { key: "admin",           label: "Admin",           color: "bg-rose-100 text-rose-700" },
-  { key: "project_manager", label: "Project Manager", color: "bg-violet-100 text-violet-700" },
-  { key: "office",          label: "Office",          color: "bg-blue-100 text-blue-700" },
-  { key: "foreman",         label: "Foreman",         color: "bg-amber-100 text-amber-700" },
-  { key: "laborer",         label: "Laborer",         color: "bg-slate-100 text-slate-600" },
-  { key: "other",           label: "Other",           color: "bg-slate-100 text-slate-500" },
-];
-
-const MODULES = [
-  { key: "dashboard",       label: "Dashboard",        description: "View company KPIs and overview" },
-  { key: "sales_dashboard", label: "Sales Dashboard",  description: "View sales pipeline metrics" },
-  { key: "crm",             label: "CRM",              description: "Contacts, leads, and prospects" },
-  { key: "projects",        label: "Projects",         description: "Create and manage projects" },
-  { key: "estimates",       label: "Estimates",        description: "Build and send estimates" },
-  { key: "payments",        label: "Payments",         description: "Invoices, draws, and payments" },
-  { key: "documents",       label: "Documents",        description: "Upload and manage files" },
-  { key: "calendar",        label: "Calendar",         description: "Scheduling and events" },
-  { key: "reports",         label: "Reports & WIP",    description: "Financial and operational reports" },
-  { key: "subcontractors",  label: "Subcontractors",   description: "Manage subcontractor contacts" },
-  { key: "municipalities",  label: "Municipalities",        description: "Permit portal credentials" },
-  { key: "material_library", label: "Material Library",     description: "Add, edit, and delete items in the Material Library" },
-  { key: "settings",        label: "Team & Settings",       description: "Manage users and permissions" },
-];
-
-const DEFAULT_PERMISSIONS = {
-  admin:           { dashboard: true,  sales_dashboard: true,  crm: true,  projects: true,  estimates: true,  payments: true,  documents: true,  calendar: true,  reports: true,  subcontractors: true,  municipalities: true,  material_library: true,  settings: true  },
-  project_manager: { dashboard: true,  sales_dashboard: true,  crm: true,  projects: true,  estimates: true,  payments: true,  documents: true,  calendar: true,  reports: true,  subcontractors: true,  municipalities: false,  material_library: true,  settings: false },
-  office:          { dashboard: true,  sales_dashboard: true,  crm: true,  projects: false, estimates: true,  payments: true,  documents: true,  calendar: true,  reports: true,  subcontractors: false, municipalities: false, material_library: true,  settings: false },
-  foreman:         { dashboard: true,  sales_dashboard: false, crm: false, projects: true,  estimates: false, payments: false, documents: true,  calendar: true,  reports: false, subcontractors: false, municipalities: false, material_library: false, settings: false },
-  laborer:         { dashboard: false, sales_dashboard: false, crm: false, projects: true,  estimates: false, payments: false, documents: false, calendar: false, reports: false, subcontractors: false, municipalities: false, material_library: false, settings: false },
-  other:           { dashboard: true,  sales_dashboard: false, crm: false, projects: false, estimates: false, payments: false, documents: false, calendar: false, reports: false, subcontractors: false, municipalities: false, material_library: false, settings: false },
-};
 
 const EMPTY_EMPLOYEE = {
   full_name: "", email: "", phone: "", role: "other",
@@ -365,9 +333,16 @@ function PermissionsTab() {
           {" "}Municipalities (permit portal passwords) is off for every role by default; it's enforced in the database, not just hidden.
           {!loading && !canEdit && <span className="block text-amber-700 mt-1">Only an admin can change these.</span>}
         </p>
+        <div className="flex gap-2 shrink-0">
+        {canEdit && (
+          <Button variant="outline" size="sm" onClick={() => { if (confirm("Reset every role to the recommended permissions? Click Save Changes afterwards to keep them.")) { setPermissions(DEFAULT_PERMISSIONS); setSaved(false); } }}>
+            Reset to recommended
+          </Button>
+        )}
         <Button onClick={handleSave} disabled={saving || !canEdit} size="sm" className="bg-gradient-to-r from-amber-500 to-orange-500 min-w-[110px]">
           {saved ? <><Check className="w-4 h-4 mr-1" /> Saved</> : saving ? "Saving…" : <><Save className="w-4 h-4 mr-1" /> Save Changes</>}
         </Button>
+        </div>
       </div>
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
@@ -376,48 +351,58 @@ function PermissionsTab() {
               <tr className="bg-slate-50 border-b border-slate-200">
                 <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 w-52">Module</th>
                 {ROLES.map(role => (
-                  <th key={role.key} className="px-4 py-3 text-center min-w-[110px]">
+                  <th key={role.key} title={role.blurb} className="px-3 py-3 text-center min-w-[104px] align-bottom">
                     <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", role.color)}>{role.label}</span>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {MODULES.map((mod, i) => (
-                <tr key={mod.key} className={cn("border-b border-slate-100", i % 2 === 0 ? "bg-white" : "bg-slate-50/50")}>
-                  <td className="px-5 py-3">
-                    <p className="font-medium text-slate-800 text-sm">{mod.label}</p>
-                    <p className="text-xs text-slate-400 mt-0.5">{mod.description}</p>
-                  </td>
-                  {ROLES.map(role => {
-                    const allowed = permissions[role.key]?.[mod.key] ?? false;
-                    const isAdmin = role.key === "admin";
-                    return (
-                      <td key={role.key} className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => toggle(role.key, mod.key)}
-                          disabled={isAdmin}
-                          className={cn(
-                            "w-6 h-6 rounded-full border-2 flex items-center justify-center mx-auto transition-all",
-                            isAdmin ? "bg-rose-500 border-rose-500 cursor-default"
-                              : allowed ? "bg-amber-500 border-amber-500 hover:bg-amber-600 cursor-pointer"
-                              : "bg-white border-slate-300 hover:border-amber-400 cursor-pointer"
-                          )}
-                        >
-                          {(isAdmin || allowed) && <Check className="w-3 h-3 text-white" />}
-                        </button>
+              {MODULE_GROUPS.map((group) => (
+                <Fragment key={group.label}>
+                  <tr className="bg-slate-100/80 border-b border-slate-200">
+                    <td colSpan={ROLES.length + 1} className="px-5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">{group.label}</td>
+                  </tr>
+                  {group.modules.map((mod, i) => (
+                    <tr key={mod.key} className={cn("border-b border-slate-100", i % 2 === 0 ? "bg-white" : "bg-slate-50/50")}>
+                      <td className="px-5 py-3">
+                        <p className="font-medium text-slate-800 text-sm">{mod.label}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">{mod.description}</p>
                       </td>
-                    );
-                  })}
-                </tr>
+                      {ROLES.map(role => {
+                        const allowed = permissions[role.key]?.[mod.key] ?? false;
+                        const isAdmin = role.key === "admin";
+                        return (
+                          <td key={role.key} className="px-4 py-3 text-center">
+                            <button
+                              onClick={() => toggle(role.key, mod.key)}
+                              disabled={isAdmin || !canEdit}
+                              title={`${role.label}: ${mod.label} ${allowed || isAdmin ? "on" : "off"}`}
+                              className={cn(
+                                "w-6 h-6 rounded-full border-2 flex items-center justify-center mx-auto transition-all",
+                                isAdmin ? "bg-rose-500 border-rose-500 cursor-default"
+                                  : allowed ? "bg-amber-500 border-amber-500 hover:bg-amber-600 cursor-pointer"
+                                  : "bg-white border-slate-300 hover:border-amber-400 cursor-pointer"
+                              )}
+                            >
+                              {(isAdmin || allowed) && <Check className="w-3 h-3 text-white" />}
+                            </button>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </Fragment>
               ))}
             </tbody>
           </table>
         </div>
       </div>
-      <p className="text-xs text-slate-400">
-        These permissions control UI visibility. Supabase Row Level Security provides additional server-side enforcement.
-      </p>
+      <div className="rounded-xl border border-slate-200 bg-white p-4 text-xs text-slate-500 space-y-1">
+        <p className="font-semibold text-slate-700">What each role is for</p>
+        {ROLES.map((r) => <p key={r.key}><span className="font-medium text-slate-700">{r.label}:</span> {r.blurb}</p>)}
+        <p className="pt-1">Switches hide the page from the sidebar, block opening it by address, and hide the matching project tabs. Municipalities is also locked in the database. Subcontractors, Builder Portal-only PMs and customers use their own portal logins and never see these modules.</p>
+      </div>
     </div>
   );
 }

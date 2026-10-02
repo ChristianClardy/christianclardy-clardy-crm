@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { promoteLeadToProspect, syncLeadContactToClient } from "@/lib/leadConversion";
+import { useRolePermissions } from "@/lib/useRolePermissions";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -259,6 +260,7 @@ export default function ContactDetailSlider({ lead, onClose, onUpdate }) {
   const [quickLogType, setQuickLogType] = useState(null); // null | "call" | "email" | "note" | "meeting"
   const [converting, setConverting] = useState(false);
   const [contractsOpen, setContractsOpen] = useState(false);
+  const { can } = useRolePermissions();
 
   const nameInputRef = useRef(null);
 
@@ -459,9 +461,11 @@ export default function ContactDetailSlider({ lead, onClose, onUpdate }) {
                   <TrendingUp className="mr-2 h-4 w-4" />
                   {converting ? "Promoting..." : isProspect ? "Prospect" : "Promote to Prospect"}
                 </Button>
-                <Button className="w-full mt-2" size="sm" variant="outline" onClick={() => setContractsOpen(true)}>
-                  <FileSignature className="mr-2 h-4 w-4" /> Contracts
-                </Button>
+                {can("contracts") && (
+                  <Button className="w-full mt-2" size="sm" variant="outline" onClick={() => setContractsOpen(true)}>
+                    <FileSignature className="mr-2 h-4 w-4" /> Contracts
+                  </Button>
+                )}
               </div>
 
               {/* Quick actions */}

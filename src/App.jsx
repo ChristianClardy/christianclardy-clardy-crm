@@ -39,15 +39,17 @@ import Builder from './pages/Builder';
 import CustomerPortal from './pages/CustomerPortal';
 import { Home } from 'lucide-react';
 import SubPortalLayout from './components/app/SubPortalLayout';
+import ModuleGate from './components/app/ModuleGate';
 import { usePortalUser } from '@/lib/portalUser';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
 
+// Every staff page checks its role permission (src/lib/permissions.js).
 const LayoutWrapper = ({ children, currentPageName }) => Layout ?
-  <Layout currentPageName={currentPageName}>{children}</Layout>
-  : <>{children}</>;
+  <Layout currentPageName={currentPageName}><ModuleGate page={currentPageName}>{children}</ModuleGate></Layout>
+  : <ModuleGate page={currentPageName}>{children}</ModuleGate>;
 
 // Detect invite link synchronously before Supabase clears the hash
 const isInviteFlow = (() => {

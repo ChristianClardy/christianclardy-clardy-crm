@@ -60,6 +60,8 @@ import AppointmentsPanel from "@/components/scheduling/AppointmentsPanel";
 import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
 import { reconcileDraws } from "@/lib/draws";
 import { rescaleDraws } from "@/lib/drawSchedule";
+import { useRolePermissions } from "@/lib/useRolePermissions";
+import { PROJECT_TAB_MODULE } from "@/lib/permissions";
 
 const statusStyles = {
   planning: { label: "Planning", class: "bg-slate-100 text-slate-700" },
@@ -72,7 +74,7 @@ const statusStyles = {
 
 
 // Every tab on a project, in order. Each key must have a matching
-// `activeTab === key` section below.
+// `currentTab === key` section below.
 const PROJECT_TABS = [
   { key: "overview",      label: "Overview",        icon: LayoutGrid },
   { key: "permits",       label: "Permits",         icon: FileText },
@@ -105,6 +107,12 @@ export default function ProjectDetail() {
   const tabAlias = { sheet: "schedule", timeline: "schedule" };
   const initialTab = tabAlias[requestedTab] || requestedTab;
   const [activeTab, setActiveTab] = useState(PROJECT_TABS.some((t) => t.key === initialTab) ? initialTab : "overview");
+  // Tabs and dollar amounts follow the role's permissions (src/lib/permissions.js).
+  const { can, loading: permsLoading } = useRolePermissions();
+  const tabAllowed = (key) => !PROJECT_TAB_MODULE[key] || can(PROJECT_TAB_MODULE[key]);
+  const visibleTabs = PROJECT_TABS.filter((t) => tabAllowed(t.key));
+  const currentTab = tabAllowed(activeTab) ? activeTab : "overview";
+  const canSeeMoney = can("job_costs") || can("project_billing");
   const [subcontractors, setSubcontractors] = useState([]);
   // Set by a change order's "Send for signature": the Contracts tab opens
   // with that change order and a change order template picked.
@@ -197,7 +205,7 @@ export default function ProjectDetail() {
 
 
 
-  if (loading) {
+  if (loading || permsLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
@@ -270,7 +278,7 @@ export default function ProjectDetail() {
 
       {/* Tab Navigation */}
       <div className="flex gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto max-w-full">
-        {PROJECT_TABS.map(({ key, label, icon: Icon }) => (
+        {visibleTabs.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => {
@@ -279,7 +287,7 @@ export default function ProjectDetail() {
             }}
             className={cn(
               "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-              activeTab === key
+              currentTab === key
                 ? "bg-white text-slate-900 shadow-sm"
                 : "text-slate-500 hover:text-slate-700"
             )}
@@ -290,7 +298,7 @@ export default function ProjectDetail() {
         ))}
       </div>
 
-      {activeTab === "contracts" && (
+      {currentTab === "contracts" && (
         <div className="bg-white rounded-2xl border border-slate-200">
           <div className="px-6 pt-5">
             <h2 className="text-lg font-semibold text-slate-900">Contracts</h2>
@@ -304,7 +312,7 @@ export default function ProjectDetail() {
         </div>
       )}
 
-      {activeTab === "changeorders" && (
+      {currentTab === "changeorders" && (
         <ChangeOrdersPanel
           project={project}
           onSend={(co) => { setSendChangeOrderId(co.id); setActiveTab("contracts"); }}
@@ -312,7 +320,7 @@ export default function ProjectDetail() {
       )}
 
       {/* Schedule tab: the same schedule PMs run in the Builder Portal */}
-      {activeTab === "schedule" && (
+      {currentTab === "schedule" && (
         <div className="space-y-3">
           <div className="flex justify-end">
             <Link to={createPageUrl(`Builder?project=${projectId}`)} className="text-sm font-medium text-amber-700 hover:underline">
@@ -323,7 +331,7 @@ export default function ProjectDetail() {
         </div>
       )}
 
-       {activeTab === "appointments" && (
+       {currentTab === "appointments" && (
          <div className="grid gap-6 xl:grid-cols-2">
            <AppointmentsPanel
              title="Project Appointments"
@@ -340,32 +348,32 @@ export default function ProjectDetail() {
        )}
 
        {/* Permit tab */}
-       {activeTab === "permits" && (
+       {currentTab === "permits" && (
          <PermitTracker project={project} onProjectUpdated={loadData} />
        )}
 
        {/* Pool Selections tab */}
-       {activeTab === "selections" && (
+       {currentTab === "selections" && (
          <PoolSelectionsPanel project={project} />
        )}
 
        {/* Photos tab */}
-       {activeTab === "photos" && (
+       {currentTab === "photos" && (
          <PhotoGallery projectId={projectId} />
        )}
 
        {/* Financials tab */}
-       {activeTab === "financials" && (
+       {currentTab === "financials" && (
          <ProjectFinancials project={project} onUpdateProject={loadData} />
        )}
 
        {/* Accounting tab — AP, lien waivers, cash flow projection */}
-       {activeTab === "accounting" && (
+       {currentTab === "accounting" && (
          <ProjectAccounting project={project} />
        )}
 
        {/* Cash Flow tab */}
-       {activeTab === "cashflow" && (
+       {currentTab === "cashflow" && (
          <CashFlowTracker
            projectId={projectId}
            contractValue={project.contract_value || 0}
@@ -378,19 +386,19 @@ export default function ProjectDetail() {
        )}
 
        {/* Files tab */}
-       {activeTab === "files" && (
+       {currentTab === "files" && (
          <ProjectFiles projectId={projectId} />
        )}
 
        {/* Collaboration tab */}
-       {activeTab === "collaboration" && (
+       {currentTab === "collaboration" && (
          <div className="bg-white rounded-2xl border border-slate-200 p-6">
            <CommentSection entityType="project" entityId={projectId} />
          </div>
        )}
 
       {/* Overview tab */}
-      {activeTab === "overview" && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {currentTab === "overview" && <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
           {/* Progress Card */}
@@ -448,8 +456,8 @@ export default function ProjectDetail() {
             )}
           </div>
 
-          {/* Financials Card */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+          {/* Financials Card (money roles only) */}
+          {canSeeMoney && <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
             <h2 className="text-lg font-semibold text-slate-900">Financials</h2>
             <div className="space-y-3">
               <div className="flex justify-between">
@@ -473,7 +481,7 @@ export default function ProjectDetail() {
                 </div>
               </div>
             </div>
-          </div>
+          </div>}
         </div>
       </div>}
 
@@ -576,6 +584,7 @@ export default function ProjectDetail() {
                 />
               </div>
             </div>
+            {canSeeMoney && <>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Contract Value ($)</Label>
@@ -656,6 +665,7 @@ export default function ProjectDetail() {
                 className="mt-1.5"
               />
             </div>
+            </>}
             <div className="flex justify-end gap-3 pt-4">
               <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
                 Cancel

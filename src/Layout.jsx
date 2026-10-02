@@ -46,20 +46,22 @@ export default function Layout({ children, currentPageName }) {
   const crmPages = new Set(["CRM", "Pipeline", "CRMContacts", "CRMCompanies", "CRMActivities", "CRMDashboard"]);
   const [crmOpen, setCrmOpen] = useState(() => crmPages.has(currentPageName));
 
-  // Municipalities holds permit-portal passwords: admins, plus roles switched
-  // on in Settings → Permissions (054 enforces it in the database too).
+  // Each link needs its module (Settings → Roles & Permissions,
+  // src/lib/permissions.js); links without one are open to all staff.
   const { can, loading: permsLoading } = useRolePermissions();
+  const allowed = (item) => !item.module || (!permsLoading && can(item.module));
 
   const navigation = [
-    { name: "Dashboard", href: createPageUrl("Dashboard"), icon: LayoutDashboard },
-    { name: "Sales Dashboard", href: createPageUrl("SalesDashboard"), icon: CheckSquare },
-    { name: "Projects", href: createPageUrl("Projects"), icon: FolderKanban },
-    { name: "Builder Portal", href: createPageUrl("Builder"), icon: ClipboardList },
-    { name: "Subcontractor Portal", href: createPageUrl("BuilderPortal"), icon: HardHat },
+    { name: "Dashboard", href: createPageUrl("Dashboard"), icon: LayoutDashboard, module: "dashboard" },
+    { name: "Sales Dashboard", href: createPageUrl("SalesDashboard"), icon: CheckSquare, module: "sales_dashboard" },
+    { name: "Projects", href: createPageUrl("Projects"), icon: FolderKanban, module: "projects" },
+    { name: "Builder Portal", href: createPageUrl("Builder"), icon: ClipboardList, module: "builder_portal" },
+    { name: "Subcontractor Portal", href: createPageUrl("BuilderPortal"), icon: HardHat, module: "subcontractors" },
     {
       name: "CRM",
       href: createPageUrl("CRM"),
       icon: Users,
+      module: "crm",
       children: [
         { name: "Pipeline", href: createPageUrl("Pipeline"), icon: Kanban },
         { name: "Contacts", href: createPageUrl("CRMContacts"), icon: Phone },
@@ -68,17 +70,17 @@ export default function Layout({ children, currentPageName }) {
         { name: "CRM Dashboard", href: createPageUrl("CRMDashboard"), icon: BarChart3 },
       ],
     },
-    { name: "Calendar", href: createPageUrl("Calendar"), icon: CalendarDays },
-    ...(!permsLoading && can("municipalities") ? [{ name: "Municipalities", href: createPageUrl("Municipalities"), icon: Building2 }] : []),
-    { name: "Estimates", href: createPageUrl("Estimates"), icon: Receipt },
-    { name: "Payments", href: createPageUrl("Payments"), icon: DollarSign },
-    { name: "Finance", href: createPageUrl("FinanceDashboard"), icon: FileBarChart2 },
-    { name: "Documents", href: createPageUrl("Documents"), icon: FolderOpen },
-    { name: "Reports", href: createPageUrl("Reports"), icon: FileText },
+    { name: "Calendar", href: createPageUrl("Calendar"), icon: CalendarDays, module: "calendar" },
+    { name: "Municipalities", href: createPageUrl("Municipalities"), icon: Building2, module: "municipalities" },
+    { name: "Estimates", href: createPageUrl("Estimates"), icon: Receipt, module: "estimates" },
+    { name: "Payments", href: createPageUrl("Payments"), icon: DollarSign, module: "payments" },
+    { name: "Finance", href: createPageUrl("FinanceDashboard"), icon: FileBarChart2, module: "finance" },
+    { name: "Documents", href: createPageUrl("Documents"), icon: FolderOpen, module: "documents" },
+    { name: "Reports", href: createPageUrl("Reports"), icon: FileText, module: "reports" },
     { name: "Material Library", href: createPageUrl("MaterialLibrary"), icon: Package },
-    { name: "Workspace Items", href: createPageUrl("WorkplaceItems"), icon: Wrench },
-    { name: "Settings", href: createPageUrl("Settings"), icon: ShieldCheck },
-  ];
+    { name: "Workspace Items", href: createPageUrl("WorkplaceItems"), icon: Wrench, module: "workspace_items" },
+    { name: "Settings", href: createPageUrl("Settings"), icon: ShieldCheck, module: "settings" },
+  ].filter(allowed);
 
   const isActive = (href) => {
     const pageName = href.split('/').pop();

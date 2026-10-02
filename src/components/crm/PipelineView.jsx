@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import ContractsPanel from "@/components/crm/ContractsPanel";
+import { useRolePermissions } from "@/lib/useRolePermissions";
 
 // ─── Stage definitions ────────────────────────────────────────────────────────
 
@@ -303,7 +304,10 @@ function DealFormDialog({ open, onClose, onSaved, initialData, leads }) {
 // Lead's own page uses to send a contract before any Deal exists.
 
 function DealContractsTab({ deal, leads }) {
+  const { can, loading } = useRolePermissions();
   const lead = leads.find((l) => l.id === deal.lead_id) || null;
+  if (loading) return null;
+  if (!can("contracts")) return <p className="p-6 text-sm text-slate-500">Your role doesn't include sending contracts. An admin can change that in Settings → Roles &amp; Permissions.</p>;
   return <ContractsPanel lead={lead} deal={deal} />;
 }
 

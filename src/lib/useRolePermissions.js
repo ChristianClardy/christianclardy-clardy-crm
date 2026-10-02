@@ -1,22 +1,14 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
+import { DEFAULT_PERMISSIONS } from '@/lib/permissions';
 
 // Which modules the signed-in staff member may use (Settings → Permissions).
 // Admin = an admin member of the staff organization, as the database decides
 // it (is_admin(), 054); admins can use everything. Everyone else gets their
-// employee role's saved switches over these defaults. The database enforces
+// employee role's saved switches over the defaults in src/lib/permissions.js. The database enforces
 // the sensitive ones (Municipalities) on its own; this only drives the UI.
 
-// Mirror of Settings.jsx DEFAULT_PERMISSIONS for the modules checked here.
-const DEFAULT_ROLE_PERMISSIONS = {
-  admin:           { material_library: true,  municipalities: true },
-  project_manager: { material_library: true,  municipalities: false },
-  office:          { material_library: true,  municipalities: false },
-  foreman:         { material_library: false, municipalities: false },
-  laborer:         { material_library: false, municipalities: false },
-  other:           { material_library: false, municipalities: false },
-};
 
 // Saved switches live on the oldest company profile that has any (054 reads the same row).
 export async function loadSavedRolePermissions() {
@@ -50,7 +42,7 @@ export function useRolePermissions() {
       ]);
       if (cancelled) return;
       const empRole = emp?.role || 'other';
-      setPermissions({ ...DEFAULT_ROLE_PERMISSIONS[empRole], ...(saved?.[empRole] || {}) });
+      setPermissions({ ...(DEFAULT_PERMISSIONS[empRole] || DEFAULT_PERMISSIONS.other), ...(saved?.[empRole] || {}) });
     })().catch(() => { if (!cancelled) setPermissions({}); });
     return () => { cancelled = true; };
   }, [user?.id, user?.role, user?.email]);

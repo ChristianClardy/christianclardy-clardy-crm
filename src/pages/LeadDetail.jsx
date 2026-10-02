@@ -15,6 +15,7 @@ import LostReasonDialog from "@/components/crm/LostReasonDialog";
 import DesignerAssignmentDialog from "@/components/crm/DesignerAssignmentDialog";
 import { promoteLeadToProspect, setLeadStatus, markLeadLost, reactivateLead, assignDesignerAndSetInDesign, updateLeadDesigner } from "@/lib/leadConversion";
 import { LEAD_STAGES, PROSPECT_THRESHOLD_STAGE } from "@/lib/leadStages";
+import { useRolePermissions } from "@/lib/useRolePermissions";
 
 const funnelSteps = LEAD_STAGES;
 
@@ -23,6 +24,8 @@ export default function LeadDetail() {
   const urlParams = new URLSearchParams(window.location.search);
   const leadId = urlParams.get("id");
   const [lead, setLead] = useState(null);
+  const { can } = useRolePermissions();
+  const canContracts = can("contracts");
   const [followUps, setFollowUps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
@@ -319,12 +322,14 @@ export default function LeadDetail() {
         defaultLocation={lead.property_address || ""}
       />
 
+{canContracts && (
       <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between gap-3 p-5 pb-0">
           <h2 className="text-lg font-semibold text-slate-900">Contracts</h2>
         </div>
         <ContractsPanel lead={lead} />
       </div>
+      )}
 
       <LeadFollowUpPanel lead={lead} followUps={followUps} onRefresh={loadData} />
       <NextStepsPanel title="Lead Tasks / Next Steps" linkedClientId={lead.linked_contact_id || lead.id} />
