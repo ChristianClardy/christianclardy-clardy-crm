@@ -11,6 +11,7 @@ import Onboarding from './pages/Onboarding';
 import Login from './pages/Login';
 import SetPassword from './pages/SetPassword';
 import JoinPortal from './pages/JoinPortal';
+import { EulaPage, PrivacyPage } from './pages/LegalPage';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import CRM from './pages/CRM';
 import CRMDashboard from './components/crm/CRMDashboard';
@@ -62,10 +63,16 @@ const isInviteFlow = (() => {
 // page rewrites the URL to /BuilderPortal once they're signed in.
 const isJoinFlow = window.location.pathname === '/join';
 
+// Public legal pages (Intuit / DocuSign app listings link here): no sign-in.
+const LEGAL_PAGES = { '/eula': EulaPage, '/terms': EulaPage, '/privacy': PrivacyPage };
+
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, user } = useAuth();
   const { loading: tenantLoading, needsOnboarding } = useTenant();
   const { loading: portalLoading, portalUser, pmUser, customerUser, isStaff } = usePortalUser(isAuthenticated ? user?.id : null);
+
+  const LegalPage = LEGAL_PAGES[window.location.pathname.replace(/\/$/, '').toLowerCase()];
+  if (LegalPage) return <LegalPage />;
 
   // Invite link clicked — show password-set screen regardless of auth state
   if (isInviteFlow) return <SetPassword />;
