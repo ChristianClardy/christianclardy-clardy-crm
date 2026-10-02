@@ -29,6 +29,7 @@ import JobAssignmentsTab from "@/components/settings/JobAssignmentsTab";
 import QuickBooksTab from "@/components/settings/QuickBooksTab";
 import PmLoginsSection from "@/components/settings/PmLoginsSection";
 import PmInviteDialog from "@/components/settings/PmInviteDialog";
+import StaffInviteDialog from "@/components/settings/StaffInviteDialog";
 import RemoveEmployeeDialog from "@/components/settings/RemoveEmployeeDialog";
 import JobPicker from "@/components/settings/JobPicker";
 import { savePmJobs, loadPmJobIds } from "@/lib/jobAssignments";
@@ -67,6 +68,7 @@ function TeamTab() {
   const [jobs, setJobs]               = useState([]);
   const [pmLogins, setPmLogins]   = useState([]);
   const [portalFor, setPortalFor] = useState(null); // employee whose Builder Portal access is open
+  const [inviteFor, setInviteFor] = useState(null); // employee getting a full Clardy login
   const [removing, setRemoving]   = useState(null); // employee being removed
 
   useEffect(() => { load(); }, []);
@@ -180,8 +182,10 @@ function TeamTab() {
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                   <button
-                    onClick={() => setPortalFor(emp)}
-                    title={login ? "Builder Portal login" : "Invite to the Builder Portal by text or email"}
+                    // A project manager with a Builder Portal login manages it there;
+                    // everyone else gets a login for their role (Roles & Permissions).
+                    onClick={() => (emp.role === "project_manager" && login ? setPortalFor(emp) : setInviteFor(emp))}
+                    title={login ? "Builder Portal login" : "Give them a Clardy login for their role"}
                     className={cn("inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium whitespace-nowrap",
                       login?.active ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-slate-200 text-slate-600 hover:bg-slate-50")}
                   >
@@ -206,6 +210,16 @@ function TeamTab() {
           pmLogin={pmLogins.find((l) => l.employee_id === removing.id || (removing.email && l.email === removing.email.trim().toLowerCase()))}
           onClose={() => setRemoving(null)}
           onDone={() => { setRemoving(null); load(); }}
+        />
+      )}
+
+      {inviteFor && (
+        <StaffInviteDialog
+          employee={inviteFor}
+          pmLogin={loginFor(inviteFor)}
+          onClose={() => setInviteFor(null)}
+          onPickBuilderPortal={() => { setPortalFor(inviteFor); setInviteFor(null); }}
+          onChanged={load}
         />
       )}
 
@@ -473,6 +487,9 @@ function FullAccessInvite() {
             role: inviteEmployeeRole,
             status: "active",
           });
+        } else if (existing[0].role !== inviteEmployeeRole) {
+          // Their login's access follows this role, so use the one picked here.
+          await base44.entities.Employee.update(existing[0].id, { role: inviteEmployeeRole, status: "active" });
         }
       }
       setSuccess(true);

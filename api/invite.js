@@ -85,6 +85,28 @@ async function grantStaff(userId, email) {
   });
 }
 
+// A staff invite for someone who already has a Builder Portal-only login
+// upgrades it: any portal login keeps a person out of the CRM (is_staff()), so
+// the PM login is removed and their role comes from their employee record.
+// Sub and customer logins belong to outside people and are never upgraded.
+async function upgradeToStaff(userId) {
+  const login = await getPortalLogin(userId);
+  if (!login) return;
+  if (login.kind !== 'pm') {
+    throw new Error(`${login.row.email} is a ${PORTAL_NAME[login.kind]} login. Use a different email for a team member.`);
+  }
+  const del = await fetch(`${SUPABASE_URL}/rest/v1/pm_portal_users?user_id=eq.${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+    headers: { ...adminHeaders(), Prefer: 'return=minimal' },
+  });
+  if (!del.ok) throw new Error('Could not switch their Builder Portal login to a team login.');
+  await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+    method: 'PUT',
+    headers: adminHeaders(),
+    body: JSON.stringify({ user_metadata: { portal_role: null } }),
+  });
+}
+
 const JOIN_LINK_DAYS = 7;
 const b64url = (buf) => Buffer.from(buf).toString('base64url');
 const sign = (body) => b64url(crypto.createHmac('sha256', `join-link:${SERVICE_KEY}`).update(body).digest());
@@ -387,8 +409,15 @@ module.exports = async function handler(req, res) {
         // grant staff access instead of sending a second account email.
         const existingId = await rpc('auth_user_id_by_email', { p_email: email });
         if (!existingId) throw new Error(msg);
+        try {
+          await upgradeToStaff(existingId);
+        } catch (err) {
+          res.status(400).json({ error: err.message });
+          return;
+        }
         await grantStaff(existingId, email);
-        res.status(200).json({ success: true, existing: true });
+        const emailed = await emailSignInLink(email);
+        res.status(200).json({ success: true, existing: true, emailed });
         return;
       }
       if (taken && kind) {
