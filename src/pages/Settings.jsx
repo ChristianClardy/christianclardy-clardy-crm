@@ -355,6 +355,11 @@ function PermissionsTab() {
                 {ROLES.map(role => (
                   <th key={role.key} title={role.blurb} className="sticky top-0 z-20 bg-slate-50 border-b border-slate-200 px-3 py-3 text-center min-w-[104px] align-bottom">
                     <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", role.color)}>{role.label}</span>
+                    {role.key !== "admin" && canEdit && (
+                      <a href={`/Dashboard?viewAs=${role.key}`} target="_blank" rel="noopener noreferrer" className="block mt-1 text-[11px] font-medium text-amber-700 hover:underline" title={`Open the app in a new tab as a ${role.label} sees it`}>
+                        Preview ↗
+                      </a>
+                    )}
                   </th>
                 ))}
               </tr>

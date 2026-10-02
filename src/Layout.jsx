@@ -35,7 +35,8 @@ import InstallAppButton from "@/components/app/InstallAppButton";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/ThemeContext";
 import { useTenant } from "@/lib/TenantContext";
-import { useRolePermissions } from "@/lib/useRolePermissions";
+import { useRolePermissions, exitPreview } from "@/lib/useRolePermissions";
+import { ROLES } from "@/lib/permissions";
 
 export default function Layout({ children, currentPageName }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -48,7 +49,8 @@ export default function Layout({ children, currentPageName }) {
 
   // Each link needs its module (Settings → Roles & Permissions,
   // src/lib/permissions.js); links without one are open to all staff.
-  const { can, loading: permsLoading } = useRolePermissions();
+  const { can, loading: permsLoading, previewing } = useRolePermissions();
+  const previewLabel = previewing ? ROLES.find((r) => r.key === previewing)?.label || previewing : null;
   const allowed = (item) => !item.module || (!permsLoading && can(item.module));
 
   const navigation = [
@@ -288,6 +290,12 @@ export default function Layout({ children, currentPageName }) {
 
         {/* Page content */}
         <main className="min-h-[calc(100vh-4rem)] lg:min-h-screen overflow-x-hidden" style={{ backgroundColor: "var(--brand-bg)" }}>
+          {previewLabel && (
+            <div className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-2 bg-amber-500 px-4 py-2 text-sm text-white shadow">
+              <span><strong>Previewing as {previewLabel}.</strong> The sidebar, pages and project tabs are what this role sees. Data is still yours.</span>
+              <button type="button" onClick={exitPreview} className="rounded-md bg-white/20 px-3 py-1 font-semibold hover:bg-white/30">Exit preview</button>
+            </div>
+          )}
           {children}
         </main>
       </div>

@@ -17,6 +17,29 @@ export async function loadSavedRolePermissions() {
   return { profile: withPerms || (data || [])[0] || null, saved: withPerms?.settings?.role_permissions || null };
 }
 
+// Admin-only "Preview as role": a tab opened with ?viewAs=<role> shows the app
+// the way that role sees it (sidebar, pages, project tabs). Kept per tab in
+// sessionStorage; only changes what's shown, never what the database allows.
+const PREVIEW_KEY = 'clardy_view_as';
+(() => {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const role = params.get('viewAs');
+    if (role === null) return;
+    if (role) sessionStorage.setItem(PREVIEW_KEY, role); else sessionStorage.removeItem(PREVIEW_KEY);
+    params.delete('viewAs');
+    const qs = params.toString();
+    window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash);
+  } catch { /* storage unavailable: no preview */ }
+})();
+export function previewRole() {
+  try { return sessionStorage.getItem(PREVIEW_KEY) || null; } catch { return null; }
+}
+export function exitPreview() {
+  try { sessionStorage.removeItem(PREVIEW_KEY); } catch { /* ignore */ }
+  window.location.reload();
+}
+
 let adminCheck = null;
 export function isAdmin({ refresh = false } = {}) {
   if (!adminCheck || refresh) adminCheck = supabase.rpc('is_admin').then(({ data, error }) => (error ? null : data === true));
@@ -35,6 +58,12 @@ export function useRolePermissions() {
       // user-metadata check so nobody is locked out before 054 runs.
       const admin = await isAdmin();
       if (cancelled) return;
+      const preview = previewRole();
+      if ((admin === true || (admin === null && user.role === 'admin')) && preview && DEFAULT_PERMISSIONS[preview] && preview !== 'admin') {
+        const { saved } = await loadSavedRolePermissions();
+        if (!cancelled) setPermissions({ ...DEFAULT_PERMISSIONS[preview], ...(saved?.[preview] || {}), __preview: preview });
+        return;
+      }
       if (admin === true || (admin === null && user.role === 'admin')) { setPermissions({ __all: true }); return; }
       const [{ data: emp }, { saved }] = await Promise.all([
         supabase.from('employees').select('role').ilike('email', user.email).maybeSingle(),
@@ -53,5 +82,5 @@ export function useRolePermissions() {
     return permissions[key] ?? false;
   };
 
-  return { can, loading: permissions === null, isAdmin: !!permissions?.__all };
+  return { can, loading: permissions === null, isAdmin: !!permissions?.__all, previewing: permissions?.__preview || null };
 }
