@@ -140,7 +140,12 @@ async function refreshIfNeeded(conn, creds, force = false) {
     body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: conn.refresh_token }),
   });
   const tok = await res.json();
-  if (!res.ok) throw httpError(401, 'QuickBooks sign-in expired. Reconnect in Settings → QuickBooks.');
+  if (!res.ok) {
+    // Disconnected from inside QuickBooks, or the 100-day sign-in lapsed:
+    // the stored tokens are dead, so show QuickBooks as disconnected.
+    if (tok.error === 'invalid_grant') await sbFetch('quickbooks_connection?id=eq.1', { method: 'DELETE' }).catch(() => {});
+    throw httpError(401, 'QuickBooks is disconnected. Reconnect in Settings → QuickBooks.');
+  }
   return saveConnection({
     access_token: tok.access_token,
     refresh_token: tok.refresh_token || conn.refresh_token,

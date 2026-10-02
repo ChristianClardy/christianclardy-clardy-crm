@@ -12,6 +12,7 @@ import Login from './pages/Login';
 import SetPassword from './pages/SetPassword';
 import JoinPortal from './pages/JoinPortal';
 import { EulaPage, PrivacyPage } from './pages/LegalPage';
+import QuickBooksDisconnected from './pages/QuickBooksDisconnected';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import CRM from './pages/CRM';
 import CRMDashboard from './components/crm/CRMDashboard';
@@ -63,8 +64,13 @@ const isInviteFlow = (() => {
 // page rewrites the URL to /BuilderPortal once they're signed in.
 const isJoinFlow = window.location.pathname === '/join';
 
-// Public legal pages (Intuit / DocuSign app listings link here): no sign-in.
-const LEGAL_PAGES = { '/eula': EulaPage, '/terms': EulaPage, '/privacy': PrivacyPage };
+// Public pages (Intuit / DocuSign app listings link here): no sign-in.
+const LEGAL_PAGES = {
+  '/eula': EulaPage,
+  '/terms': EulaPage,
+  '/privacy': PrivacyPage,
+  '/quickbooks/disconnected': QuickBooksDisconnected,
+};
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, user } = useAuth();
