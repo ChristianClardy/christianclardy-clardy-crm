@@ -33,6 +33,7 @@ import RemoveEmployeeDialog from "@/components/settings/RemoveEmployeeDialog";
 import JobPicker from "@/components/settings/JobPicker";
 import { savePmJobs, loadPmJobIds } from "@/lib/jobAssignments";
 import { apiFetch } from "@/lib/apiFetch";
+import { loadSavedRolePermissions, isAdmin } from "@/lib/useRolePermissions";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -63,7 +64,7 @@ const MODULES = [
 
 const DEFAULT_PERMISSIONS = {
   admin:           { dashboard: true,  sales_dashboard: true,  crm: true,  projects: true,  estimates: true,  payments: true,  documents: true,  calendar: true,  reports: true,  subcontractors: true,  municipalities: true,  material_library: true,  settings: true  },
-  project_manager: { dashboard: true,  sales_dashboard: true,  crm: true,  projects: true,  estimates: true,  payments: true,  documents: true,  calendar: true,  reports: true,  subcontractors: true,  municipalities: true,  material_library: true,  settings: false },
+  project_manager: { dashboard: true,  sales_dashboard: true,  crm: true,  projects: true,  estimates: true,  payments: true,  documents: true,  calendar: true,  reports: true,  subcontractors: true,  municipalities: false,  material_library: true,  settings: false },
   office:          { dashboard: true,  sales_dashboard: true,  crm: true,  projects: false, estimates: true,  payments: true,  documents: true,  calendar: true,  reports: true,  subcontractors: false, municipalities: false, material_library: true,  settings: false },
   foreman:         { dashboard: true,  sales_dashboard: false, crm: false, projects: true,  estimates: false, payments: false, documents: true,  calendar: true,  reports: false, subcontractors: false, municipalities: false, material_library: false, settings: false },
   laborer:         { dashboard: false, sales_dashboard: false, crm: false, projects: true,  estimates: false, payments: false, documents: false, calendar: false, reports: false, subcontractors: false, municipalities: false, material_library: false, settings: false },
@@ -310,23 +311,25 @@ function PermissionsTab() {
   const [loading, setLoading]         = useState(true);
   const [saving, setSaving]           = useState(false);
   const [saved, setSaved]             = useState(false);
+  const [canEdit, setCanEdit]         = useState(false); // only admins change permissions (054)
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('company_profiles').select('id, settings').limit(1).single();
-      if (data?.settings?.role_permissions) {
+      const [{ saved }, admin] = await Promise.all([loadSavedRolePermissions(), isAdmin()]);
+      if (saved) {
         const merged = {};
         for (const role of ROLES) {
-          merged[role.key] = { ...DEFAULT_PERMISSIONS[role.key], ...data.settings.role_permissions[role.key] };
+          merged[role.key] = { ...DEFAULT_PERMISSIONS[role.key], ...saved[role.key] };
         }
         setPermissions(merged);
       }
+      setCanEdit(admin !== false);
       setLoading(false);
     })();
   }, []);
 
   const toggle = (roleKey, moduleKey) => {
-    if (roleKey === "admin") return;
+    if (roleKey === "admin" || !canEdit) return;
     setPermissions(prev => ({
       ...prev,
       [roleKey]: { ...prev[roleKey], [moduleKey]: !prev[roleKey][moduleKey] },
@@ -336,11 +339,12 @@ function PermissionsTab() {
 
   const handleSave = async () => {
     setSaving(true);
-    const { data } = await supabase.from('company_profiles').select('id, settings').limit(1).single();
-    if (data) {
-      await supabase.from('company_profiles').update({
-        settings: { ...(data.settings || {}), role_permissions: permissions },
-      }).eq('id', data.id);
+    const { profile } = await loadSavedRolePermissions();
+    if (profile) {
+      const { error } = await supabase.from('company_profiles').update({
+        settings: { ...(profile.settings || {}), role_permissions: permissions },
+      }).eq('id', profile.id);
+      if (error) { setSaving(false); alert(error.message); return; }
     }
     setSaving(false);
     setSaved(true);
@@ -358,8 +362,10 @@ function PermissionsTab() {
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500">
           Check which modules each role can access. <span className="font-medium text-slate-700">Admin</span> always has full access.
+          {" "}Municipalities (permit portal passwords) is off for every role by default; it's enforced in the database, not just hidden.
+          {!loading && !canEdit && <span className="block text-amber-700 mt-1">Only an admin can change these.</span>}
         </p>
-        <Button onClick={handleSave} disabled={saving} size="sm" className="bg-gradient-to-r from-amber-500 to-orange-500 min-w-[110px]">
+        <Button onClick={handleSave} disabled={saving || !canEdit} size="sm" className="bg-gradient-to-r from-amber-500 to-orange-500 min-w-[110px]">
           {saved ? <><Check className="w-4 h-4 mr-1" /> Saved</> : saving ? "Saving…" : <><Save className="w-4 h-4 mr-1" /> Save Changes</>}
         </Button>
       </div>

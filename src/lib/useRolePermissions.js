@@ -2,15 +2,34 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
 
-// Mirror of Settings.jsx DEFAULT_PERMISSIONS — kept in sync manually
+// Which modules the signed-in staff member may use (Settings → Permissions).
+// Admin = an admin member of the staff organization, as the database decides
+// it (is_admin(), 054); admins can use everything. Everyone else gets their
+// employee role's saved switches over these defaults. The database enforces
+// the sensitive ones (Municipalities) on its own; this only drives the UI.
+
+// Mirror of Settings.jsx DEFAULT_PERMISSIONS for the modules checked here.
 const DEFAULT_ROLE_PERMISSIONS = {
-  admin:           { material_library: true  },
-  project_manager: { material_library: true  },
-  office:          { material_library: true  },
-  foreman:         { material_library: false },
-  laborer:         { material_library: false },
-  other:           { material_library: false },
+  admin:           { material_library: true,  municipalities: true },
+  project_manager: { material_library: true,  municipalities: false },
+  office:          { material_library: true,  municipalities: false },
+  foreman:         { material_library: false, municipalities: false },
+  laborer:         { material_library: false, municipalities: false },
+  other:           { material_library: false, municipalities: false },
 };
+
+// Saved switches live on the oldest company profile that has any (054 reads the same row).
+export async function loadSavedRolePermissions() {
+  const { data } = await supabase.from('company_profiles').select('id, settings').order('created_at').limit(50);
+  const withPerms = (data || []).find((p) => p.settings?.role_permissions);
+  return { profile: withPerms || (data || [])[0] || null, saved: withPerms?.settings?.role_permissions || null };
+}
+
+let adminCheck = null;
+export function isAdmin({ refresh = false } = {}) {
+  if (!adminCheck || refresh) adminCheck = supabase.rpc('is_admin').then(({ data, error }) => (error ? null : data === true));
+  return adminCheck;
+}
 
 export function useRolePermissions() {
   const { user } = useAuth();
@@ -18,24 +37,22 @@ export function useRolePermissions() {
 
   useEffect(() => {
     if (!user) { setPermissions({}); return; }
-
-    // Auth-level admins always have full manage access
-    if (user.role === 'admin') {
-      setPermissions({ __all: true });
-      return;
-    }
-
-    Promise.all([
-      supabase.from('employees').select('role').eq('email', user.email).maybeSingle(),
-      supabase.from('company_profiles').select('settings').limit(1).single(),
-    ]).then(([{ data: emp }, { data: profile }]) => {
+    let cancelled = false;
+    (async () => {
+      // null = is_admin() isn't in the database yet: fall back to the old
+      // user-metadata check so nobody is locked out before 054 runs.
+      const admin = await isAdmin();
+      if (cancelled) return;
+      if (admin === true || (admin === null && user.role === 'admin')) { setPermissions({ __all: true }); return; }
+      const [{ data: emp }, { saved }] = await Promise.all([
+        supabase.from('employees').select('role').ilike('email', user.email).maybeSingle(),
+        loadSavedRolePermissions(),
+      ]);
+      if (cancelled) return;
       const empRole = emp?.role || 'other';
-      const savedPerms = profile?.settings?.role_permissions?.[empRole] || {};
-      setPermissions({
-        ...DEFAULT_ROLE_PERMISSIONS[empRole],
-        ...savedPerms,
-      });
-    }).catch(() => setPermissions({}));
+      setPermissions({ ...DEFAULT_ROLE_PERMISSIONS[empRole], ...(saved?.[empRole] || {}) });
+    })().catch(() => { if (!cancelled) setPermissions({}); });
+    return () => { cancelled = true; };
   }, [user?.id, user?.role, user?.email]);
 
   const can = (key) => {
@@ -44,5 +61,5 @@ export function useRolePermissions() {
     return permissions[key] ?? false;
   };
 
-  return { can, loading: permissions === null };
+  return { can, loading: permissions === null, isAdmin: !!permissions?.__all };
 }

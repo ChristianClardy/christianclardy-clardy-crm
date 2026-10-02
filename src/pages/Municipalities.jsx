@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import SheetStyleToolbar, { DEFAULT_SHEET_STYLE } from "@/components/sheet/SheetStyleToolbar";
 import SheetFormattingBar from "@/components/sheet/SheetFormattingBar";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
+import { useRolePermissions } from "@/lib/useRolePermissions";
 
 const DEFAULT_COLUMNS = [
   { key: "city",                        label: "City",                          width: 150 },
@@ -173,7 +174,24 @@ function MuniRow({ row, ri, columns, sheetStyle, isRowSelected, dragOverId, isCe
   );
 }
 
+// Permit portal logins, passwords and security answers: admins only, plus
+// roles switched on in Settings → Permissions. The database enforces it too
+// (054); this keeps everyone else from even opening the page.
 export default function Municipalities() {
+  const { can, loading } = useRolePermissions();
+  if (loading) return <div className="flex justify-center py-20"><div className="h-6 w-6 animate-spin rounded-full border-4 border-amber-500 border-t-transparent" /></div>;
+  if (!can("municipalities")) {
+    return (
+      <div className="max-w-md mx-auto p-10 text-center space-y-2">
+        <h1 className="text-lg font-semibold text-slate-900">No access to Municipalities</h1>
+        <p className="text-sm text-slate-500">This page holds permit portal logins and passwords, so only admins can open it. An admin can give your role access in Settings → Permissions.</p>
+      </div>
+    );
+  }
+  return <MunicipalitiesSheet />;
+}
+
+function MunicipalitiesSheet() {
   const companyScope = useCompanyScope();
   const [rows, setRows] = useState([]);
   const [columns, setColumns] = useState(DEFAULT_COLUMNS);

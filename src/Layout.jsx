@@ -35,6 +35,7 @@ import InstallAppButton from "@/components/app/InstallAppButton";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/ThemeContext";
 import { useTenant } from "@/lib/TenantContext";
+import { useRolePermissions } from "@/lib/useRolePermissions";
 
 export default function Layout({ children, currentPageName }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -44,6 +45,10 @@ export default function Layout({ children, currentPageName }) {
 
   const crmPages = new Set(["CRM", "Pipeline", "CRMContacts", "CRMCompanies", "CRMActivities", "CRMDashboard"]);
   const [crmOpen, setCrmOpen] = useState(() => crmPages.has(currentPageName));
+
+  // Municipalities holds permit-portal passwords: admins, plus roles switched
+  // on in Settings → Permissions (054 enforces it in the database too).
+  const { can, loading: permsLoading } = useRolePermissions();
 
   const navigation = [
     { name: "Dashboard", href: createPageUrl("Dashboard"), icon: LayoutDashboard },
@@ -64,7 +69,7 @@ export default function Layout({ children, currentPageName }) {
       ],
     },
     { name: "Calendar", href: createPageUrl("Calendar"), icon: CalendarDays },
-    { name: "Municipalities", href: createPageUrl("Municipalities"), icon: Building2 },
+    ...(!permsLoading && can("municipalities") ? [{ name: "Municipalities", href: createPageUrl("Municipalities"), icon: Building2 }] : []),
     { name: "Estimates", href: createPageUrl("Estimates"), icon: Receipt },
     { name: "Payments", href: createPageUrl("Payments"), icon: DollarSign },
     { name: "Finance", href: createPageUrl("FinanceDashboard"), icon: FileBarChart2 },
