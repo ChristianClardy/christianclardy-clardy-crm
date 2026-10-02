@@ -21,6 +21,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2, Zap, Clock, CheckCircle2, Settings2 } from "lucide-react";
+import { useQbConnected } from "@/lib/quickbooks";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -104,6 +105,7 @@ function describeAmount(rule) {
 // ─── Add / Edit Dialog ───────────────────────────────────────────────────────
 
 function RuleDialog({ open, onClose, onSave, initial }) {
+  const qbConnected = useQbConnected();
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
@@ -271,8 +273,8 @@ function RuleDialog({ open, onClose, onSave, initial }) {
             />
           </div>
 
-          {/* Send via QB */}
-          <div className="flex items-center gap-2">
+          {/* Send via QB (only once QuickBooks is connected) */}
+          {qbConnected && <div className="flex items-center gap-2">
             <Checkbox
               id="send_via_qb"
               checked={form.send_via_qb}
@@ -281,7 +283,7 @@ function RuleDialog({ open, onClose, onSave, initial }) {
             <Label htmlFor="send_via_qb" className="cursor-pointer">
               Send via QuickBooks
             </Label>
-          </div>
+          </div>}
 
           {/* Description Template */}
           <div className="space-y-1.5">

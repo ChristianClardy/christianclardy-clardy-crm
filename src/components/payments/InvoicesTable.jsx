@@ -15,7 +15,7 @@ const statusStyles = {
 };
 const statusLabel = (s) => { const v = (s || "draft").toLowerCase(); return v.charAt(0).toUpperCase() + v.slice(1); };
 
-export default function InvoicesTable({ invoices, projectMap, clientMap, companyMap, onEdit, onMarkSent, onDelete, onSendToQB, qbSendingId }) {
+export default function InvoicesTable({ invoices, projectMap, clientMap, companyMap, onEdit, onMarkSent, onDelete, onSendToQB, qbSendingId, qbConnected = false }) {
   const getInvoicePdfTargetId = (invoiceId) => `invoice-preview-${invoiceId}`;
   const previewInvoice = invoices[0];
   const previewProject = previewInvoice ? projectMap[previewInvoice.linked_job_id] : null;
@@ -103,7 +103,7 @@ export default function InvoicesTable({ invoices, projectMap, clientMap, company
                               <ExternalLink className="w-3.5 h-3.5" />
                             </Button>
                           )}
-                          <Button
+                          {qbConnected && <Button
                             variant="ghost"
                             size="icon"
                             className={invoice.qb_invoice_id ? "h-8 w-8 text-emerald-600" : "h-8 w-8 text-slate-400"}
@@ -114,7 +114,7 @@ export default function InvoicesTable({ invoices, projectMap, clientMap, company
                             {qbSendingId === invoice.id
                               ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                               : <Cloud className="w-3.5 h-3.5" />}
-                          </Button>
+                          </Button>}
                         </div>
                       </td>
                     </tr>

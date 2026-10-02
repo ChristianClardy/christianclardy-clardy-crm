@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/apiFetch";
 
 // Calls /api/quickbooks (api/_lib/quickbooks.js does the work). Throws with
@@ -32,4 +33,16 @@ export async function qbAutoPush(action, payload, setting) {
   } catch (err) {
     return { error: err.message };
   }
+}
+
+// True once QuickBooks is connected. QuickBooks buttons and options stay
+// hidden until then (the integration can sit unconnected indefinitely).
+export function useQbConnected() {
+  const [connected, setConnected] = useState(false);
+  useEffect(() => {
+    let live = true;
+    qbStatus().then((s) => { if (live) setConnected(!!s.connected); });
+    return () => { live = false; };
+  }, []);
+  return connected;
 }

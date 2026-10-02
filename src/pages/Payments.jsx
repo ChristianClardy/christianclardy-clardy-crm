@@ -13,7 +13,7 @@ import { getInvoiceBranding } from "@/components/payments/invoiceBrandingUtils";
 import { DollarSign, Search, CheckCircle2, Clock, AlertCircle, RefreshCw, Plus, Palette, Cloud, ExternalLink, X } from "lucide-react";
 import { getSelectedCompanyScope, subscribeToCompanyScope } from "@/lib/companyScope";
 import { cn } from "@/lib/utils";
-import { qbCall, qbAutoPush } from "@/lib/quickbooks";
+import { qbCall, qbAutoPush, useQbConnected } from "@/lib/quickbooks";
 import { isPartlyPaid, drawRemaining } from "@/lib/draws";
 
 const statusStyles = {
@@ -192,6 +192,7 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
 
   // ── QuickBooks send ───────────────────────────────────────────────────────
   const [qbSending, setQbSending] = useState(null); // invoice.id while in-flight
+  const qbConnected = useQbConnected();
   const [qbResult, setQbResult] = useState(null);   // { invoice_name, qb_payment_link } after success
   const [qbError, setQbError] = useState(null);
 
@@ -299,6 +300,7 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
         onDelete={handleDeleteInvoice}
         onSendToQB={handleSendToQB}
         qbSendingId={qbSending}
+        qbConnected={qbConnected}
       />
 
       <ReceivedPaymentsTable payments={filteredPayments} projectMap={projectMap} clientMap={clientMap} companyMap={companyMap} />
