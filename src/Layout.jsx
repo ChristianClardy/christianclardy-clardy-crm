@@ -36,6 +36,7 @@ import NotificationBell from "@/components/notifications/NotificationBell";
 import OverdueAppointmentGate from "@/components/scheduling/OverdueAppointmentGate";
 import CompanyScopeSwitcher from "@/components/company/CompanyScopeSwitcher";
 import InstallAppButton from "@/components/app/InstallAppButton";
+import InstallNudge from "@/components/app/InstallNudge";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/ThemeContext";
 import { useTenant } from "@/lib/TenantContext";
@@ -320,6 +321,7 @@ export default function Layout({ children, currentPageName }) {
               <button type="button" onClick={exitPreview} className="rounded-md bg-white/20 px-3 py-1 font-semibold hover:bg-white/30">Exit preview</button>
             </div>
           )}
+          {!previewLabel && <InstallNudge />}
           {readOnly && !previewLabel && (
             <div className="sticky top-0 z-40 flex items-center gap-2 bg-indigo-600 px-4 py-2 text-sm text-white shadow">
               <Eye className="w-4 h-4 shrink-0" />

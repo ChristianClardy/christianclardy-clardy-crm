@@ -1,6 +1,7 @@
 import { HardHat, LogOut } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import InstallAppButton from "@/components/app/InstallAppButton";
+import InstallNudge from "@/components/app/InstallNudge";
 
 // Minimal shell for limited logins (subcontractors, Builder Portal-only PMs,
 // customers): no CRM sidebar, just the one portal.
@@ -22,6 +23,7 @@ export default function SubPortalLayout({ subcontractorName, title = "Subcontrac
           <span className="hidden sm:inline">Sign out</span>
         </button>
       </header>
+      <InstallNudge />
       <main>{children}</main>
     </div>
   );
