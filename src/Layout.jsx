@@ -28,7 +28,9 @@ import {
   ClipboardList,
   Lock,
   Eye,
+  LogOut,
 } from "lucide-react";
+import { useAuth } from "@/lib/AuthContext";
 import { useState } from "react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import OverdueAppointmentGate from "@/components/scheduling/OverdueAppointmentGate";
@@ -45,6 +47,7 @@ export default function Layout({ children, currentPageName }) {
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
   const { organization } = useTenant();
+  const { user, logout } = useAuth();
 
   const crmPages = new Set(["CRM", "Pipeline", "CRMContacts", "CRMCompanies", "CRMActivities", "CRMDashboard"]);
   const [crmOpen, setCrmOpen] = useState(() => crmPages.has(currentPageName));
@@ -228,6 +231,17 @@ export default function Layout({ children, currentPageName }) {
             <NotificationBell />
           </div>
         </div>
+        <button
+          onClick={() => logout()}
+          className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 rounded text-xs tracking-wide transition-colors"
+          style={{ border: "1px solid var(--brand-sidebar-border)", color: "var(--brand-gold-light)" }}
+          onMouseEnter={e => { e.currentTarget.style.backgroundColor = "var(--brand-sidebar-hover)"; }}
+          onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; }}
+          title={user?.email ? `Signed in as ${user.email}` : "Sign out"}
+        >
+          <LogOut className="w-4 h-4" />
+          <span className="truncate">Sign out{user?.email ? ` · ${user.email}` : ""}</span>
+        </button>
       </div>
     </div>
   );
