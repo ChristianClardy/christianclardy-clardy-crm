@@ -55,7 +55,9 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
 const isInviteFlow = (() => {
   try {
     const params = new URLSearchParams(window.location.hash.slice(1));
-    return params.get('type') === 'invite';
+    // invite = first invite email; magiclink = the sign-in link emailed when
+    // access is restored (api/invite.js). Both get the password + install setup.
+    return params.get('type') === 'invite' || params.get('type') === 'magiclink';
   } catch {
     return false;
   }

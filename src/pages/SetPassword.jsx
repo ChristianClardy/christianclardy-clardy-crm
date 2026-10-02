@@ -1,11 +1,22 @@
 import { useState, useEffect } from 'react';
 import { HardHat, Lock, Eye, EyeOff, Loader2, CheckCircle2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { isStandalone } from '@/lib/installPrompt';
+import InstallAppStep, { SetupProgress } from '@/components/app/InstallAppStep';
+
+// Where each kind of login lands, from the portal_role its invite set.
+const DESTINATION = {
+  customer:        { label: 'my project', href: '/CustomerPortal' },
+  subcontractor:   { label: 'my jobs',    href: '/BuilderPortal' },
+  project_manager: { label: 'my jobs',    href: '/' },
+};
+const STEPS = ['Password', 'Install'];
 
 /**
- * Shown when a user arrives via a Supabase invite link.
- * Supabase has already established a temporary session from the invite token;
- * we just need the user to choose a password.
+ * Shown when a user arrives via an emailed invite or sign-in link (staff,
+ * PMs, subs and customers alike). Supabase has already established a session
+ * from the link; they choose a password, then get the same "add Clardy to
+ * your phone / computer" guide as a texted portal link (JoinPortal).
  */
 export default function SetPassword() {
   const [password, setPassword]     = useState('');
@@ -13,6 +24,7 @@ export default function SetPassword() {
   const [showPass, setShowPass]     = useState(false);
   const [loading, setLoading]       = useState(false);
   const [done, setDone]             = useState(false);
+  const [account, setAccount]       = useState(null); // { email, portal_role }
   const [error, setError]           = useState('');
   const [sessionReady, setSessionReady] = useState(false);
 
@@ -48,15 +60,20 @@ export default function SetPassword() {
       setLoading(false);
       return;
     }
+    const { data: { user } } = await supabase.auth.getUser();
+    setAccount({ email: user?.email || '', portal_role: user?.user_metadata?.portal_role || null });
     setDone(true);
-    setTimeout(() => { window.location.href = '/'; }, 1800);
+    if (isStandalone()) setTimeout(() => { window.location.href = destination(user?.user_metadata?.portal_role).href; }, 1800);
   };
+
+  const destination = (role) => DESTINATION[role] || { label: 'the app', href: '/' };
+  const goToApp = () => { window.location.href = destination(account?.portal_role).href; };
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: '#f5f0eb', fontFamily: "'Georgia', serif" }}>
       <div className="w-full max-w-sm">
         {/* Logo */}
-        <div className="flex flex-col items-center mb-8">
+        <div className="flex flex-col items-center mb-6">
           <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3" style={{ backgroundColor: '#3d3530' }}>
             <HardHat className="w-6 h-6" style={{ color: '#b5965a' }} />
           </div>
@@ -64,8 +81,12 @@ export default function SetPassword() {
           <p className="text-sm mt-1" style={{ color: '#7a6e66' }}>Management Platform</p>
         </div>
 
+        {!isStandalone() && <SetupProgress steps={STEPS} current={done ? 1 : 0} />}
+
         <div className="rounded-2xl p-8 shadow-lg" style={{ backgroundColor: '#fff', border: '1px solid #ddd5c8' }}>
-          {done ? (
+          {done && !isStandalone() ? (
+            <InstallAppStep email={account?.email} destination={destination(account?.portal_role).label} onDone={goToApp} />
+          ) : done ? (
             <div className="flex flex-col items-center gap-3 py-4">
               <CheckCircle2 className="w-10 h-10" style={{ color: '#16a34a' }} />
               <p className="font-semibold text-slate-900">Password set — welcome!</p>

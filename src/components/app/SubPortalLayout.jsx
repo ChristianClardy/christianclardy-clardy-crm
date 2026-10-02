@@ -16,7 +16,7 @@ export default function SubPortalLayout({ subcontractorName, title = "Subcontrac
           <p className="text-sm font-bold tracking-wide truncate" style={{ color: "#f5f0eb" }}>{title}</p>
           <p className="text-xs truncate" style={{ color: "#c9ac76" }}>{subcontractorName || user?.email}</p>
         </div>
-        <InstallAppButton label="" className="p-2 rounded" style={{ color: "#c9ac76" }} />
+        <InstallAppButton label="Install" className="p-2 rounded flex items-center gap-1 text-xs" style={{ color: "#c9ac76" }} />
         <button onClick={() => logout()} className="p-2 rounded flex items-center gap-1 text-xs" style={{ color: "#c9ac76" }} title="Sign out">
           <LogOut className="w-4 h-4" />
           <span className="hidden sm:inline">Sign out</span>

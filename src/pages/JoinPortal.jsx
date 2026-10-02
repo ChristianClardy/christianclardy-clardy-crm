@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { HardHat, Lock, Eye, EyeOff, Loader2, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { isStandalone, installPlatform } from '@/lib/installPrompt';
-import InstallSteps from '@/components/app/InstallSteps';
+import { isStandalone } from '@/lib/installPrompt';
+import InstallAppStep, { SetupProgress } from '@/components/app/InstallAppStep';
 
 // Where a subcontractor lands from the Subcontractor Portal link staff text them
 // (/join?t=…, made by /api/invite?action=text-link). Walks them through:
@@ -47,7 +47,6 @@ export default function JoinPortal() {
   }, []);
 
   const firstName = account?.full_name?.split(' ')[0];
-  const ios = installPlatform().startsWith('ios');
   const isCustomer = account?.portal === 'customer';
   const openPortal = () => { window.location.href = isCustomer ? '/CustomerPortal' : '/BuilderPortal'; };
   const destination = isCustomer ? 'my project' : 'my jobs';
@@ -63,22 +62,7 @@ export default function JoinPortal() {
           <p className="text-sm mt-1" style={{ color: '#7a6e66' }}>Principle Outdoor Living</p>
         </div>
 
-        {!error && (
-          <div className="flex items-center justify-center gap-2 mb-5">
-            {STEPS.map((label, i) => (
-              <div key={label} className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className="w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center"
-                    style={i <= step ? { backgroundColor: '#3d3530', color: '#f5f0eb' } : { backgroundColor: '#ddd5c8', color: '#7a6e66' }}
-                  >{i + 1}</span>
-                  <span className="text-xs" style={{ color: i <= step ? '#3d3530' : '#a89e96' }}>{label}</span>
-                </div>
-                {i < STEPS.length - 1 && <span className="w-4 h-px" style={{ backgroundColor: '#ddd5c8' }} />}
-              </div>
-            ))}
-          </div>
-        )}
+        {!error && <SetupProgress steps={STEPS} current={step} />}
 
         <div className="rounded-2xl p-6 shadow-lg" style={{ backgroundColor: '#fff', border: '1px solid #ddd5c8' }}>
           {error ? (
@@ -98,21 +82,7 @@ export default function JoinPortal() {
               onDone={() => setStep(isStandalone() ? 3 : 2)}
             />
           ) : step === 2 ? (
-            <div className="space-y-5">
-              <div>
-                <h2 className="text-lg font-semibold" style={{ color: '#3d3530' }}>Add Clardy to your {ios || installPlatform().startsWith('android') ? 'home screen' : 'computer'}</h2>
-                <p className="text-sm mt-1" style={{ color: '#7a6e66' }}>Then it opens like any other app, right to {destination}.</p>
-              </div>
-              <InstallSteps
-                finalStep={ios
-                  ? <>Open <strong>Clardy</strong> from your home screen and sign in with <strong>{account.email}</strong> and the password you just made.</>
-                  : <>Open <strong>Clardy</strong> from your home screen or desktop. You're already signed in.</>}
-              />
-              <button onClick={openPortal} className="w-full py-2.5 rounded-lg text-sm font-semibold" style={{ backgroundColor: '#3d3530', color: '#f5f0eb' }}>
-                Done, go to {destination}
-              </button>
-              <button onClick={openPortal} className="w-full text-xs hover:underline" style={{ color: '#7a6e66' }}>I'll do this later</button>
-            </div>
+            <InstallAppStep email={account.email} destination={destination} onDone={openPortal} />
           ) : (
             <div className="space-y-4 text-center">
               <p className="text-sm" style={{ color: '#3d3530' }}>You're all set.</p>
