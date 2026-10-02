@@ -34,6 +34,7 @@ import JobPicker from "@/components/settings/JobPicker";
 import { savePmJobs, loadPmJobIds } from "@/lib/jobAssignments";
 import { apiFetch } from "@/lib/apiFetch";
 import { loadSavedRolePermissions, isAdmin } from "@/lib/useRolePermissions";
+import { loadDocuSignProfile } from "@/lib/docusignProfile";
 import { ROLES, MODULE_GROUPS, DEFAULT_PERMISSIONS } from "@/lib/permissions";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -691,11 +692,7 @@ function DocuSignTab() {
   useEffect(() => { loadStatus(); loadAppConfig(); }, []);
 
   const loadStatus = async () => {
-    const { data } = await supabase
-      .from("company_profiles")
-      .select("id, settings")
-      .limit(1)
-      .single();
+    const data = await loadDocuSignProfile();
     setDocusign(data?.settings?.docusign || null);
     setLoading(false);
   };
@@ -743,11 +740,7 @@ function DocuSignTab() {
   const handleDisconnect = async () => {
     if (!confirm("Disconnect DocuSign? You will need to reconnect to send documents.")) return;
     setDisconnecting(true);
-    const { data } = await supabase
-      .from("company_profiles")
-      .select("id, settings")
-      .limit(1)
-      .single();
+    const data = await loadDocuSignProfile();
     if (data) {
       const { docusign: _removed, ...rest } = data.settings || {};
       await supabase.from("company_profiles").update({ settings: rest }).eq("id", data.id);

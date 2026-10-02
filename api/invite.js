@@ -25,7 +25,7 @@
 // only ever works for an active sub, PM or customer login, never staff.
 
 const crypto = require('crypto');
-const { getStaffCaller } = require('./_lib/staffAuth.js');
+const { getStaffCaller, READ_ONLY_MESSAGE } = require('./_lib/staffAuth.js');
 const privacy = require('./_lib/privacy.js');
 
 const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
@@ -328,6 +328,7 @@ module.exports = async function handler(req, res) {
     try {
       const caller = await getStaffCaller(req);
       if (!caller) return res.status(401).json({ error: 'Only signed-in staff can delete personal data.' });
+      if (caller.isViewer) return res.status(403).json({ error: READ_ONLY_MESSAGE });
       const { entity_type, entity_id, reason } = req.body || {};
       const opts = { by: caller.email, reason };
       if (entity_type === 'client') return res.status(200).json(await privacy.eraseClient(entity_id, opts));
@@ -342,6 +343,7 @@ module.exports = async function handler(req, res) {
     try {
       const caller = await getStaffCaller(req);
       if (!caller) return res.status(401).json({ error: 'Only signed-in staff can send invites.' });
+      if (caller.isViewer) return res.status(403).json({ error: READ_ONLY_MESSAGE });
       await handleTextLink(req, res, caller);
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -362,6 +364,10 @@ module.exports = async function handler(req, res) {
     const caller = await getStaffCaller(req);
     if (!caller) {
       res.status(401).json({ error: 'Only signed-in staff can send invites.' });
+      return;
+    }
+    if (caller.isViewer) {
+      res.status(403).json({ error: READ_ONLY_MESSAGE });
       return;
     }
 

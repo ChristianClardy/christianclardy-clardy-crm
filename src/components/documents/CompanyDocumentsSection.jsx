@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { loadDocuSignProfile } from "@/lib/docusignProfile";
 import { base44 } from "@/api/base44Client";
-import { supabase } from "@/lib/supabase";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -309,7 +309,7 @@ export default function CompanyDocumentsSection({ selectedCompanyScope = "all", 
   };
 
   const checkDocuSign = async () => {
-    const { data } = await supabase.from("company_profiles").select("settings").limit(1).single();
+    const data = await loadDocuSignProfile();
     setDocusignConnected(!!data?.settings?.docusign?.access_token);
   };
 

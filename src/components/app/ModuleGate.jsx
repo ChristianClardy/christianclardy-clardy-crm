@@ -1,4 +1,4 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { ShieldOff } from "lucide-react";
 import { useRolePermissions } from "@/lib/useRolePermissions";
 import { PAGE_MODULE, LANDING_ORDER } from "@/lib/permissions";
@@ -6,9 +6,11 @@ import { createPageUrl } from "@/utils";
 
 // Wraps every staff page (App.jsx LayoutWrapper): a page whose module the
 // person's role doesn't have (Settings → Roles & Permissions) isn't shown.
-// Their start page sends them on to the first page they can open.
+// Their start page sends them on to the first page they can open, unless
+// they picked it from the sidebar (where locked pages still show).
 export default function ModuleGate({ page, children }) {
   const { can, loading } = useRolePermissions();
+  const location = useLocation();
   const module = PAGE_MODULE[page];
   if (!module) return children;
   if (loading) {
@@ -17,7 +19,7 @@ export default function ModuleGate({ page, children }) {
   if (can(module)) return children;
 
   const landing = LANDING_ORDER.find((p) => !PAGE_MODULE[p] || can(PAGE_MODULE[p]));
-  if (page === "Dashboard" && landing && landing !== "Dashboard") return <Navigate to={createPageUrl(landing)} replace />;
+  if (page === "Dashboard" && !location.state?.picked && landing && landing !== "Dashboard") return <Navigate to={createPageUrl(landing)} replace />;
   return (
     <div className="max-w-md mx-auto p-10 text-center space-y-3">
       <ShieldOff className="w-8 h-8 mx-auto text-slate-300" />

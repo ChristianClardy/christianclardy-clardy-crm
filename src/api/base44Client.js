@@ -10,6 +10,7 @@
 import { supabase } from '@/lib/supabase';
 import { getSelectedCompanyScope } from '@/lib/companyScope';
 import { apiFetch } from '@/lib/apiFetch';
+import { READ_ONLY_MESSAGE, blocksWrite, isReadOnly } from '@/lib/readOnly';
 
 // ─── Entity → table name map ────────────────────────────────────────────────
 const TABLE_MAP = {
@@ -194,13 +195,20 @@ const newId = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto
 // Alerts on write failures. Read failures are logged to console so components
 // can catch and render empty states without interrupting the user.
 function reportError(op, table, error) {
-  const msg = isNetworkError(error)
+  const msg = /^View-only access/.test(error?.message || '')
+    ? error.message
+    : isNetworkError(error)
     ? "Couldn't reach the server. Check your signal or Wi-Fi and try again."
     : `${op} failed on "${table}": ${error?.message || error}`;
   console.error('[base44]', msg, error);
   const isWrite = op === 'create' || op === 'update' || op === 'delete';
   if (isWrite) setTimeout(() => alert(msg), 0);
   throw error;
+}
+
+// A view-only login's write stops here with a clear message (src/lib/readOnly.js).
+function guardReadOnly(op, table) {
+  if (blocksWrite(table, op)) reportError(op, table, new Error(READ_ONLY_MESSAGE));
 }
 
 // ─── Entity factory ──────────────────────────────────────────────────────────
@@ -255,6 +263,7 @@ function createEntity(tableName) {
 
     /** create(record) → created record */
     async create(record) {
+      guardReadOnly('create', tableName);
       const payload = cleanForWrite(record);
       // Auto-inject organization_id so every new record is scoped to the active org
       if (needsOrg() && !payload.organization_id) {
@@ -297,6 +306,7 @@ function createEntity(tableName) {
 
     /** update(id, record) → updated record */
     async update(id, record) {
+      guardReadOnly('update', tableName);
       const payload = cleanForWrite(record);
       let query = supabase.from(tableName).update(payload).eq('id', id);
       if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
@@ -320,6 +330,7 @@ function createEntity(tableName) {
 
     /** delete(id) */
     async delete(id) {
+      guardReadOnly('delete', tableName);
       let query = supabase.from(tableName).delete().eq('id', id);
       if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
       const { error } = await withRetry(() => query);
@@ -392,6 +403,7 @@ const STORAGE_BUCKET = 'Attachements';
 const integrations = {
   Core: {
     async UploadFile({ file, entity_type, entity_id, uploaded_by, category }) {
+      if (isReadOnly()) throw new Error(READ_ONLY_MESSAGE);
       // Step 1: Upload file directly to Supabase Storage from the browser
       // (bypasses Vercel's 4.5MB serverless body limit)
       const ext = file.name.split('.').pop();

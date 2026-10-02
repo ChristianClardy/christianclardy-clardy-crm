@@ -22,6 +22,8 @@ import {
   TrendingUp,
   BarChart3,
   DollarSign,
+  Lock,
+  ShieldOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -109,9 +111,9 @@ export default function ProjectDetail() {
   const [activeTab, setActiveTab] = useState(PROJECT_TABS.some((t) => t.key === initialTab) ? initialTab : "overview");
   // Tabs and dollar amounts follow the role's permissions (src/lib/permissions.js).
   const { can, loading: permsLoading } = useRolePermissions();
+  // Every tab shows; one the role can't open has a lock and shows "no access".
   const tabAllowed = (key) => !PROJECT_TAB_MODULE[key] || can(PROJECT_TAB_MODULE[key]);
-  const visibleTabs = PROJECT_TABS.filter((t) => tabAllowed(t.key));
-  const currentTab = tabAllowed(activeTab) ? activeTab : "overview";
+  const currentTab = tabAllowed(activeTab) ? activeTab : "locked";
   const canSeeMoney = can("job_costs") || can("project_billing");
   const [subcontractors, setSubcontractors] = useState([]);
   // Set by a change order's "Send for signature": the Contracts tab opens
@@ -278,7 +280,7 @@ export default function ProjectDetail() {
 
       {/* Tab Navigation */}
       <div className="flex gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto max-w-full">
-        {visibleTabs.map(({ key, label, icon: Icon }) => (
+        {PROJECT_TABS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => {
@@ -287,16 +289,26 @@ export default function ProjectDetail() {
             }}
             className={cn(
               "shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-              currentTab === key
+              activeTab === key
                 ? "bg-white text-slate-900 shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
+                : "text-slate-500 hover:text-slate-700",
+              !tabAllowed(key) && "opacity-60"
             )}
           >
             <Icon className="w-4 h-4" />
             {label}
+            {!tabAllowed(key) && <Lock className="w-3 h-3 text-slate-400" aria-label="No access" />}
           </button>
         ))}
       </div>
+
+      {currentTab === "locked" && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center space-y-2">
+          <ShieldOff className="w-8 h-8 mx-auto text-slate-300" />
+          <h2 className="text-lg font-semibold text-slate-900">You don't have access to this tab</h2>
+          <p className="text-sm text-slate-500">Your role doesn't include it. An admin can change that in Settings → Roles &amp; Permissions.</p>
+        </div>
+      )}
 
       {currentTab === "contracts" && (
         <div className="bg-white rounded-2xl border border-slate-200">

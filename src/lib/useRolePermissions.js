@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
-import { DEFAULT_PERMISSIONS } from '@/lib/permissions';
+import { DEFAULT_PERMISSIONS, READ_ONLY_ROLES } from '@/lib/permissions';
+import { setReadOnly } from '@/lib/readOnly';
 
 // Which modules the signed-in staff member may use (Settings → Permissions).
 // Admin = an admin member of the staff organization, as the database decides
@@ -61,17 +62,20 @@ export function useRolePermissions() {
       const preview = previewRole();
       if ((admin === true || (admin === null && user.role === 'admin')) && preview && DEFAULT_PERMISSIONS[preview] && preview !== 'admin') {
         const { saved } = await loadSavedRolePermissions();
-        if (!cancelled) setPermissions({ ...DEFAULT_PERMISSIONS[preview], ...(saved?.[preview] || {}), __preview: preview });
+        if (cancelled) return;
+        setReadOnly(READ_ONLY_ROLES.has(preview));
+        setPermissions({ ...DEFAULT_PERMISSIONS[preview], ...(saved?.[preview] || {}), __preview: preview, __readOnly: READ_ONLY_ROLES.has(preview) });
         return;
       }
-      if (admin === true || (admin === null && user.role === 'admin')) { setPermissions({ __all: true }); return; }
+      if (admin === true || (admin === null && user.role === 'admin')) { setReadOnly(false); setPermissions({ __all: true }); return; }
       const [{ data: emp }, { saved }] = await Promise.all([
         supabase.from('employees').select('role').ilike('email', user.email).maybeSingle(),
         loadSavedRolePermissions(),
       ]);
       if (cancelled) return;
       const empRole = emp?.role || 'other';
-      setPermissions({ ...(DEFAULT_PERMISSIONS[empRole] || DEFAULT_PERMISSIONS.other), ...(saved?.[empRole] || {}) });
+      setReadOnly(READ_ONLY_ROLES.has(empRole));
+      setPermissions({ ...(DEFAULT_PERMISSIONS[empRole] || DEFAULT_PERMISSIONS.other), ...(saved?.[empRole] || {}), __readOnly: READ_ONLY_ROLES.has(empRole) });
     })().catch(() => { if (!cancelled) setPermissions({}); });
     return () => { cancelled = true; };
   }, [user?.id, user?.role, user?.email]);
@@ -82,5 +86,5 @@ export function useRolePermissions() {
     return permissions[key] ?? false;
   };
 
-  return { can, loading: permissions === null, isAdmin: !!permissions?.__all, previewing: permissions?.__preview || null };
+  return { can, loading: permissions === null, isAdmin: !!permissions?.__all, previewing: permissions?.__preview || null, readOnly: !!permissions?.__readOnly };
 }

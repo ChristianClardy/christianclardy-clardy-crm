@@ -5,6 +5,10 @@
 // A role's saved switches (company_profiles.settings.role_permissions)
 // override these defaults; a module a role has nothing saved for uses the
 // default here. Municipalities is also enforced in the database (054).
+//
+// Viewer is read-only on top of whatever it can open: the database refuses
+// every change from a Viewer login (055), and the app says so up front.
+export const READ_ONLY_ROLES = new Set(["viewer"]);
 
 export const ROLES = [
   { key: "admin",           label: "Admin / Owner",            color: "bg-rose-100 text-rose-700",       blurb: "Everything, including permissions." },
@@ -15,6 +19,7 @@ export const ROLES = [
   { key: "project_manager", label: "Project Manager",          color: "bg-violet-100 text-violet-700",   blurb: "Runs jobs: schedule, subs, change orders, job costs." },
   { key: "foreman",         label: "Superintendent / Foreman", color: "bg-amber-100 text-amber-700",     blurb: "On site: schedule, daily logs, punch list, documents. No money." },
   { key: "laborer",         label: "Field Crew",               color: "bg-slate-100 text-slate-600",     blurb: "Their calendar and job documents. No money." },
+  { key: "viewer",          label: "Viewer (read-only)",       color: "bg-indigo-100 text-indigo-700",   blurb: "Executives and owners: sees everything switched on, can't change anything." },
   { key: "other",           label: "Other",                    color: "bg-slate-100 text-slate-500",     blurb: "Nothing until switched on." },
 ];
 
@@ -63,6 +68,7 @@ export const DEFAULT_PERMISSIONS = {
   project_manager: on("dashboard", "projects", "builder_portal", "change_orders", "contracts", "subcontractors", "job_costs", "calendar", "documents", "material_library", "workspace_items"),
   foreman:         on("dashboard", "projects", "builder_portal", "subcontractors", "calendar", "documents", "workspace_items"),
   laborer:         on("calendar", "documents"),
+  viewer:          on(...MODULES.map((m) => m.key).filter((k) => k !== "municipalities" && k !== "settings")),
   other:           on(),
 };
 

@@ -26,6 +26,8 @@ import {
   Activity,
   ChevronDown,
   ClipboardList,
+  Lock,
+  Eye,
 } from "lucide-react";
 import { useState } from "react";
 import NotificationBell from "@/components/notifications/NotificationBell";
@@ -47,11 +49,13 @@ export default function Layout({ children, currentPageName }) {
   const crmPages = new Set(["CRM", "Pipeline", "CRMContacts", "CRMCompanies", "CRMActivities", "CRMDashboard"]);
   const [crmOpen, setCrmOpen] = useState(() => crmPages.has(currentPageName));
 
-  // Each link needs its module (Settings → Roles & Permissions,
-  // src/lib/permissions.js); links without one are open to all staff.
-  const { can, loading: permsLoading, previewing } = useRolePermissions();
+  // Every link shows for everyone; one whose module the role doesn't have
+  // (Settings → Roles & Permissions, src/lib/permissions.js) is dimmed with a
+  // lock and opens the "no access" page (ModuleGate).
+  const { can, loading: permsLoading, previewing, readOnly } = useRolePermissions();
   const previewLabel = previewing ? ROLES.find((r) => r.key === previewing)?.label || previewing : null;
-  const allowed = (item) => !item.module || (!permsLoading && can(item.module));
+  const locked = (item) => !!item.module && !permsLoading && !can(item.module);
+  const LockMark = ({ item }) => (locked(item) ? <Lock className="w-3.5 h-3.5 ml-auto opacity-70" aria-label="No access" /> : null);
 
   const navigation = [
     { name: "Dashboard", href: createPageUrl("Dashboard"), icon: LayoutDashboard, module: "dashboard" },
@@ -82,7 +86,7 @@ export default function Layout({ children, currentPageName }) {
     { name: "Material Library", href: createPageUrl("MaterialLibrary"), icon: Package },
     { name: "Workspace Items", href: createPageUrl("WorkplaceItems"), icon: Wrench, module: "workspace_items" },
     { name: "Settings", href: createPageUrl("Settings"), icon: ShieldCheck, module: "settings" },
-  ].filter(allowed);
+  ];
 
   const isActive = (href) => {
     const pageName = href.split('/').pop();
@@ -129,8 +133,9 @@ export default function Layout({ children, currentPageName }) {
                 <div className="flex items-center">
                   <Link
                     to={item.href}
+                    state={{ picked: true }}
                     onClick={() => setSidebarOpen(false)}
-                    className="flex flex-1 items-center gap-3 px-4 py-3 rounded-l text-sm tracking-wide transition-all duration-200"
+                    className={cn("flex flex-1 items-center gap-3 px-4 py-3 rounded-l text-sm tracking-wide transition-all duration-200", locked(item) && "opacity-50")}
                     style={isActive(item.href)
                       ? { backgroundColor: "var(--brand-gold)", color: "#f5f0eb", fontWeight: 600 }
                       : groupActive
@@ -142,6 +147,7 @@ export default function Layout({ children, currentPageName }) {
                   >
                     <item.icon className="w-4 h-4" />
                     {item.name}
+                    <LockMark item={item} />
                   </Link>
                   <button
                     onClick={() => setCrmOpen(o => !o)}
@@ -157,8 +163,9 @@ export default function Layout({ children, currentPageName }) {
                       <Link
                         key={child.name}
                         to={child.href}
+                        state={{ picked: true }}
                         onClick={() => setSidebarOpen(false)}
-                        className="flex items-center gap-3 px-3 py-2 rounded text-sm tracking-wide transition-all duration-200"
+                        className={cn("flex items-center gap-3 px-3 py-2 rounded text-sm tracking-wide transition-all duration-200", locked(item) && "opacity-50")}
                         style={isActive(child.href)
                           ? { backgroundColor: "var(--brand-gold)", color: "#f5f0eb", fontWeight: 600 }
                           : { color: "var(--brand-sidebar-text)", fontWeight: 400 }
@@ -168,6 +175,7 @@ export default function Layout({ children, currentPageName }) {
                       >
                         <child.icon className="w-3.5 h-3.5" />
                         {child.name}
+                        <LockMark item={item} />
                       </Link>
                     ))}
                   </div>
@@ -179,8 +187,9 @@ export default function Layout({ children, currentPageName }) {
             <Link
               key={item.name}
               to={item.href}
+              state={{ picked: true }}
               onClick={() => setSidebarOpen(false)}
-              className="flex items-center gap-3 px-4 py-3 rounded text-sm tracking-wide transition-all duration-200"
+              className={cn("flex items-center gap-3 px-4 py-3 rounded text-sm tracking-wide transition-all duration-200", locked(item) && "opacity-50")}
               style={isActive(item.href)
                 ? { backgroundColor: "var(--brand-gold)", color: "#f5f0eb", fontWeight: 600 }
                 : { color: "var(--brand-sidebar-text)", fontWeight: 400 }
@@ -190,6 +199,7 @@ export default function Layout({ children, currentPageName }) {
             >
               <item.icon className="w-4 h-4" />
               {item.name}
+              <LockMark item={item} />
             </Link>
           );
         })}
@@ -292,8 +302,14 @@ export default function Layout({ children, currentPageName }) {
         <main className="min-h-[calc(100vh-4rem)] lg:min-h-screen overflow-x-hidden" style={{ backgroundColor: "var(--brand-bg)" }}>
           {previewLabel && (
             <div className="sticky top-0 z-40 flex flex-wrap items-center justify-between gap-2 bg-amber-500 px-4 py-2 text-sm text-white shadow">
-              <span><strong>Previewing as {previewLabel}.</strong> The sidebar, pages and project tabs are what this role sees. Data is still yours.</span>
+              <span><strong>Previewing as {previewLabel}.</strong> The sidebar, pages and project tabs are what this role sees. {readOnly ? "Saving is blocked in this tab, like it is for them." : "Data is still yours."}</span>
               <button type="button" onClick={exitPreview} className="rounded-md bg-white/20 px-3 py-1 font-semibold hover:bg-white/30">Exit preview</button>
+            </div>
+          )}
+          {readOnly && !previewLabel && (
+            <div className="sticky top-0 z-40 flex items-center gap-2 bg-indigo-600 px-4 py-2 text-sm text-white shadow">
+              <Eye className="w-4 h-4 shrink-0" />
+              <span><strong>View-only access.</strong> You can see everything your role allows, but changes won't be saved.</span>
             </div>
           )}
           {children}

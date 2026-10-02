@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
+import { loadDocuSignProfile } from "@/lib/docusignProfile";
+import { useNavigate } from "react-router-dom";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
 import { apiFetch } from "@/lib/apiFetch";
 
@@ -48,11 +49,11 @@ export default function DocuSignCallback() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to connect DocuSign.");
 
-      // Persist tokens in company_profiles.settings.docusign (org-scoped)
-      const profileQuery = supabase.from("company_profiles").select("id, settings").limit(1);
-      const { data: profile, error: dbError } = await profileQuery.single();
+      // Persist tokens in company_profiles.settings.docusign (org-scoped),
+      // on the profile that already holds it, so the app and server agree.
+      const profile = await loadDocuSignProfile();
 
-      if (dbError || !profile) throw new Error("Could not load company profile.");
+      if (!profile) throw new Error("Could not load company profile.");
 
       const expiresAt = new Date(Date.now() + data.expires_in * 1000).toISOString();
 
