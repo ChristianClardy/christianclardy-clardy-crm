@@ -20,6 +20,7 @@ import {
   Clock,
   RefreshCw,
   Home,
+  ShieldAlert,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -45,6 +46,7 @@ import AppointmentsPanel from "@/components/scheduling/AppointmentsPanel";
 import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
 import ContactHistoryPanel from "@/components/crm/ContactHistoryPanel";
 import CustomerPortalDialog from "@/components/clients/CustomerPortalDialog";
+import EraseDataDialog from "@/components/privacy/EraseDataDialog";
 import { cn } from "@/lib/utils";
 
 const statusStyles = {
@@ -74,6 +76,7 @@ export default function ClientDetail() {
   const [loading, setLoading] = useState(true);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [portalOpen, setPortalOpen] = useState(false);
+  const [eraseOpen, setEraseOpen] = useState(false);
   const [formData, setFormData] = useState({});
 
   useEffect(() => {
@@ -207,6 +210,10 @@ export default function ClientDetail() {
             <Edit2 className="w-4 h-4 mr-2" />
             Edit
           </Button>
+          <Button variant="outline" className="text-rose-600 hover:text-rose-700" onClick={() => setEraseOpen(true)} title="Privacy request: remove this person's details, keep financial records">
+            <ShieldAlert className="w-4 h-4 mr-2" />
+            Delete personal data
+          </Button>
           <Button variant="outline" className="text-rose-600 hover:text-rose-700" onClick={handleDeleteClient}>
             <Trash2 className="w-4 h-4" />
           </Button>
@@ -214,6 +221,7 @@ export default function ClientDetail() {
       </div>
 
       {portalOpen && <CustomerPortalDialog client={client} onClose={() => setPortalOpen(false)} />}
+      <EraseDataDialog entityType="client" entity={client} open={eraseOpen} onClose={() => setEraseOpen(false)} onDone={loadData} />
 
       {/* Contact Info */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6">

@@ -17,12 +17,16 @@
 // ?action=text-link (staff): same sub login, but instead of an email it
 // returns a /join link for staff to text from their own phone. Pass
 // `user_id` instead to get a fresh link for an existing sub login.
+// ?action=erase (staff): "Delete personal data" for a client or
+// subcontractor (body { entity_type, entity_id, reason }); see
+// api/_lib/privacy.js. Lives here to stay within Vercel's function limit.
 // ?action=redeem (public): trades a /join link's token for a one-time sign-in
 // token (see src/pages/JoinPortal.jsx). The join token is HMAC-signed and
 // only ever works for an active sub, PM or customer login, never staff.
 
 const crypto = require('crypto');
 const { getStaffCaller } = require('./_lib/staffAuth.js');
+const privacy = require('./_lib/privacy.js');
 
 const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -317,6 +321,20 @@ module.exports = async function handler(req, res) {
       await handleRedeem(req, res);
     } catch (err) {
       res.status(500).json({ error: err.message });
+    }
+    return;
+  }
+  if (action === 'erase') {
+    try {
+      const caller = await getStaffCaller(req);
+      if (!caller) return res.status(401).json({ error: 'Only signed-in staff can delete personal data.' });
+      const { entity_type, entity_id, reason } = req.body || {};
+      const opts = { by: caller.email, reason };
+      if (entity_type === 'client') return res.status(200).json(await privacy.eraseClient(entity_id, opts));
+      if (entity_type === 'subcontractor') return res.status(200).json(await privacy.eraseSubcontractor(entity_id, opts));
+      return res.status(400).json({ error: 'entity_type must be client or subcontractor.' });
+    } catch (err) {
+      res.status(err.status || 500).json({ error: err.message });
     }
     return;
   }

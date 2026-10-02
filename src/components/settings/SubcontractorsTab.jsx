@@ -19,6 +19,7 @@ import SubAccessDialog from "@/components/builder/SubAccessDialog";
 import { goToSettingsTab } from "@/lib/settingsNav";
 import { TRADE_LABELS, tradeLabel, subTrades, subTradeLabels } from "@/lib/subTrades";
 import JobPicker from "@/components/settings/JobPicker";
+import EraseDataDialog from "@/components/privacy/EraseDataDialog";
 import { saveSubJobs, loadSubJobIds } from "@/lib/jobAssignments";
 
 // Subcontractor directory: contact info, compliance paperwork (insurance,
@@ -94,6 +95,7 @@ export default function SubcontractorsTab() {
 
   const [editing, setEditing] = useState(null); // null | "new" | sub
   const [accessSub, setAccessSub] = useState(null);
+  const [erasing, setErasing] = useState(null);
 
   const load = async () => {
     const [s, a, pu, ackRes] = await Promise.all([
@@ -236,6 +238,7 @@ export default function SubcontractorsTab() {
               onAccess={() => setAccessSub(row.sub)}
               onStatus={(status) => setStatus(row.sub, status)}
               onDelete={() => remove(row)}
+              onErase={() => setErasing(row.sub)}
             />
           ))}
         </div>
@@ -251,6 +254,8 @@ export default function SubcontractorsTab() {
           onSaved={() => { setEditing(null); load(); }}
         />
       )}
+
+      <EraseDataDialog entityType="subcontractor" entity={erasing} open={!!erasing} onClose={() => setErasing(null)} onDone={load} />
 
       {accessSub && (
         <SubAccessDialog
@@ -312,7 +317,7 @@ function UnlinkedLogins({ logins, subs, onLinked }) {
   );
 }
 
-function SubRow({ row, signed, onEdit, onAccess, onStatus, onDelete }) {
+function SubRow({ row, signed, onEdit, onAccess, onStatus, onDelete, onErase }) {
   const { sub, issues, jobs, logins } = row;
   const status = STATUS[sub.status] || STATUS.active;
   const bad = issues.filter((i) => i.level === "bad");
@@ -379,6 +384,7 @@ function SubRow({ row, signed, onEdit, onAccess, onStatus, onDelete }) {
             {sub.status !== "preferred" && <DropdownMenuItem onClick={() => onStatus("preferred")}>Mark preferred</DropdownMenuItem>}
             {sub.status !== "active" && <DropdownMenuItem onClick={() => onStatus("active")}>Mark active</DropdownMenuItem>}
             {sub.status !== "inactive" && <DropdownMenuItem onClick={() => onStatus("inactive")}>Mark inactive</DropdownMenuItem>}
+            <DropdownMenuItem onClick={onErase} className="text-rose-600">Delete personal data (privacy request)</DropdownMenuItem>
             <DropdownMenuItem onClick={onDelete} className="text-rose-600">Delete</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
