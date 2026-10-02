@@ -16,7 +16,15 @@ import { qbCall, qbStatus } from "@/lib/quickbooks";
 //   5. Sync status and Sync now
 
 const origin = typeof window !== "undefined" ? window.location.origin : "https://clardy.io";
+// Handled on the server (vercel.json rewrite → /api/quickbooks?action=oauth-callback),
+// which redirects back here with ?qb=connected or ?qb=error.
 const REDIRECT_URI = `${origin}/QuickBooksCallback`;
+const RETURN_MESSAGES = {
+  connected: { ok: true, text: "QuickBooks is connected. Pick how Clardy books invoices and bills below." },
+  denied: { ok: false, text: "QuickBooks access wasn't approved. Click Connect to QuickBooks to try again." },
+  expired: { ok: false, text: "That QuickBooks sign-in took too long or wasn't started from Clardy. Click Connect to QuickBooks again." },
+  failed: { ok: false, text: "QuickBooks couldn't be connected. Check the app keys and the Redirect URI in your Intuit app, then try again." },
+};
 const WEBHOOK_URL = `${origin}/api/quickbooks?action=webhook`;
 
 function CopyField({ label, value }) {
@@ -55,6 +63,14 @@ export default function QuickBooksTab() {
   const [options, setOptions] = useState(null);
   const [mapping, setMapping] = useState({});
   const [syncResult, setSyncResult] = useState(null);
+  // Result of the QuickBooks sign-in (?qb=connected|error&reason=…), shown once.
+  const [returnMsg] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    const qb = p.get("qb");
+    if (!qb) return null;
+    window.history.replaceState(null, "", "/Settings?tab=quickbooks");
+    return qb === "connected" ? RETURN_MESSAGES.connected : RETURN_MESSAGES[p.get("reason")] || RETURN_MESSAGES.failed;
+  });
 
   const load = async () => {
     const s = await qbStatus({ refresh: true });
@@ -124,6 +140,9 @@ export default function QuickBooksTab() {
         </p>
       </div>
 
+      {returnMsg && (
+        <div className={cn("rounded-xl border px-4 py-3 text-sm", returnMsg.ok ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-700")}>{returnMsg.text}</div>
+      )}
       {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
 
       {/* 1. Setup guide */}

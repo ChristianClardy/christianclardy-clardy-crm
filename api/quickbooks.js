@@ -5,7 +5,7 @@
 //   status                         connection status, mappings, last sync
 //   config-save                    { client_id, client_secret, environment, webhook_verifier }
 //   auth-url                       { redirect_uri } → Intuit sign-in URL (signed state)
-//   callback                       { code, realm_id, state, redirect_uri } → stores tokens server-side
+//   (sign-in return: GET /quickbooks/callback → ?action=oauth-callback, below)
 //   disconnect
 //   options                        items + accounts to map in Settings
 //   settings-save                  { settings }
@@ -17,6 +17,11 @@
 //   ar-aging                       open invoices by days late
 // Public, verified by Intuit's signature:
 //   POST /api/quickbooks?action=webhook
+// Public, verified by the signed OAuth state (only staff can start sign-in):
+//   GET /quickbooks/callback (vercel.json rewrite to ?action=oauth-callback):
+//   Intuit's redirect after sign-in. Exchanges the code on the server and
+//   answers with a 302 to Settings, never an HTML page, so the code in the
+//   URL can't leak through a Referer header (Intuit security requirement).
 
 const { requireStaff } = require('./_lib/staffAuth.js');
 const qb = require('./_lib/quickbooks.js');
@@ -42,7 +47,34 @@ async function handleWebhook(req, res) {
   return res.status(200).json({ ok: true });
 }
 
+function redirect(res, location) {
+  res.statusCode = 302;
+  res.setHeader('Location', location);
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.end();
+}
+
+async function handleOAuthCallback(req, res) {
+  const { code, realmId, state, error } = req.query || {};
+  const back = (params) => redirect(res, `/Settings?tab=quickbooks&${new URLSearchParams(params)}`);
+  if (error) return back({ qb: 'error', reason: error === 'access_denied' ? 'denied' : 'failed' });
+  if (!code || !realmId) return back({ qb: 'error', reason: 'failed' });
+  try {
+    await qb.exchangeCode({ code, realmId, state });
+    return back({ qb: 'connected' });
+  } catch (err) {
+    console.error('quickbooks oauth callback failed:', err.message);
+    return back({ qb: 'error', reason: /expired|not started/i.test(err.message) ? 'expired' : 'failed' });
+  }
+}
+
 module.exports = async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  if (req.query?.action === 'oauth-callback') {
+    if (req.method !== 'GET') return res.status(405).send('Method Not Allowed');
+    return handleOAuthCallback(req, res);
+  }
   if (req.query?.action === 'webhook') {
     if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
     return handleWebhook(req, res);
@@ -69,7 +101,6 @@ module.exports = async function handler(req, res) {
       case 'status':         result = await qb.status(); break;
       case 'config-save':    result = await saveConfig(body); break;
       case 'auth-url':       result = { auth_url: await qb.authUrl(required(body, 'redirect_uri'), user) }; break;
-      case 'callback':       result = await qb.exchangeCode({ code: required(body, 'code'), realmId: required(body, 'realm_id'), state: body.state, redirectUri: required(body, 'redirect_uri') }); break;
       case 'disconnect':     await qb.disconnect(); result = { ok: true }; break;
       case 'options':        result = await qb.listOptions(); break;
       case 'settings-save':  result = await qb.saveSettings(body.settings || {}); break;

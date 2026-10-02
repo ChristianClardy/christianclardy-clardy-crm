@@ -34,7 +34,6 @@ import Settings from './pages/Settings';
 import MaterialLibraryPage from './pages/MaterialLibrary';
 import DocuSignCallback from './pages/DocuSignCallback';
 import DocuSignSenderReturn from './pages/DocuSignSenderReturn';
-import QuickBooksCallback from './pages/QuickBooksCallback';
 import BuilderPortal from './pages/BuilderPortal';
 import Builder from './pages/Builder';
 import CustomerPortal from './pages/CustomerPortal';
@@ -179,7 +178,6 @@ const AuthenticatedApp = () => {
       <Route path="/MaterialLibrary" element={<LayoutWrapper currentPageName="MaterialLibrary"><MaterialLibraryPage /></LayoutWrapper>} />
       <Route path="/DocuSignCallback" element={<DocuSignCallback />} />
       <Route path="/DocuSignSenderReturn" element={<DocuSignSenderReturn />} />
-      <Route path="/QuickBooksCallback" element={<QuickBooksCallback />} />
       <Route path="/lead-form" element={<PublicLeadForm />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>

@@ -35,15 +35,60 @@ async function getCredentials() {
   return (await sbList('quickbooks_credentials', { limit: 1 }))[0] || null;
 }
 
+// ─── Token encryption (Intuit security requirement) ─────────────────────────
+// The refresh token, access token and realm ID are encrypted with AES-256-GCM
+// before they're stored. The key lives in the server's environment, separate
+// from the database: QB_TOKEN_KEY (32 bytes, base64) when set, otherwise
+// derived from the Supabase service key. Changing the key just means
+// reconnecting QuickBooks. Values saved before encryption still read fine
+// and are encrypted on the next save.
+const ENC_PREFIX = 'enc:v1:';
+const ENCRYPTED_FIELDS = ['access_token', 'refresh_token', 'realm_id'];
+let tokenKey = null;
+function key() {
+  if (tokenKey) return tokenKey;
+  const configured = process.env.QB_TOKEN_KEY ? Buffer.from(process.env.QB_TOKEN_KEY, 'base64') : null;
+  tokenKey = configured && configured.length === 32
+    ? configured
+    : Buffer.from(crypto.hkdfSync('sha256', SERVICE_KEY || '', 'clardy-quickbooks', 'qb-token-aes-256-gcm', 32));
+  return tokenKey;
+}
+function encrypt(value) {
+  if (value == null || value === '' || String(value).startsWith(ENC_PREFIX)) return value;
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key(), iv);
+  const data = Buffer.concat([cipher.update(String(value), 'utf8'), cipher.final()]);
+  return ENC_PREFIX + Buffer.concat([iv, cipher.getAuthTag(), data]).toString('base64');
+}
+function decrypt(value) {
+  if (value == null || !String(value).startsWith(ENC_PREFIX)) return value;
+  const raw = Buffer.from(String(value).slice(ENC_PREFIX.length), 'base64');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key(), raw.subarray(0, 12));
+  decipher.setAuthTag(raw.subarray(12, 28));
+  return Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString('utf8');
+}
+const encryptRow = (row) => { const out = { ...row }; for (const f of ENCRYPTED_FIELDS) if (f in out) out[f] = encrypt(out[f]); return out; };
+function decryptRow(row) {
+  if (!row) return row;
+  const out = { ...row };
+  try {
+    for (const f of ENCRYPTED_FIELDS) out[f] = decrypt(out[f]);
+  } catch {
+    // Encrypted with a different key: unusable, so treat as disconnected.
+    return null;
+  }
+  return out;
+}
+
 async function getConnection() {
-  return (await sbList('quickbooks_connection', { filters: { id: 'eq.1' }, limit: 1 }))[0] || null;
+  return decryptRow((await sbList('quickbooks_connection', { filters: { id: 'eq.1' }, limit: 1 }))[0] || null);
 }
 
 async function saveConnection(patch) {
-  const existing = await getConnection();
-  const row = { ...patch, updated_at: new Date().toISOString() };
-  if (existing) return sbUpdate('quickbooks_connection', 1, row);
-  return sbInsert('quickbooks_connection', { id: 1, ...row });
+  const existing = (await sbList('quickbooks_connection', { select: 'id', filters: { id: 'eq.1' }, limit: 1 }))[0];
+  const row = encryptRow({ ...patch, updated_at: new Date().toISOString() });
+  const saved = existing ? await sbUpdate('quickbooks_connection', 1, row) : await sbInsert('quickbooks_connection', { id: 1, ...row });
+  return decryptRow(saved);
 }
 
 const apiBase = (creds) => (creds?.environment === 'production'
@@ -78,14 +123,19 @@ async function authUrl(redirectUri, user) {
     scope: QB_SCOPE,
     redirect_uri: redirectUri,
     response_type: 'code',
-    state: signState({ u: user?.email || user?.id || '' }),
+    state: signState({ u: user?.email || user?.id || '', r: redirectUri }),
   });
   return `${QB_AUTH_URL}?${params}`;
 }
 
+// Intuit sends the browser back to /quickbooks/callback (a server route, see
+// api/quickbooks.js) with the code in the URL. The redirect URI must match the
+// one sign-in started with, which is carried in the signed state.
 async function exchangeCode({ code, realmId, state, redirectUri }) {
   const st = readState(state);
   if (!st) throw httpError(400, 'This QuickBooks sign-in link expired or was not started from Clardy. Click Connect again.');
+  redirectUri = st.r || redirectUri;
+  if (!redirectUri) throw httpError(400, 'QuickBooks sign-in is missing its return address. Click Connect again.');
   const creds = await getCredentials();
   if (!creds?.client_id) throw httpError(400, 'QuickBooks app keys are missing.');
   const res = await fetch(QB_TOKEN_URL, {
