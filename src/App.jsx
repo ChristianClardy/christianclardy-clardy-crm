@@ -40,6 +40,7 @@ import CustomerPortal from './pages/CustomerPortal';
 import { Home } from 'lucide-react';
 import SubPortalLayout from './components/app/SubPortalLayout';
 import ModuleGate from './components/app/ModuleGate';
+import ProjectReport from './pages/ProjectReport';
 import { usePortalUser } from '@/lib/portalUser';
 
 const { Pages, Layout, mainPage } = pagesConfig;
@@ -180,6 +181,8 @@ const AuthenticatedApp = () => {
       <Route path="/InvoiceDesigner" element={<LayoutWrapper currentPageName="Payments"><InvoiceDesigner /></LayoutWrapper>} />
       <Route path="/Settings" element={<LayoutWrapper currentPageName="Settings"><Settings /></LayoutWrapper>} />
       <Route path="/MaterialLibrary" element={<LayoutWrapper currentPageName="MaterialLibrary"><MaterialLibraryPage /></LayoutWrapper>} />
+      {/* Printable, so no sidebar; same access as the project page. */}
+      <Route path="/ProjectReport" element={<ModuleGate page="ProjectDetail"><ProjectReport /></ModuleGate>} />
       <Route path="/DocuSignCallback" element={<DocuSignCallback />} />
       <Route path="/DocuSignSenderReturn" element={<DocuSignSenderReturn />} />
       <Route path="/lead-form" element={<PublicLeadForm />} />

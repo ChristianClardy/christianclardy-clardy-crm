@@ -24,6 +24,7 @@ import {
   DollarSign,
   Lock,
   ShieldOff,
+  Printer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -272,6 +273,10 @@ export default function ProjectDetail() {
           </div>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => window.open(createPageUrl(`ProjectReport?id=${project.id}`), "_blank")} title="Print or save a PDF of this project's overview, budget vs actual and billing">
+            <Printer className="w-4 h-4 mr-1" />
+            Print overview
+          </Button>
           <Button variant="outline" onClick={() => setIsEditDialogOpen(true)}>
             <Edit2 className="w-4 h-4 mr-1" />
             Edit
