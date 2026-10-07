@@ -39,3 +39,20 @@ export async function createTextInviteLink({ email, fullName, subcontractorId, p
   if (!res.ok) throw new Error(json.error || 'Could not create the link.');
   return json;
 }
+
+// Staff login delivered as a link to copy and text instead of an email (for
+// when Supabase can't send email). Resolves { url, existing }.
+export async function createStaffInviteLink({ email, fullName }) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch('/api/invite?action=staff-link', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session?.access_token || ''}`,
+    },
+    body: JSON.stringify({ email, full_name: fullName }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || 'Could not create the link.');
+  return json;
+}

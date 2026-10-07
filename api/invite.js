@@ -14,6 +14,10 @@
 //     login for a homeowner, limited to that client's projects: payments,
 //     progress and signed documents (041_customer_portal.sql).
 //
+// ?action=staff-link (staff): a staff invite without the email. Returns the
+// same set-password link the invite email would contain (or, for an existing
+// login, a one-time sign-in link) for staff to copy and text themselves, so
+// invites still work when Supabase can't send email.
 // ?action=text-link (staff): same sub login, but instead of an email it
 // returns a /join link for staff to text from their own phone. Pass
 // `user_id` instead to get a fresh link for an existing sub login.
@@ -298,6 +302,55 @@ async function handleTextLink(req, res, caller) {
   return res.status(200).json({ url: joinUrl(req, userId), email: email.toLowerCase(), days: JOIN_LINK_DAYS });
 }
 
+async function generateLink(type, email, data) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
+    method: 'POST',
+    headers: adminHeaders(),
+    body: JSON.stringify({ type, email, ...(data ? { data } : {}) }),
+  });
+  const payload = await res.json().catch(() => ({}));
+  const url = payload?.action_link || payload?.properties?.action_link;
+  return { ok: res.ok && Boolean(url), url, payload };
+}
+
+async function handleStaffLink(req, res) {
+  const { email: rawEmail, full_name } = req.body || {};
+  const email = String(rawEmail || '').trim().toLowerCase();
+  if (!email) return res.status(400).json({ error: 'Email is required.' });
+
+  // New login: the invite link sets their password, like the invite email.
+  const invite = await generateLink('invite', email, full_name ? { full_name } : null);
+  if (invite.ok) {
+    const userId = invite.payload?.id || invite.payload?.user?.id;
+    if (!userId) throw new Error('Link created but no user id came back; access was not granted.');
+    try {
+      await grantStaff(userId, email);
+    } catch (err) {
+      await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, { method: 'DELETE', headers: adminHeaders() });
+      throw new Error(`Could not grant access: ${err.message}`);
+    }
+    return res.status(200).json({ url: invite.url });
+  }
+
+  const msg = invite.payload?.msg || invite.payload?.message || invite.payload?.error_description || 'Could not create the link.';
+  if (!/already.*registered|already.*exists/i.test(msg)) return res.status(400).json({ error: msg });
+
+  // Existing login (e.g. an earlier invite that never finished): grant staff
+  // access and hand back a one-time sign-in link, which opens the same
+  // set-password screen (App.jsx isInviteFlow).
+  const existingId = await rpc('auth_user_id_by_email', { p_email: email });
+  if (!existingId) throw new Error(msg);
+  try {
+    await upgradeToStaff(existingId);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  await grantStaff(existingId, email);
+  const signIn = await generateLink('magiclink', email);
+  if (!signIn.ok) throw new Error(signIn.payload?.msg || signIn.payload?.message || 'Could not create the link.');
+  return res.status(200).json({ url: signIn.url, existing: true });
+}
+
 async function handleRedeem(req, res) {
   const expired = 'This link has expired or is not valid. Ask Principle Outdoor Living to text you a new one.';
   const userId = readJoinToken((req.body || {}).t);
@@ -358,6 +411,17 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: 'entity_type must be client or subcontractor.' });
     } catch (err) {
       res.status(err.status || 500).json({ error: err.message });
+    }
+    return;
+  }
+  if (action === 'staff-link') {
+    try {
+      const caller = await getStaffCaller(req);
+      if (!caller) return res.status(401).json({ error: 'Only signed-in staff can send invites.' });
+      if (caller.isViewer) return res.status(403).json({ error: READ_ONLY_MESSAGE });
+      await handleStaffLink(req, res);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
     }
     return;
   }

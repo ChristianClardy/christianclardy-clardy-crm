@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { Loader2, Send, ClipboardList } from "lucide-react";
+import { Loader2, Send, ClipboardList, Link2, Copy, CheckCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { sendInvite } from "@/lib/sendInvite";
+import { sendInvite, createStaffInviteLink } from "@/lib/sendInvite";
 import { ROLES } from "@/lib/permissions";
 
 // Clardy login for one employee, opened from their row in Employees. Their
@@ -16,11 +16,45 @@ export default function StaffInviteDialog({ employee, pmLogin, onClose, onPickBu
   const [email, setEmail] = useState(employee.email || "");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(null);
+  const [link, setLink] = useState("");
+  const [copied, setCopied] = useState(false);
   const role = ROLES.find((r) => r.key === employee.role) || ROLES.find((r) => r.key === "other");
+
+  const copyLink = async (url = link) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Some browsers block copying after a network wait; the link is shown to copy by hand.
+    }
+  };
+
+  // Same set-password link the invite email holds, to text them yourself
+  // (works even when Supabase can't send email).
+  const makeLink = async () => {
+    setBusy(true); setMessage(null); setLink("");
+    try {
+      const r = await createStaffInviteLink({ email: email.trim(), fullName: employee.full_name });
+      setLink(r.url);
+      await copyLink(r.url);
+      setMessage({
+        ok: true,
+        text: r.existing
+          ? `${email.trim()} now has a ${role.label} login. Text them this sign-in link. It works once and expires in about an hour.`
+          : `Text ${employee.full_name} this link. It works once and expires in about an hour; they'll set a password, then get steps to put Clardy on their phone or computer.`,
+      });
+      onChanged?.();
+    } catch (err) {
+      setMessage({ ok: false, text: err.message });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const invite = async (e) => {
     e.preventDefault();
-    setBusy(true); setMessage(null);
+    setBusy(true); setMessage(null); setLink("");
     try {
       const r = await sendInvite({ email: email.trim(), fullName: employee.full_name });
       setMessage({
@@ -62,6 +96,15 @@ export default function StaffInviteDialog({ employee, pmLogin, onClose, onPickBu
 
           {message && <p className={message.ok ? "text-emerald-700" : "text-rose-600"}>{message.text}</p>}
 
+          {link && (
+            <div className="flex items-center gap-2">
+              <Input readOnly value={link} onFocus={(e) => e.target.select()} className="h-9 text-xs" />
+              <Button type="button" variant="outline" size="sm" onClick={() => copyLink()}>
+                {copied ? <><CheckCheck className="w-3.5 h-3.5 mr-1" /> Copied</> : <><Copy className="w-3.5 h-3.5 mr-1" /> Copy</>}
+              </Button>
+            </div>
+          )}
+
           <div className="flex flex-wrap items-center justify-between gap-2">
             {employee.role === "project_manager" && !pmLogin ? (
               <button type="button" onClick={onPickBuilderPortal} className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:underline">
@@ -70,6 +113,9 @@ export default function StaffInviteDialog({ employee, pmLogin, onClose, onPickBu
             ) : <span />}
             <div className="flex gap-2">
               <Button type="button" variant="outline" onClick={onClose}>Close</Button>
+              <Button type="button" variant="outline" disabled={busy || !email.trim()} onClick={makeLink}>
+                <Link2 className="w-4 h-4 mr-1" /> Copy invite link
+              </Button>
               <Button type="submit" disabled={busy || !email.trim()} className="bg-slate-900 hover:bg-slate-800 text-white">
                 {busy ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Send className="w-4 h-4 mr-1" />} Email invite
               </Button>
