@@ -22,6 +22,26 @@
 // Settings -> Templates -> Merge Fields, so `label` and `description` here
 // are user-facing copy, not just dropdown text.
 
+// One set of fields per line of the payment schedule / allowances template
+// applied to a project, numbered in order (draw 1 = the template's first
+// milestone, ordered by draw_number on the Billing tab). Lets a contract
+// written for a given template place each milestone's % and $ where it wants
+// instead of only the whole schedule as a block. A line the project doesn't
+// have resolves blank.
+const NUMBERED_LINES = 15;
+const lineNumbers = Array.from({ length: NUMBERED_LINES }, (_, i) => i + 1);
+
+const DRAW_LINE_SOURCES = lineNumbers.flatMap((n) => [
+  { value: `draws.${n}.title`,   label: `Draw ${n} — Milestone`,               group: "Draw Schedule Lines", description: `Name of draw ${n} on the project's Billing tab (from the applied payment schedule template).` },
+  { value: `draws.${n}.percent`, label: `Draw ${n} — % of Contract Price`,     group: "Draw Schedule Lines", description: `Draw ${n}'s amount as a percentage of the total contract price, e.g. "30%". Includes any builder fee share.` },
+  { value: `draws.${n}.amount`,  label: `Draw ${n} — Amount ($)`,              group: "Draw Schedule Lines", description: `Dollar amount of draw ${n}.` },
+]);
+
+const ALLOWANCE_LINE_SOURCES = lineNumbers.flatMap((n) => [
+  { value: `selections.allowance_${n}.item`,   label: `Allowance ${n} — Item`,       group: "Allowance Lines", description: `Name of allowance ${n} on the project's Pool Selections → Allowances tab (from the applied allowances template).` },
+  { value: `selections.allowance_${n}.amount`, label: `Allowance ${n} — Amount ($)`, group: "Allowance Lines", description: `Dollar amount of allowance ${n}.` },
+]);
+
 export const MERGE_SOURCES = [
   { value: "client.name",          label: "Client — Name",             group: "Client",   description: "Client's full name." },
   { value: "client.contact_person",label: "Client — Contact Person",   group: "Client",   description: "Named contact at the client, if different from the client name." },
@@ -70,6 +90,7 @@ export const MERGE_SOURCES = [
   { value: "selections.allowances_total",       label: "Selections — Allowances Total ($)",      group: "Pool Selections", description: "Sum of all allowance amounts." },
   { value: "selections.payment_schedule",       label: "Selections — Payment Schedule",          group: "Pool Selections", description: "The milestone payment schedule — one line per milestone, with amounts." },
   { value: "selections.payment_schedule_total", label: "Selections — Payment Schedule Total ($)", group: "Pool Selections", description: "Sum of all payment-schedule amounts." },
+  ...ALLOWANCE_LINE_SOURCES,
   { value: "selections.interior_finish_product",label: "Selections — Interior Finish Product",   group: "Pool Selections", description: "Interior finish manufacturer/product." },
   { value: "selections.interior_finish_color",  label: "Selections — Interior Finish Color",     group: "Pool Selections", description: "Interior finish color/finish." },
   { value: "selections.tile_product",           label: "Selections — Tile Product",              group: "Pool Selections", description: "Waterline tile manufacturer/product." },
@@ -84,6 +105,7 @@ export const MERGE_SOURCES = [
   { value: "draws.payment_schedule",       label: "Draws — Payment Schedule",        group: "Draw Schedule", description: "The project's draw schedule — one line per draw with milestone name, percentage, and dollar amount. Managed on the project's Billing tab." },
   { value: "draws.payment_schedule_table", label: "Draws — Payment Schedule Table",   group: "Draw Schedule", description: "Draw schedule as a formatted text table (Milestone | % | Amount) with a totals row — ready to paste into a contract." },
   { value: "draws.payment_schedule_total", label: "Draws — Payment Schedule Total ($)", group: "Draw Schedule", description: "Sum of all draw amounts on the project's Billing tab." },
+  ...DRAW_LINE_SOURCES,
 
   { value: "change_order.number",              label: "Change Order — Number",               group: "Change Order", description: "Change order number on this project, e.g. \"CO-3\"." },
   { value: "change_order.title",               label: "Change Order — Title",                group: "Change Order", description: "Short name of the change order." },
@@ -311,6 +333,34 @@ function formatAllowancesTableDraws(draws) {
   return `${table}\n${"-".repeat(20)}\n${"Total".padEnd(pad)} |     | ${formatCurrency(total)}`;
 }
 
+// Resolves draws.<n>.<field> and selections.allowance_<n>.<field>. Returns
+// undefined for any other source so the main switch handles it.
+function formatPercent(p) {
+  return `${Math.round(p * 100) / 100}%`;
+}
+
+function resolveNumberedLine(source, { project, selections, draws }) {
+  let m = /^draws\.(\d+)\.(title|percent|amount)$/.exec(source);
+  if (m) {
+    const draw = (draws || []).filter((d) => d.title || Number(d.amount))[Number(m[1]) - 1];
+    if (!draw) return "";
+    if (m[2] === "title") return draw.title || "";
+    if (m[2] === "amount") return formatMoney(draw.amount);
+    // % of the total contract price — not the template's % of contract minus
+    // builder fee — so the percentages in the contract add up to 100%.
+    const contract = Number(project?.contract_value) || 0;
+    if (contract > 0) return formatPercent((Number(draw.amount) || 0) / contract * 100);
+    return Number(draw.percent_of_contract) > 0 ? formatPercent(Number(draw.percent_of_contract)) : "";
+  }
+  m = /^selections\.allowance_(\d+)\.(item|amount)$/.exec(source);
+  if (m) {
+    const row = (selections?.allowances || []).filter((r) => r.item)[Number(m[1]) - 1];
+    if (!row) return "";
+    return m[2] === "item" ? row.item : formatMoney(row.amount);
+  }
+  return undefined;
+}
+
 // changeOrder / changeOrderPriorTotal come from a project's Change Orders tab
 // (src/components/projects/ChangeOrdersPanel.jsx); priorTotal is the contract
 // value plus every other approved change order.
@@ -323,6 +373,8 @@ export function resolveContractMergeValue(source, { deal, client, company, proje
   const approvedDays = sumField(approved, "schedule_days");
   const revisedValue = Number(project?.contract_value || 0) + approvedTotal;
   const priorDays = sumField(approved.filter((o) => o.id !== changeOrder?.id), "schedule_days");
+  const lineValue = resolveNumberedLine(source, { project, selections, draws });
+  if (lineValue !== undefined) return lineValue;
   switch (source) {
     case "client.name":              return client?.name || "";
     case "client.contact_person":    return client?.contact_person || "";
