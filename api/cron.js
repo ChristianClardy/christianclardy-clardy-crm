@@ -2,7 +2,8 @@
 // to stay within Vercel Hobby plan's 12-function limit.
 //
 // Routes:
-//   GET  /api/cron?action=calendar       → iCal feed
+//   GET  /api/cron?action=calendar&token=…  → one person's private iCal feed
+//                                          (link from Settings → Calendar Feed)
 //   GET  /api/cron?action=stage-alerts   → lead stage alert cron
 //   GET  /api/cron?action=docusign-sync  → daily backstop: sync open DocuSign
 //                                          envelopes and save any signed contracts
@@ -87,14 +88,55 @@ function generateICS(events) {
     lines.push('END:VEVENT');
   }
   lines.push('END:VCALENDAR');
-  return lines.join('\r\n');
+  return lines.map(foldLine).join('\r\n');
+}
+
+// iCalendar lines max out at 75 bytes; longer ones continue on the next line
+// after a leading space (RFC 5545 §3.1). Splits on characters, not bytes, so
+// accented letters and emoji aren't cut in half.
+function foldLine(line) {
+  if (Buffer.byteLength(line) <= 75) return line;
+  const parts = [];
+  let current = '';
+  let limit = 75;
+  for (const ch of line) {
+    if (Buffer.byteLength(current + ch) > limit) {
+      parts.push(current);
+      current = '';
+      limit = 74; // continuation lines start with a space
+    }
+    current += ch;
+  }
+  parts.push(current);
+  return parts.join('\r\n ');
+}
+
+// Same visibility rule as the Calendar page (canUserSeeEvent in
+// src/lib/calendarEngine.js): team and company events for everyone, private
+// ones only for their creator, the people assigned, and admins/managers.
+function feedOwnerCanSee(ev, owner) {
+  const visibility = ev.visibility || 'team';
+  if (visibility === 'team' || visibility === 'company') return true;
+  if (owner.is_admin) return true;
+  if (ev.created_by && owner.email && ev.created_by.toLowerCase() === owner.email.toLowerCase()) return true;
+  return Boolean(owner.full_name) && (ev.assigned_users || []).includes(owner.full_name);
 }
 
 async function handleCalendar(req, res) {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, private');
+  res.setHeader('X-Robots-Tag', 'noindex');
+  const token = String(req.query.token || '');
+  // calendar_feed_owner() returns null for an unknown/reset link or anyone who
+  // is no longer active staff (059_calendar_feed_tokens.sql).
+  const owner = /^[0-9a-f]{32,128}$/.test(token)
+    ? await supabaseFetch('rpc/calendar_feed_owner', { method: 'POST', body: JSON.stringify({ p_token: token }) })
+    : null;
+  if (!owner) {
+    return res.status(401).send('This calendar link is invalid or has been reset. Get your link from Settings → Calendar Feed in Clardy.io.');
+  }
   const events = await supabaseFetch('calendar_events?select=*&order=start_datetime.asc');
   res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.send(generateICS(events || []));
+  res.send(generateICS((events || []).filter((ev) => feedOwnerCanSee(ev, owner))));
 }
 
 // ─── Lead stage alerts cron ───────────────────────────────────────────────────

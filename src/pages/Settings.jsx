@@ -571,16 +571,28 @@ function FullAccessInvite() {
 // ─── Calendar Feed tab ───────────────────────────────────────────────────────
 
 function CalendarFeedTab() {
-  const [userId, setUserId] = useState(null);
+  const [token, setToken] = useState(null);
+  const [error, setError] = useState("");
+  const [resetting, setResetting] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) setUserId(user.id);
-    });
-  }, []);
+  const loadToken = async (reset = false) => {
+    const { data, error: rpcError } = await supabase.rpc("calendar_feed_token", { p_reset: reset });
+    if (rpcError) {
+      setError(/does not exist|could not find/i.test(rpcError.message)
+        ? "Private calendar links aren't set up yet (run migration 059)."
+        : rpcError.message);
+      return;
+    }
+    setError("");
+    setToken(data);
+  };
 
-  const feedUrl = `${typeof window !== "undefined" ? window.location.origin : "https://clardy.io"}/api/cron?action=calendar`;
+  useEffect(() => { loadToken(); }, []);
+
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://clardy.io";
+  const feedUrl = token ? `${origin}/api/cron?action=calendar&token=${token}` : "";
+  const webcalUrl = feedUrl.replace(/^https?:/, "webcal:");
 
   const copy = () => {
     navigator.clipboard.writeText(feedUrl);
@@ -588,23 +600,52 @@ function CalendarFeedTab() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const resetLink = async () => {
+    const ok = await confirmAction(
+      "Your current link stops working right away. Any calendar subscribed to it will need the new link.",
+      { title: "Reset your calendar link?", confirmLabel: "Reset link" },
+    );
+    if (!ok) return;
+    setResetting(true);
+    await loadToken(true);
+    setResetting(false);
+  };
+
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 max-w-2xl space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-slate-900">Apple / Google Calendar Feed</h2>
         <p className="text-sm text-slate-500 mt-1">
-          Subscribe to this URL in any calendar app to see all Clardy.io events automatically sync.
+          Subscribe to your private link in any calendar app to see your Clardy.io events sync automatically.
+          It shows the same events you see on the Calendar page.
         </p>
       </div>
-      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center gap-3">
-        <code className="text-xs text-slate-700 flex-1 break-all">{feedUrl}</code>
-        <button
-          onClick={copy}
-          className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors"
-        >
-          {copied ? <><CheckCheck className="w-3.5 h-3.5" /> Copied!</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
-        </button>
-      </div>
+      {error ? (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-sm text-rose-700">{error}</div>
+      ) : !token ? (
+        <div className="text-sm text-slate-500">Loading your link…</div>
+      ) : (
+        <div className="space-y-3">
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center gap-3">
+            <code className="text-xs text-slate-700 flex-1 break-all">{feedUrl}</code>
+            <button
+              onClick={copy}
+              className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors"
+            >
+              {copied ? <><CheckCheck className="w-3.5 h-3.5" /> Copied!</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline" size="sm"><a href={webcalUrl}>Open in Apple Calendar</a></Button>
+            <Button variant="outline" size="sm" onClick={resetLink} disabled={resetting} className="text-rose-600">
+              {resetting ? "Resetting…" : "Reset link"}
+            </Button>
+          </div>
+          <p className="text-xs text-slate-500">
+            This link is private to you. Anyone who has it can see your calendar, so don't share it. If it gets out, reset it.
+          </p>
+        </div>
+      )}
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2 text-sm text-amber-800">
         <p className="font-semibold">How to subscribe in Apple Calendar (Mac):</p>
         <ol className="list-decimal list-inside space-y-1 text-xs">
