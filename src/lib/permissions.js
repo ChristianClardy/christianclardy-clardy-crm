@@ -30,6 +30,7 @@ export const MODULE_GROUPS = [
     { key: "crm",              label: "CRM & Clients",          description: "Leads, pipeline, contacts, companies, activities, clients" },
     { key: "estimates",        label: "Estimates",              description: "Build, price and send estimates" },
     { key: "contracts",        label: "Contracts",              description: "Send contracts and documents for signature (DocuSign)" },
+    { key: "automations",      label: "Messaging & Automations", description: "Email and text clients, drips, broadcasts, message inbox" },
   ]},
   { label: "Jobs", modules: [
     { key: "projects",         label: "Projects",               description: "Projects: overview, schedule, permits, selections, photos, files, comments" },
@@ -61,9 +62,9 @@ export const MODULES = MODULE_GROUPS.flatMap((g) => g.modules);
 const on = (...keys) => Object.fromEntries(MODULES.map((m) => [m.key, keys.includes(m.key)]));
 export const DEFAULT_PERMISSIONS = {
   admin:           on(...MODULES.map((m) => m.key)),
-  office:          on("dashboard", "sales_dashboard", "crm", "estimates", "contracts", "projects", "change_orders", "project_billing", "payments", "calendar", "documents", "material_library", "workspace_items"),
+  office:          on("dashboard", "sales_dashboard", "crm", "estimates", "contracts", "automations", "projects", "change_orders", "project_billing", "payments", "calendar", "documents", "material_library", "workspace_items"),
   bookkeeper:      on("dashboard", "projects", "job_costs", "project_billing", "payments", "finance", "reports", "documents", "calendar"),
-  sales:           on("dashboard", "sales_dashboard", "crm", "estimates", "contracts", "projects", "calendar", "documents", "material_library"),
+  sales:           on("dashboard", "sales_dashboard", "crm", "estimates", "contracts", "automations", "projects", "calendar", "documents", "material_library"),
   designer:        on("dashboard", "crm", "estimates", "projects", "calendar", "documents", "material_library"),
   project_manager: on("dashboard", "projects", "builder_portal", "change_orders", "contracts", "subcontractors", "job_costs", "calendar", "documents", "material_library", "workspace_items"),
   foreman:         on("dashboard", "projects", "builder_portal", "subcontractors", "calendar", "documents", "workspace_items"),
@@ -80,6 +81,7 @@ export const PAGE_MODULE = {
   CRM: "crm", Pipeline: "crm", CRMContacts: "crm", CRMCompanies: "crm", CRMActivities: "crm", CRMDashboard: "crm",
   Clients: "crm", ClientDetail: "crm", Prospects: "crm", LeadDetail: "crm",
   Estimates: "estimates", EstimateDetail: "estimates",
+  Automations: "automations",
   Projects: "projects", ProjectDetail: "projects", ProjectManagerDashboard: "builder_portal",
   Builder: "builder_portal",
   BuilderPortal: "subcontractors",

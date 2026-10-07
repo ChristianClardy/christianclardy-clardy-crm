@@ -29,6 +29,7 @@ import {
   Lock,
   Eye,
   LogOut,
+  Send,
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { useState } from "react";
@@ -80,6 +81,7 @@ export default function Layout({ children, currentPageName }) {
         { name: "CRM Dashboard", href: createPageUrl("CRMDashboard"), icon: BarChart3 },
       ],
     },
+    { name: "Automations", href: createPageUrl("Automations"), icon: Send, module: "automations" },
     { name: "Calendar", href: createPageUrl("Calendar"), icon: CalendarDays, module: "calendar" },
     { name: "Municipalities", href: createPageUrl("Municipalities"), icon: Building2, module: "municipalities" },
     { name: "Estimates", href: createPageUrl("Estimates"), icon: Receipt, module: "estimates" },

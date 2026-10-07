@@ -9,6 +9,7 @@ import LeadFormDialog from "@/components/crm/LeadFormDialog";
 import ContractsPanel from "@/components/crm/ContractsPanel";
 import LeadFollowUpPanel from "@/components/crm/LeadFollowUpPanel";
 import ContactHistoryPanel from "@/components/crm/ContactHistoryPanel";
+import MessagesPanel from "@/components/messaging/MessagesPanel";
 import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
 import AppointmentsPanel from "@/components/scheduling/AppointmentsPanel";
 import LostReasonDialog from "@/components/crm/LostReasonDialog";
@@ -333,6 +334,15 @@ export default function LeadDetail() {
 
       <LeadFollowUpPanel lead={lead} followUps={followUps} onRefresh={loadData} />
       <NextStepsPanel title="Lead Tasks / Next Steps" linkedClientId={lead.linked_contact_id || lead.id} />
+
+      <MessagesPanel
+        leadId={lead.id}
+        clientId={lead.linked_contact_id || ""}
+        name={lead.full_name || ""}
+        email={lead.email}
+        phone={lead.phone}
+        stage={lead.status}
+      />
 
       <ContactHistoryPanel
         title="Communication & History"

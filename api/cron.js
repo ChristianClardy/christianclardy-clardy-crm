@@ -8,9 +8,22 @@
 //                                          envelopes and save any signed contracts
 //   GET  /api/cron?action=qb-sync        → daily backstop: pull QuickBooks changes
 //                                          (webhooks do it live; see api/_lib/quickbooks.js)
+//
+// Messaging & Automations (api/_lib/messaging.js):
+//   GET  ?action=messaging-tick       → send due drip steps (pg_cron every 5 min,
+//                                       Vercel cron daily, or staff "Send now")
+//   GET  ?action=messaging-status     → staff: is email / texting set up
+//   POST ?action=messaging-send       → staff: one email/text to a contact
+//   POST ?action=messaging-broadcast  → staff: one message to many contacts
+//   GET/POST ?action=unsubscribe      → public email unsubscribe page / one-click
+//   POST ?action=twilio-inbound       → Twilio: incoming text (signature checked)
+//   POST ?action=twilio-status        → Twilio: delivery update
+//   POST ?action=resend-webhook       → Resend: delivered/opened/bounced
 
 const { syncEnvelope } = require('./_lib/docusign.js');
 const quickbooks = require('./_lib/quickbooks.js');
+const messaging = require('./_lib/messaging.js');
+const { getStaffCaller, requireStaff } = require('./_lib/staffAuth.js');
 
 const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -179,12 +192,83 @@ async function handleDocusignSync(req, res) {
   return res.status(200).json({ checked, saved, errors });
 }
 
+// ─── Messaging & Automations ─────────────────────────────────────────────────
+
+const isCron = (req) => !!process.env.CRON_SECRET && req.headers.authorization === `Bearer ${process.env.CRON_SECRET}`;
+
+function unsubscribePage(title, text, form) {
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head>
+<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f5f0eb;font-family:Georgia,serif;padding:16px">
+<div style="max-width:420px;background:#fff;border-radius:12px;padding:28px;text-align:center;color:#3d3530">
+<h1 style="font-size:20px;margin:0 0 12px">${title}</h1><p style="color:#7a6e66;line-height:1.5">${text}</p>${form || ''}</div></body></html>`;
+}
+
+async function handleUnsubscribe(req, res) {
+  const email = messaging.readUnsubscribe(req.query);
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  if (!email) return res.status(400).send(unsubscribePage('Link not valid', 'This unsubscribe link is incomplete. Reply to any of our emails and we will take you off the list.'));
+  // GET only shows a button: mail scanners open links, and must not unsubscribe anyone.
+  if (req.method !== 'POST') {
+    return res.status(200).send(unsubscribePage('Unsubscribe?', `Stop emails to <b>${messaging.escapeHtml(email)}</b>?`,
+      `<form method="post"><button style="margin-top:8px;background:#3d3530;color:#fff;border:0;border-radius:8px;padding:10px 20px;font-size:15px;cursor:pointer">Unsubscribe</button></form>`));
+  }
+  await messaging.optOut('email', email, 'unsubscribe');
+  return res.status(200).send(unsubscribePage("You're unsubscribed", "You won't get any more of these emails."));
+}
+
+async function handleMessaging(action, req, res) {
+  if (action === 'unsubscribe') return handleUnsubscribe(req, res);
+
+  if (action === 'twilio-inbound') {
+    if (!messaging.validTwilioSignature(req)) return res.status(403).send('Invalid signature');
+    await messaging.handleInboundSms(req);
+    res.setHeader('Content-Type', 'text/xml');
+    return res.status(200).send('<Response></Response>');
+  }
+  if (action === 'twilio-status') {
+    await messaging.handleTwilioStatus(req).catch((err) => console.error('twilio-status', err));
+    return res.status(200).end();
+  }
+  if (action === 'resend-webhook') {
+    await messaging.handleResendWebhook(req).catch((err) => console.error('resend-webhook', err));
+    return res.status(200).json({ received: true });
+  }
+
+  if (action === 'messaging-tick') {
+    if (!isCron(req)) {
+      // Staff can push the queue along ("Send now"); a viewer can't.
+      const user = await getStaffCaller(req).catch(() => null);
+      if (!user || user.isViewer) return res.status(401).json({ error: 'Unauthorized' });
+    }
+    return res.status(200).json(await messaging.processDue({ budgetMs: isCron(req) ? 45000 : 20000 }));
+  }
+
+  const staff = await requireStaff(req, res);
+  if (!staff) return;
+  if (action === 'messaging-status') return res.status(200).json(messaging.status());
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
+  const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+  try {
+    if (action === 'messaging-send') return res.status(200).json(await messaging.sendNow(body, staff.email));
+    if (action === 'messaging-broadcast') return res.status(200).json(await messaging.broadcast(body, staff.email));
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  return res.status(400).json({ error: 'Unknown messaging action' });
+}
+
+const MESSAGING_ACTIONS = new Set([
+  'messaging-tick', 'messaging-status', 'messaging-send', 'messaging-broadcast',
+  'unsubscribe', 'twilio-inbound', 'twilio-status', 'resend-webhook',
+]);
+
 module.exports = async function handler(req, res) {
   if (!SERVICE_KEY) return res.status(500).json({ error: 'Missing SUPABASE_SERVICE_ROLE_KEY' });
 
   const action = req.query.action;
 
   try {
+    if (MESSAGING_ACTIONS.has(action)) return await handleMessaging(action, req, res);
     if (action === 'calendar') return await handleCalendar(req, res);
     if (action === 'stage-alerts') return await handleStageAlerts(req, res);
     if (action === 'docusign-sync') return await handleDocusignSync(req, res);

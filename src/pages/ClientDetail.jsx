@@ -45,6 +45,7 @@ import ClientWorkflowControl from "@/components/clients/ClientWorkflowControl";
 import AppointmentsPanel from "@/components/scheduling/AppointmentsPanel";
 import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
 import ContactHistoryPanel from "@/components/crm/ContactHistoryPanel";
+import MessagesPanel from "@/components/messaging/MessagesPanel";
 import CustomerPortalDialog from "@/components/clients/CustomerPortalDialog";
 import EraseDataDialog from "@/components/privacy/EraseDataDialog";
 import { cn } from "@/lib/utils";
@@ -277,6 +278,13 @@ export default function ClientDetail() {
         <AppointmentsPanel title="Appointments" linkedClientId={clientId} defaultLocation={client.address || ""} />
         <NextStepsPanel title="Follow-Up / Next Steps" linkedClientId={clientId} />
       </div>
+
+      <MessagesPanel
+        clientId={clientId}
+        name={client.name || [client.first_name, client.last_name].filter(Boolean).join(" ")}
+        email={client.email}
+        phone={client.phone}
+      />
 
       <ContactHistoryPanel
         title="Communication & History"

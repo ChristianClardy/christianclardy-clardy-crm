@@ -65,6 +65,12 @@ const TABLE_MAP = {
   PmPortalUser:           'pm_portal_users',
   ProjectSubcontractor:   'project_subcontractors',
   PunchListItem:          'punch_list_items',
+  MessageTemplate:        'message_templates',
+  MessageSequence:        'message_sequences',
+  MessageSequenceStep:    'message_sequence_steps',
+  MessageEnrollment:      'message_enrollments',
+  Message:                'messages',
+  MessageOptOut:          'message_opt_outs',
 };
 
 // ─── Field name compatibility ────────────────────────────────────────────────
@@ -156,6 +162,7 @@ const COMPANY_SCOPED_TABLES = new Set([
   'tasks', 'change_orders', 'draws', 'sub_invoices',
   'projects', 'documents', 'municipalities',
   'barrier_daily_logs', 'subcontractor_barrier_acknowledgments', 'punch_list_items',
+  'message_templates', 'message_sequences', 'message_enrollments', 'messages',
 ]);
 
 // Foreign keys that tie a record to a specific job; see create().
@@ -178,7 +185,7 @@ const NETWORK_ERROR = /load failed|failed to fetch|networkerror|network request 
 const isNetworkError = (error) => !!error && NETWORK_ERROR.test(error.message || String(error));
 const RETRY_DELAYS_MS = [700, 1800];
 // Tables keyed by something other than a generated uuid `id`.
-const NO_UUID_ID_TABLES = new Set(['subcontractor_portal_users', 'pm_portal_users', 'customer_portal_users', 'quickbooks_credentials']);
+const NO_UUID_ID_TABLES = new Set(['message_opt_outs', 'subcontractor_portal_users', 'pm_portal_users', 'customer_portal_users', 'quickbooks_credentials']);
 
 async function withRetry(run) {
   let result = await run(0);

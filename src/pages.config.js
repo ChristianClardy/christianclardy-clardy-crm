@@ -47,6 +47,7 @@
  *
  * The mainPage value must match a key in the PAGES object exactly.
  */
+import Automations from './pages/Automations';
 import Builder from './pages/Builder';
 import BuilderPortal from './pages/BuilderPortal';
 import CRM from './pages/CRM';
@@ -75,6 +76,7 @@ import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
+    "Automations": Automations,
     "Builder": Builder,
     "BuilderPortal": BuilderPortal,
     "CRM": CRM,
