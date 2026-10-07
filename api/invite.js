@@ -14,10 +14,11 @@
 //     login for a homeowner, limited to that client's projects: payments,
 //     progress and signed documents (041_customer_portal.sql).
 //
-// ?action=staff-link (staff): a staff invite without the email. Returns the
-// same set-password link the invite email would contain (or, for an existing
-// login, a one-time sign-in link) for staff to copy and text themselves, so
-// invites still work when Supabase can't send email.
+// ?action=staff-link (staff): a staff invite without the email. Creates the
+// login and returns a /join link, good for JOIN_LINK_DAYS, for staff to copy
+// and text themselves. Unlike portal links it works only until the person
+// first signs in after it was made. Opening it lands on the set-password
+// screen, like the invite email.
 // ?action=text-link (staff): same sub login, but instead of an email it
 // returns a /join link for staff to text from their own phone. Pass
 // `user_id` instead to get a fresh link for an existing sub login.
@@ -26,7 +27,8 @@
 // api/_lib/privacy.js. Lives here to stay within Vercel's function limit.
 // ?action=redeem (public): trades a /join link's token for a one-time sign-in
 // token (see src/pages/JoinPortal.jsx). The join token is HMAC-signed and
-// only ever works for an active sub, PM or customer login, never staff.
+// works for an active sub, PM or customer login, or, for a staff-link token,
+// a staff login that hasn't signed in since the link was made.
 
 const crypto = require('crypto');
 const { getStaffCaller, READ_ONLY_MESSAGE } = require('./_lib/staffAuth.js');
@@ -115,20 +117,25 @@ const JOIN_LINK_DAYS = 7;
 const b64url = (buf) => Buffer.from(buf).toString('base64url');
 const sign = (body) => b64url(crypto.createHmac('sha256', `join-link:${SERVICE_KEY}`).update(body).digest());
 
-function makeJoinToken(userId) {
-  const body = b64url(JSON.stringify({ u: userId, e: Math.floor(Date.now() / 1000) + JOIN_LINK_DAYS * 86400 }));
+// staff: a staff invite link (s = 1, i = when it was made), which redeem only
+// honours until the person's first sign-in after `i`.
+function makeJoinToken(userId, { staff = false } = {}) {
+  const now = Math.floor(Date.now() / 1000);
+  const claims = { u: userId, e: now + JOIN_LINK_DAYS * 86400, ...(staff ? { s: 1, i: now } : {}) };
+  const body = b64url(JSON.stringify(claims));
   return `${body}.${sign(body)}`;
 }
 
-// Returns the user id, or null if the token is forged, malformed or expired.
-function readJoinToken(token) {
+// Returns the token's claims ({ u, e, s?, i? }), or null if it's forged,
+// malformed or expired.
+function readJoinClaims(token) {
   const [body, sig] = String(token || '').split('.');
   if (!body || !sig) return null;
   const expected = sign(body);
   if (sig.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
   try {
-    const { u, e } = JSON.parse(Buffer.from(body, 'base64url').toString());
-    return u && e > Date.now() / 1000 ? u : null;
+    const claims = JSON.parse(Buffer.from(body, 'base64url').toString());
+    return claims.u && claims.e > Date.now() / 1000 ? claims : null;
   } catch {
     return null;
   }
@@ -245,10 +252,10 @@ async function emailSignInLink(email) {
   return res.ok;
 }
 
-function joinUrl(req, userId) {
+function joinUrl(req, userId, opts) {
   const host = req.headers['x-forwarded-host'] || req.headers.host;
   const proto = req.headers['x-forwarded-proto'] || 'https';
-  return `${proto}://${host}/join?t=${makeJoinToken(userId)}`;
+  return `${proto}://${host}/join?t=${makeJoinToken(userId, opts)}`;
 }
 
 async function handleTextLink(req, res, caller) {
@@ -302,15 +309,16 @@ async function handleTextLink(req, res, caller) {
   return res.status(200).json({ url: joinUrl(req, userId), email: email.toLowerCase(), days: JOIN_LINK_DAYS });
 }
 
-async function generateLink(type, email, data) {
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
-    method: 'POST',
-    headers: adminHeaders(),
-    body: JSON.stringify({ type, email, ...(data ? { data } : {}) }),
-  });
-  const payload = await res.json().catch(() => ({}));
-  const url = payload?.action_link || payload?.properties?.action_link;
-  return { ok: res.ok && Boolean(url), url, payload };
+// Active member of the staff org and not a portal-only login, i.e. is_staff()
+// for a given user (041_customer_portal.sql).
+async function isStaffUser(userId) {
+  const orgId = await rpc('staff_org_id');
+  const rows = await fetch(
+    `${SUPABASE_URL}/rest/v1/organization_members?select=status&user_id=eq.${userId}&organization_id=eq.${orgId}`,
+    { headers: adminHeaders() },
+  ).then((r) => r.json());
+  const active = Array.isArray(rows) && rows.some((r) => (r.status || 'active') === 'active');
+  return active && !(await getPortalLogin(userId));
 }
 
 async function handleStaffLink(req, res) {
@@ -318,26 +326,30 @@ async function handleStaffLink(req, res) {
   const email = String(rawEmail || '').trim().toLowerCase();
   if (!email) return res.status(400).json({ error: 'Email is required.' });
 
-  // New login: the invite link sets their password, like the invite email.
-  const invite = await generateLink('invite', email, full_name ? { full_name } : null);
-  if (invite.ok) {
-    const userId = invite.payload?.id || invite.payload?.user?.id;
-    if (!userId) throw new Error('Link created but no user id came back; access was not granted.');
+  // Create the login without sending Supabase's invite email.
+  const createRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+    method: 'POST',
+    headers: adminHeaders(),
+    body: JSON.stringify({ email, email_confirm: true, user_metadata: full_name ? { full_name } : {} }),
+  });
+  const created = await createRes.json().catch(() => ({}));
+
+  if (createRes.ok) {
+    const userId = created?.id || created?.user?.id;
+    if (!userId) throw new Error('Login created but no user id came back; access was not granted.');
     try {
       await grantStaff(userId, email);
     } catch (err) {
       await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, { method: 'DELETE', headers: adminHeaders() });
       throw new Error(`Could not grant access: ${err.message}`);
     }
-    return res.status(200).json({ url: invite.url });
+    return res.status(200).json({ url: joinUrl(req, userId, { staff: true }), days: JOIN_LINK_DAYS });
   }
 
-  const msg = invite.payload?.msg || invite.payload?.message || invite.payload?.error_description || 'Could not create the link.';
+  const msg = created?.msg || created?.message || created?.error_description || 'Could not create the login.';
   if (!/already.*registered|already.*exists/i.test(msg)) return res.status(400).json({ error: msg });
 
-  // Existing login (e.g. an earlier invite that never finished): grant staff
-  // access and hand back a one-time sign-in link, which opens the same
-  // set-password screen (App.jsx isInviteFlow).
+  // Existing login (e.g. an earlier invite that never finished): grant staff access.
   const existingId = await rpc('auth_user_id_by_email', { p_email: email });
   if (!existingId) throw new Error(msg);
   try {
@@ -346,15 +358,38 @@ async function handleStaffLink(req, res) {
     return res.status(400).json({ error: err.message });
   }
   await grantStaff(existingId, email);
-  const signIn = await generateLink('magiclink', email);
-  if (!signIn.ok) throw new Error(signIn.payload?.msg || signIn.payload?.message || 'Could not create the link.');
-  return res.status(200).json({ url: signIn.url, existing: true });
+  return res.status(200).json({ url: joinUrl(req, existingId, { staff: true }), days: JOIN_LINK_DAYS, existing: true });
+}
+
+// A staff /join link: still staff, and not signed in since the link was made.
+// Hands back a fresh Supabase sign-in link (valid ~1 hour) that the browser
+// opens straight away; it lands on the set-password screen (App.jsx).
+async function redeemStaffLink(claims, res, expired) {
+  if (!(await isStaffUser(claims.u))) return res.status(400).json({ error: expired });
+  const userRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${claims.u}`, { headers: adminHeaders() });
+  const user = await userRes.json();
+  if (!userRes.ok || !user?.email) return res.status(400).json({ error: expired });
+  const lastSignIn = user.last_sign_in_at ? Date.parse(user.last_sign_in_at) / 1000 : 0;
+  if (lastSignIn > claims.i) {
+    return res.status(400).json({ error: 'This invite link has already been used. Sign in with your email and password instead.' });
+  }
+  const linkRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
+    method: 'POST',
+    headers: adminHeaders(),
+    body: JSON.stringify({ type: 'magiclink', email: user.email }),
+  });
+  const link = await linkRes.json().catch(() => ({}));
+  const actionLink = link?.action_link || link?.properties?.action_link;
+  if (!linkRes.ok || !actionLink) throw new Error(link?.msg || link?.message || 'Could not start sign-in.');
+  return res.status(200).json({ redirect: actionLink, portal: 'staff' });
 }
 
 async function handleRedeem(req, res) {
   const expired = 'This link has expired or is not valid. Ask Principle Outdoor Living to text you a new one.';
-  const userId = readJoinToken((req.body || {}).t);
-  if (!userId) return res.status(400).json({ error: expired });
+  const claims = readJoinClaims((req.body || {}).t);
+  if (!claims) return res.status(400).json({ error: expired });
+  if (claims.s) return redeemStaffLink(claims, res, expired);
+  const userId = claims.u;
 
   const login = await getPortalLogin(userId);
   if (!login) return res.status(400).json({ error: expired });

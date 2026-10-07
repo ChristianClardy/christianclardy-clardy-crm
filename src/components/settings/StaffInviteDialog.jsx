@@ -41,8 +41,8 @@ export default function StaffInviteDialog({ employee, pmLogin, onClose, onPickBu
       setMessage({
         ok: true,
         text: r.existing
-          ? `${email.trim()} now has a ${role.label} login. Text them this sign-in link. It works once and expires in about an hour.`
-          : `Text ${employee.full_name} this link. It works once and expires in about an hour; they'll set a password, then get steps to put Clardy on their phone or computer.`,
+          ? `${email.trim()} now has a ${role.label} login. Text them this link. It works for 7 days, until they sign in with it.`
+          : `Text ${employee.full_name} this link. It works for 7 days, until they sign in with it. They'll set a password, then get steps to put Clardy on their phone or computer.`,
       });
       onChanged?.();
     } catch (err) {

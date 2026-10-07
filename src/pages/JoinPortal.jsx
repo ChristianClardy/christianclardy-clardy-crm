@@ -33,6 +33,9 @@ export default function JoinPortal() {
         });
         const json = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(json.error || 'Could not sign you in.');
+        // Staff invite link: continue to Supabase's sign-in, which lands on
+        // the set-password screen.
+        if (json.redirect) { window.location.replace(json.redirect); return; }
         const { error: otpErr } = await supabase.auth.verifyOtp({ token_hash: json.token_hash, type: 'email' });
         if (otpErr) throw new Error(otpErr.message);
         // Drop the token from the address bar, so "Add to Home Screen" saves
