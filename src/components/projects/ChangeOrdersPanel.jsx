@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import DocuSignEnvelopes from "@/components/docusign/DocuSignEnvelopes";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 // A project's Change Orders tab. Each change order has a title, the
 // description of the change, optional line items, and its schedule impact.
@@ -61,7 +62,7 @@ export default function ChangeOrdersPanel({ project, onSend }) {
   };
 
   const remove = async (co) => {
-    if (!confirm(`Delete ${co.number ? `CO-${co.number}` : "this change order"}? This can't be undone.`)) return;
+    if (!await confirmAction(`Delete ${co.number ? `CO-${co.number}` : "this change order"}? This can't be undone.`)) return;
     await base44.entities.ChangeOrder.delete(co.id);
     load();
   };
@@ -132,14 +133,14 @@ export default function ChangeOrdersPanel({ project, onSend }) {
                     </Button>
                     {(co.status === "draft" || co.status === "sent" || co.status === "declined") && (
                       <Button size="sm" variant="outline" className="h-8" title="Mark approved (signed on paper)"
-                        onClick={() => { if (confirm("Mark this change order approved without DocuSign (e.g. signed on paper)?")) setStatus(co, "approved"); }}>
+                        onClick={async () => { if (await confirmAction("Mark this change order approved without DocuSign (e.g. signed on paper)?")) setStatus(co, "approved"); }}>
                         <CheckCircle2 className="w-4 h-4" />
                       </Button>
                     )}
                     {co.status === "draft" ? (
                       <Button size="sm" variant="outline" className="h-8 text-rose-600" title="Delete" onClick={() => remove(co)}><Trash2 className="w-4 h-4" /></Button>
                     ) : co.status !== "void" && co.status !== "approved" && (
-                      <Button size="sm" variant="outline" className="h-8" title="Void" onClick={() => { if (confirm("Void this change order?")) setStatus(co, "void"); }}><Ban className="w-4 h-4" /></Button>
+                      <Button size="sm" variant="outline" className="h-8" title="Void" onClick={async () => { if (await confirmAction("Void this change order?")) setStatus(co, "void"); }}><Ban className="w-4 h-4" /></Button>
                     )}
                   </div>
                 </div>

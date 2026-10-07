@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { extractTemplateTokens } from "@/lib/scopeTemplateEngine";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 // Same taxonomy LeadFormDialog.jsx / PublicLeadCaptureForm.jsx use for
 // lead.project_type — kept in sync by hand since neither is a DB enum.
@@ -142,7 +143,7 @@ export default function ScopeTemplatesTab() {
   };
 
   const handleDelete = async (id) => {
-    if (confirm("Delete this scope template?")) {
+    if (await confirmAction("Delete this scope template?")) {
       await base44.entities.ScopeTemplate.delete(id);
       load();
     }

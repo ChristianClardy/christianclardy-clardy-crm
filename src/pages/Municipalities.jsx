@@ -6,6 +6,7 @@ import SheetStyleToolbar, { DEFAULT_SHEET_STYLE } from "@/components/sheet/Sheet
 import SheetFormattingBar from "@/components/sheet/SheetFormattingBar";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 import { useRolePermissions } from "@/lib/useRolePermissions";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const DEFAULT_COLUMNS = [
   { key: "city",                        label: "City",                          width: 150 },
@@ -294,14 +295,14 @@ function MunicipalitiesSheet() {
   };
 
   const deleteRow = async (id) => {
-    if (!confirm("Delete this row?")) return;
+    if (!await confirmAction("Delete this row?")) return;
     await base44.entities.Municipality.delete(id);
     setRows(prev => prev.filter(r => r.id !== id));
     delete pendingUpdates.current[id];
   };
 
   const cleanDuplicates = async () => {
-    if (!confirm("Merge duplicate rows with the same city name, keeping the most complete data?")) return;
+    if (!await confirmAction("Merge duplicate rows with the same city name, keeping the most complete data?")) return;
     setSaving(true);
     // Group rows by lowercase city name (only within the active company scope —
     // the same city can legitimately have separate rows per company now)

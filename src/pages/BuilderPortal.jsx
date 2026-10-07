@@ -13,6 +13,7 @@ import SubAcknowledgmentDialog from "@/components/builder/SubAcknowledgmentDialo
 import SubAccessDialog from "@/components/builder/SubAccessDialog";
 import { downloadSubAgreementPdf } from "@/lib/subAgreementPdf";
 import { subTradeLabels } from "@/lib/subTrades";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const STAFF_TABS = [
   { key: "today", label: "Today" },
@@ -148,7 +149,7 @@ export default function BuilderPortal({ portal = null }) {
   };
 
   const deleteLog = async (log) => {
-    if (!confirm(`Delete the ${fmtDate(log.log_date)} log for ${projectById[log.project_id]?.name || "this project"}?`)) return;
+    if (!await confirmAction(`Delete the ${fmtDate(log.log_date)} log for ${projectById[log.project_id]?.name || "this project"}?`)) return;
     await base44.entities.BarrierDailyLog.delete(log.id);
     setLogs((prev) => prev.filter((l) => l.id !== log.id));
   };

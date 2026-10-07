@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { cn } from "@/lib/utils";
 import MaterialImportDialog from "./MaterialImportDialog";
 import AssemblyLibrary from "./AssemblyLibrary";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -472,7 +473,7 @@ export default function MaterialLibrary({ canManage = true }) {
   };
 
   const handleDelete = async (id) => {
-    if (confirm("Delete this item?")) { await base44.entities.Material.delete(id); load(); }
+    if (await confirmAction("Delete this item?")) { await base44.entities.Material.delete(id); load(); }
   };
 
   const handleToggleActive = async (m) => {
@@ -484,7 +485,7 @@ export default function MaterialLibrary({ canManage = true }) {
     const scoped = materials.filter(m => isLabor ? LABOR_CATEGORY_SET.has(m.category) : !LABOR_CATEGORY_SET.has(m.category));
     const toUpdate = scoped.map(m => ({ ...m, category: guessCategory(m.name, m.description, isLabor) })).filter((m, i) => m.category !== scoped[i].category);
     if (!toUpdate.length) { alert("All items already have the best category."); return; }
-    if (!confirm(`Re-categorize ${toUpdate.length} item(s)?`)) return;
+    if (!await confirmAction(`Re-categorize ${toUpdate.length} item(s)?`)) return;
     for (const m of toUpdate) await base44.entities.Material.update(m.id, { category: m.category });
     load();
   };
@@ -498,7 +499,7 @@ export default function MaterialLibrary({ canManage = true }) {
   }, [materials, isLabor]);
 
   const handleDedup = async () => {
-    if (!confirm(`Found ${dupCount} duplicate name(s). Merge them?`)) return;
+    if (!await confirmAction(`Found ${dupCount} duplicate name(s). Merge them?`)) return;
     const scoped = materials.filter(m => isLabor ? LABOR_CATEGORY_SET.has(m.category) : !LABOR_CATEGORY_SET.has(m.category));
     const groups = {};
     for (const m of scoped) { const k = (m.name || "").trim().toLowerCase(); if (k) (groups[k] = groups[k] || []).push(m); }

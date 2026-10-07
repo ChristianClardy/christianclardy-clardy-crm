@@ -65,6 +65,7 @@ import { rescaleDraws } from "@/lib/drawSchedule";
 import { useRolePermissions } from "@/lib/useRolePermissions";
 import { PROJECT_TAB_MODULE } from "@/lib/permissions";
 import ProjectStatusPicker from "@/components/projects/ProjectStatusPicker";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const statusStyles = {
   planning: { label: "Planning", class: "bg-slate-100 text-slate-700" },
@@ -200,7 +201,7 @@ export default function ProjectDetail() {
   };
 
   const handleDeleteProject = async () => {
-    if (confirm("Are you sure you want to delete this project?")) {
+    if (await confirmAction("Are you sure you want to delete this project?")) {
       await base44.entities.Project.delete(projectId);
       navigate(createPageUrl("Projects"));
     }

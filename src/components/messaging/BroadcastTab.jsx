@@ -11,6 +11,7 @@ import { useRolePermissions } from "@/lib/useRolePermissions";
 import { LEAD_STAGES } from "@/lib/leadStages";
 import { fetchAll, messagingApi } from "@/lib/messaging";
 import MessageBodyEditor from "./MessageBodyEditor";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const normEmail = (v) => (v ? String(v).trim().toLowerCase() : "");
 const normPhone = (v) => {
@@ -92,7 +93,7 @@ export default function BroadcastTab() {
   const send = async () => {
     const n = recipients.list.length;
     if (!n || !msg.body.trim() || (channel === "email" && !msg.subject.trim())) return;
-    if (!window.confirm(`Send this ${channel === "email" ? "email" : "text"} to ${n} ${n === 1 ? "person" : "people"}? This can't be undone.`)) return;
+    if (!await confirmAction(`Send this ${channel === "email" ? "email" : "text"} to ${n} ${n === 1 ? "person" : "people"}? This can't be undone.`)) return;
     setSending(true); setResult(null);
     try {
       const r = await messagingApi.broadcast({

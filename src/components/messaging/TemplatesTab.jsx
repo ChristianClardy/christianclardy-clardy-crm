@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
 import { useRolePermissions } from "@/lib/useRolePermissions";
 import MessageBodyEditor from "./MessageBodyEditor";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 export default function TemplatesTab() {
   const scope = useCompanyScope();
@@ -34,7 +35,7 @@ export default function TemplatesTab() {
   };
 
   const remove = async (t) => {
-    if (!window.confirm(`Delete template "${t.name}"?`)) return;
+    if (!await confirmAction(`Delete template "${t.name}"?`)) return;
     await base44.entities.MessageTemplate.delete(t.id);
     load();
   };

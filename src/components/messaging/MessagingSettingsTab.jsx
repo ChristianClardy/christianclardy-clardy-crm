@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useCompanyScope } from "@/lib/companyScope";
 import { useRolePermissions } from "@/lib/useRolePermissions";
 import { messagingApi } from "@/lib/messaging";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const TIMEZONES = ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu"];
 const HOURS = Array.from({ length: 24 }, (_, h) => ({ value: String(h), label: new Date(2000, 0, 1, h).toLocaleTimeString("en-US", { hour: "numeric" }) }));
@@ -107,7 +108,7 @@ export default function MessagingSettingsTab() {
     loadOptOuts();
   };
   const removeOptOut = async (o) => {
-    if (!window.confirm(`Allow messages to ${o.address} again? Only do this if they asked to be added back.`)) return;
+    if (!await confirmAction(`Allow messages to ${o.address} again? Only do this if they asked to be added back.`)) return;
     await supabase.from("message_opt_outs").delete().eq("channel", o.channel).eq("address", o.address);
     loadOptOuts();
   };

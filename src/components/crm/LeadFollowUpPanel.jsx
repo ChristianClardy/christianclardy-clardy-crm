@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { CalendarDays, Clock, Edit2, Trash2, User, X } from "lucide-react";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const addMinutes = (timeStr, mins) => {
   const [h, m] = timeStr.split(":").map(Number);
@@ -118,7 +119,7 @@ export default function LeadFollowUpPanel({ lead, followUps, onRefresh }) {
   };
 
   const deleteFollowUp = async (followUp) => {
-    if (!window.confirm(`Delete "${followUp.title}"?`)) return;
+    if (!await confirmAction(`Delete "${followUp.title}"?`)) return;
     await base44.entities.LeadFollowUp.delete(followUp.id);
     if (editingId === followUp.id) cancelEdit();
     onRefresh?.();

@@ -23,6 +23,7 @@ import { Plus, Edit2, Trash2, DollarSign, TrendingUp, CheckCircle2, Clock, Alert
 import ProjectPaymentManager from "@/components/payments/ProjectPaymentManager";
 import { buildDraws, hasBuilderFee } from "@/lib/drawSchedule";
 import { reconcileDraws, drawRemaining, isPartlyPaid } from "@/lib/draws";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const statusConfig = {
   pending:   { label: "Pending",   class: "bg-slate-100 text-slate-600",   icon: Clock },
@@ -184,7 +185,7 @@ export default function CashFlowTracker({ projectId, contractValue = 0, acculynx
   };
 
   const handleDelete = async (drawId) => {
-    if (confirm("Delete this draw?")) {
+    if (await confirmAction("Delete this draw?")) {
       await base44.entities.Draw.delete(drawId);
       await reconcileDraws(projectId);
       loadDraws();

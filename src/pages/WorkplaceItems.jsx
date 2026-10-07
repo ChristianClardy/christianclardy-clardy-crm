@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import TemplateRowEditor from "@/components/templates/TemplateRowEditor";
 import EstimateTemplates from "@/components/workspace/EstimateTemplates";
 import { STOCK_SCHEDULE_TEMPLATES } from "@/lib/stockScheduleTemplates";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const BASIC_CONSTRUCTION_TEMPLATE = [
   { id: "s1", section: "Site Preparation", task: "Site Preparation", is_section_header: true },
@@ -209,7 +210,7 @@ export default function WorkplaceItems() {
   };
 
   const handleDeleteTemplate = async (templateId) => {
-    if (confirm("Delete this template?")) {
+    if (await confirmAction("Delete this template?")) {
       try {
         await base44.entities.ProjectSheetTemplate.delete(templateId);
         loadTemplates();

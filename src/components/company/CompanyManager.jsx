@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const emptyForm = { name: "", code: "", color: "", notes: "", is_active: true };
 
@@ -53,7 +54,7 @@ export default function CompanyManager() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm("Delete this company?")) return;
+    if (!await confirmAction("Delete this company?")) return;
     await base44.entities.CompanyProfile.delete(id);
     loadCompanies();
   };

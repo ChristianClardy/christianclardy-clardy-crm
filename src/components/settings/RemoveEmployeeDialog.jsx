@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 // Removing an employee also has to cut their app access: deleting the
 // employee record alone leaves their logins working. A Builder Portal login
@@ -119,7 +120,7 @@ export default function RemoveEmployeeDialog({ employee, pmLogin, onClose, onDon
               <Button variant="outline" onClick={() => run("inactive")} disabled={!!working}>
                 {working === "inactive" && <Loader2 className="w-4 h-4 mr-1 animate-spin" />} Mark inactive
               </Button>
-              <Button onClick={() => { if (confirm(`Delete ${employee.full_name}? This can't be undone.`)) run("delete"); }} disabled={!!working} className="bg-rose-600 hover:bg-rose-700 text-white">
+              <Button onClick={async () => { if (await confirmAction(`Delete ${employee.full_name}? This can't be undone.`)) run("delete"); }} disabled={!!working} className="bg-rose-600 hover:bg-rose-700 text-white">
                 {working === "delete" && <Loader2 className="w-4 h-4 mr-1 animate-spin" />} Delete employee
               </Button>
             </div>

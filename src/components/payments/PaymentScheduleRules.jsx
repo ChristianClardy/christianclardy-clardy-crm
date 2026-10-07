@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2, Zap, Clock, CheckCircle2, Settings2 } from "lucide-react";
 import { useQbConnected } from "@/lib/quickbooks";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -390,7 +391,7 @@ export default function PaymentScheduleRules({ companyId }) {
   // ── Delete ─────────────────────────────────────────────────────────────────
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Delete this payment rule?")) return;
+    if (!await confirmAction("Delete this payment rule?")) return;
     await supabase.from("payment_schedule_rules").delete().eq("id", id);
     await fetchRules();
   };

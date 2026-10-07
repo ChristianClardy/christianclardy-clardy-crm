@@ -26,6 +26,7 @@ import {
   Clock, DollarSign, TrendingDown, TrendingUp, ShieldCheck,
   ShieldAlert, Shield, ArrowDownRight, ArrowUpRight,
 } from "lucide-react";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -188,7 +189,7 @@ export default function ProjectAccounting({ project }) {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm(qbBills.has(id) ? "Delete this invoice? Its bill is also deleted in QuickBooks." : "Delete this invoice?")) return;
+    if (!await confirmAction(qbBills.has(id) ? "Delete this invoice? Its bill is also deleted in QuickBooks." : "Delete this invoice?")) return;
     if (qbBills.has(id)) {
       const r = await qbAutoPush("delete-bill", { sub_invoice_id: id });
       if (r?.error) { alert(`Couldn't delete the bill in QuickBooks, so nothing was deleted: ${r.error}`); return; }

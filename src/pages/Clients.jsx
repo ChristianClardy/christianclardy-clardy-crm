@@ -41,6 +41,7 @@ import {
 import { cn } from "@/lib/utils";
 import ClientWorkflowControl from "@/components/clients/ClientWorkflowControl";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const statusStyles = {
   active:   { label: "Active",   class: "bg-emerald-100 text-emerald-700" },
@@ -221,7 +222,7 @@ export default function Clients() {
   };
 
   const handleDelete = async (id) => {
-    if (confirm("Are you sure you want to delete this contact?")) {
+    if (await confirmAction("Are you sure you want to delete this contact?")) {
       await base44.entities.Client.delete(id);
       loadData();
     }

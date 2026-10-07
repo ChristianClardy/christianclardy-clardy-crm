@@ -17,6 +17,7 @@ import {
   normalizeRows, chainFrom, fromTemplateRows, parseDuration,
 } from "@/lib/schedule";
 import { STOCK_SCHEDULE_TEMPLATES } from "@/lib/stockScheduleTemplates";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 // The job schedule: phases and tasks with dates, subs, and dependencies.
 // Stored in project_sheets.rows (see src/lib/schedule.js). Every change is
@@ -128,12 +129,12 @@ export default function ScheduleEditor({ project, subcontractors, focusRowId, on
     if (name?.trim()) updateRow(row.id, { section: name.trim().toUpperCase() });
   };
 
-  const deletePhase = (row) => {
+  const deletePhase = async (row) => {
     const idx = rows.findIndex((r) => r.id === row.id);
     let end = idx + 1;
     while (end < rows.length && !rows[end].is_section_header) end++;
     const count = end - idx - 1;
-    if (!confirm(`Delete the ${row.section} phase${count ? ` and its ${count} task${count !== 1 ? "s" : ""}` : ""}?`)) return;
+    if (!await confirmAction(`Delete the ${row.section} phase${count ? ` and its ${count} task${count !== 1 ? "s" : ""}` : ""}?`)) return;
     const removed = new Set(rows.slice(idx, end).map((r) => r.id));
     commit(rows.filter((r) => !removed.has(r.id)).map((r) => (removed.has(r.depends_on) ? { ...r, depends_on: null } : r)));
   };
@@ -438,7 +439,7 @@ function TaskDialog({ row, phaseId, rows, subcontractors, onClose, onSave, onDel
               <>
                 <Button type="button" variant="ghost" size="sm" onClick={() => onMove(row, -1)}><ChevronUp className="w-4 h-4" /></Button>
                 <Button type="button" variant="ghost" size="sm" onClick={() => onMove(row, 1)}><ChevronDown className="w-4 h-4" /></Button>
-                <Button type="button" variant="ghost" size="sm" className="text-rose-600" onClick={() => { if (confirm(`Delete "${row.task}"?`)) onDelete(row); }}>
+                <Button type="button" variant="ghost" size="sm" className="text-rose-600" onClick={async () => { if (await confirmAction(`Delete "${row.task}"?`)) onDelete(row); }}>
                   <Trash2 className="w-4 h-4 mr-1" /> Delete
                 </Button>
               </>

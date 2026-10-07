@@ -9,6 +9,7 @@ import { sendInvite, createTextInviteLink } from "@/lib/sendInvite";
 import { TextLinkPanel } from "@/components/builder/SubAccessDialog";
 import JobPicker from "@/components/settings/JobPicker";
 import { savePmJobs, loadPmJobIds } from "@/lib/jobAssignments";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 // Builder Portal-only logins for project managers (040_pm_portal_logins.sql).
 // A PM login runs its jobs (schedule, logs, punch list, inspections, sub
@@ -191,7 +192,7 @@ export default function PmLoginsSection() {
                   </Button>
                 )}
                 {l.active ? (
-                  <Button size="sm" variant="outline" className="h-8" onClick={() => { if (confirm(`Turn off Builder Portal access for ${employeeName(l) || l.email}?`)) patch(l, { active: false }); }}>
+                  <Button size="sm" variant="outline" className="h-8" onClick={async () => { if (await confirmAction(`Turn off Builder Portal access for ${employeeName(l) || l.email}?`)) patch(l, { active: false }); }}>
                     <UserX className="w-4 h-4 mr-1" /> Turn off
                   </Button>
                 ) : (

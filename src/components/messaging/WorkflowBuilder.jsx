@@ -11,6 +11,7 @@ import {
 } from "@/lib/workflow";
 import WorkflowCanvas from "./WorkflowCanvas";
 import NodeEditorPanel, { TriggerEditor } from "./NodeEditorPanel";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const NEW_META = {
   name: "", description: "", trigger_type: "lead_created", trigger_value: "",
@@ -82,15 +83,15 @@ export default function WorkflowBuilder({ sequenceId, onClose }) {
     setSelected(n.id);
   };
 
-  const remove = () => {
+  const remove = async () => {
     if (node.type === "condition" && ((node.yes || []).length || (node.no || []).length)
-      && !window.confirm("Delete this split and everything in its Yes and No branches?")) return;
+      && !await confirmAction("Delete this split and everything in its Yes and No branches?")) return;
     edit(removeNode(flow, node.id));
     setSelected("trigger");
   };
 
-  const close = () => {
-    if (dirty && !window.confirm("Leave without saving your changes?")) return;
+  const close = async () => {
+    if (dirty && !await confirmAction("Leave without saving your changes?")) return;
     onClose(id);
   };
 

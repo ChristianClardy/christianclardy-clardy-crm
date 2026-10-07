@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { useCompanyScope, scopeFilter, getSelectedCompanyScope } from "@/lib/companyScope";
 import { parseMasterEstimateWorkbook } from "@/lib/masterEstimateImport";
 import { PROJECT_TYPES } from "@/components/settings/ScopeTemplatesTab";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const STATUS_STYLES = {
   draft:    { label: "Draft",    className: "bg-slate-100 text-slate-600",   icon: Clock },
@@ -99,7 +100,7 @@ export default function Estimates() {
 
   const handleDelete = async (e, est) => {
     e.stopPropagation();
-    if (!confirm(`Delete "${est.title || "this estimate"}"? This cannot be undone.`)) return;
+    if (!await confirmAction(`Delete "${est.title || "this estimate"}"? This cannot be undone.`)) return;
     await base44.entities.Estimate.delete(est.id);
     setEstimates(prev => prev.filter(e => e.id !== est.id));
   };

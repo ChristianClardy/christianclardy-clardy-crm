@@ -11,6 +11,7 @@ import { MERGE_SOURCES, anchorForSource, extractContractTokens, renderContractTe
 import { scanTemplateFileForMergeTokens } from "@/lib/scanTemplateFileTokens";
 import MergeFieldPicker from "@/components/settings/MergeFieldPicker";
 import { STANDARD_CHANGE_ORDER_TEMPLATE } from "@/lib/changeOrderDocument";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 // Contract Templates and Change Order Templates share this editor; the rows
 // are contract_templates split by template_type (044). Rows from before 044
@@ -246,7 +247,7 @@ export default function ContractTemplatesTab({ templateType = "contract" }) {
   };
 
   const handleDelete = async (id) => {
-    if (confirm(`Delete this ${copy.noun.toLowerCase()}?`)) {
+    if (await confirmAction(`Delete this ${copy.noun.toLowerCase()}?`)) {
       await base44.entities.ContractTemplate.delete(id);
       load();
     }

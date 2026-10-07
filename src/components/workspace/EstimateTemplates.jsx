@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 function newId() { return Math.random().toString(36).slice(2, 10); }
 
@@ -49,7 +50,7 @@ export default function EstimateTemplates() {
   };
 
   const handleDelete = async (id) => {
-    if (confirm("Delete this estimate template?")) {
+    if (await confirmAction("Delete this estimate template?")) {
       await base44.entities.EstimateTemplate.delete(id);
       load();
     }

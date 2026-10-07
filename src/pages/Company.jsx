@@ -16,6 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import CompanyManager from "@/components/company/CompanyManager";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const ROLE_LABELS = {
   admin: { label: "Admin", color: "bg-purple-100 text-purple-700" },
@@ -100,7 +101,7 @@ export default function Company() {
   };
 
   const handleDelete = async (id) => {
-    if (confirm("Remove this employee?")) {
+    if (await confirmAction("Remove this employee?")) {
       await base44.entities.Employee.delete(id);
       loadEmployees();
     }

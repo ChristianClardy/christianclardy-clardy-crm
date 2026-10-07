@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const ACTIVE_STATUSES = new Set(["planning", "in_progress", "on_hold"]);
 const ALL = "all";
@@ -119,7 +120,7 @@ export default function JobAssignmentsTab() {
       .filter((a) => selectedSubs.has(a.subcontractor_id) && selectedJobs.has(a.project_id))
       .map((a) => a.id);
     if (!ids.length) { setMessage({ ok: true, text: "None of the selected jobs are assigned to the selected subcontractors." }); return; }
-    if (!confirm(`Remove ${ids.length} assignment${ids.length !== 1 ? "s" : ""}? Those subs will stop seeing those jobs in the app.`)) return;
+    if (!await confirmAction(`Remove ${ids.length} assignment${ids.length !== 1 ? "s" : ""}? Those subs will stop seeing those jobs in the app.`)) return;
     setBusy("unassign");
     setMessage(null);
     const { error } = await supabase.from("project_subcontractors").delete().in("id", ids);

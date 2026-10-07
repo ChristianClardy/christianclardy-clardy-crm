@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { getCurrentOrgId } from "@/api/base44Client";
 import DocuSignEnvelopes from "@/components/docusign/DocuSignEnvelopes";
 import { apiFetch } from "@/lib/apiFetch";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 export const DOC_TYPES = [
   "Contract",
@@ -349,7 +350,7 @@ export default function CompanyDocumentsSection({ selectedCompanyScope = "all", 
   };
 
   const deleteDoc = async (id) => {
-    if (!confirm("Delete this document? This cannot be undone.")) return;
+    if (!await confirmAction("Delete this document? This cannot be undone.")) return;
     await base44.entities.Document.delete(id);
     setDocuments((prev) => prev.filter((d) => d.id !== id));
   };

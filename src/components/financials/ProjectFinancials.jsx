@@ -18,6 +18,7 @@ import ProjectedProfitDialog from "@/components/financials/ProjectedProfitDialog
 import JobCostBreakdown from "@/components/financials/JobCostBreakdown";
 import { sectionsFromEstimate, rebuildFromEstimates, isLegacyBreakdown } from "@/lib/jobCostFromEstimate";
 import { mergeApInvoices } from "@/lib/apJobCost";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 function fmt(n) {
   const num = Number(n) || 0;
@@ -233,7 +234,7 @@ export default function ProjectFinancials({ project, onUpdateProject }) {
   };
 
   const handleUnlinkEstimate = async (estId) => {
-    if (!confirm("Unlink this estimate? The budget sections it created will remain but can be manually deleted.")) return;
+    if (!await confirmAction("Unlink this estimate? The budget sections it created will remain but can be manually deleted.")) return;
     const next = getLinkedIds().filter(id => id !== estId);
     await base44.entities.Project.update(project.id, { linked_estimate_ids: next });
     setLinkedEstimates(prev => prev.filter(e => e.id !== estId));

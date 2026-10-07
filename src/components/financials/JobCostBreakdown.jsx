@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { sectionTotals, costEntries, sumCosts, isExtra, newId } from "@/lib/jobCostFromEstimate";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 // Job Cost breakdown laid out like the estimate (EstimateDetail.jsx
 // TradeSection): one card per section, material sections tinted sky, the same
@@ -330,7 +331,7 @@ export default function JobCostBreakdown({ sections, estimates = [], onChange, o
           onUpdateItem={(itemId, patch) => update(section.id, (s) => ({ ...s, items: s.items.map((i) => (i.id === itemId ? { ...i, ...patch } : i)) }))}
           onAddItem={() => update(section.id, (s) => ({ ...s, collapsed: false, items: [...s.items, { id: newId(), description: "", unit: "", quantity: 0, est_cost_per_unit: 0, budgeted: 0, actual: 0, costs: [], notes: "" }] }))}
           onDeleteItem={(itemId) => update(section.id, (s) => ({ ...s, items: s.items.filter((i) => i.id !== itemId) }))}
-          onDeleteSection={() => { if (confirm(`Delete the "${section.name}" section and its lines?`)) onChange(sections.filter((s) => s.id !== section.id)); }}
+          onDeleteSection={async () => { if (await confirmAction(`Delete the "${section.name}" section and its lines?`)) onChange(sections.filter((s) => s.id !== section.id)); }}
         />
       ))}
 

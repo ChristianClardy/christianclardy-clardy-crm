@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import PhotoPicker from "@/components/app/PhotoPicker";
 import { uploadImages } from "@/lib/uploadImages";
 import { fmtShort, todayIso } from "@/lib/schedule";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 // Punch list for one job. open → ready (work done, waiting on the PM) →
 // closed (PM verified). Staff only (punch_list_items, 039_builder_portal_pm.sql).
@@ -153,7 +154,7 @@ function PunchItemDialog({ item, project, subcontractors, user, onClose, onSaved
   };
 
   const remove = async () => {
-    if (!confirm(`Delete "${item.title}"?`)) return;
+    if (!await confirmAction(`Delete "${item.title}"?`)) return;
     await base44.entities.PunchListItem.delete(item.id);
     onDeleted(item.id);
   };

@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const ROLE_STYLES = {
   admin:           "bg-rose-100 text-rose-700",
@@ -104,14 +105,14 @@ export default function OrganizationTab() {
   };
 
   const handleRevokeInvite = async (id) => {
-    if (!confirm("Revoke this invitation?")) return;
+    if (!await confirmAction("Revoke this invitation?")) return;
     await supabase.from("organization_invitations").update({ expires_at: new Date().toISOString() }).eq("id", id);
     loadMembers();
   };
 
   const handleRemoveMember = async (memberId, memberUserId) => {
     if (memberUserId === user.id) { alert("You cannot remove yourself."); return; }
-    if (!confirm("Remove this member from the organization?")) return;
+    if (!await confirmAction("Remove this member from the organization?")) return;
     await supabase.from("organization_members").delete().eq("id", memberId);
     loadMembers();
   };

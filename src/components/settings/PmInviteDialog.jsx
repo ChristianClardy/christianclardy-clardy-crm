@@ -9,6 +9,7 @@ import { sendInvite, createTextInviteLink } from "@/lib/sendInvite";
 import { TextLinkPanel } from "@/components/builder/SubAccessDialog";
 import JobPicker from "@/components/settings/JobPicker";
 import { savePmJobs, loadPmJobIds } from "@/lib/jobAssignments";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 // Builder Portal access for one employee, opened from their row in
 // Team & Subcontractors → Employees (like a sub's Invite button). Shows their
@@ -97,7 +98,7 @@ export default function PmInviteDialog({ employee, login, onClose, onChanged }) 
                 </Button>
               )}
               {login.active ? (
-                <Button size="sm" variant="outline" className="h-8" onClick={() => { if (confirm(`Turn off Builder Portal access for ${employee.full_name}?`)) patch({ active: false }); }}>
+                <Button size="sm" variant="outline" className="h-8" onClick={async () => { if (await confirmAction(`Turn off Builder Portal access for ${employee.full_name}?`)) patch({ active: false }); }}>
                   <UserX className="w-4 h-4 mr-1" /> Turn off
                 </Button>
               ) : (

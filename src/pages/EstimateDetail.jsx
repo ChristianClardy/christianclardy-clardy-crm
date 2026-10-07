@@ -23,6 +23,7 @@ import DocuSignEnvelopes from "@/components/docusign/DocuSignEnvelopes";
 import { PROJECT_TYPES } from "@/components/settings/ScopeTemplatesTab";
 import { renderScopeTemplate } from "@/lib/scopeTemplateEngine";
 import { apiFetch } from "@/lib/apiFetch";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -2160,10 +2161,10 @@ export default function EstimateDetail() {
     (!t.company_id || t.company_id === selectedCompanyId)
   );
 
-  const handleGenerateScope = () => {
+  const handleGenerateScope = async () => {
     const template = scopeTemplates.find(t => t.id === selectedScopeTemplateId);
     if (!template) return;
-    if (estimate.notes?.trim() && !confirm("This replaces the current Notes/Scope text with the generated scope. Continue?")) return;
+    if (estimate.notes?.trim() && !await confirmAction("This replaces the current Notes/Scope text with the generated scope. Continue?")) return;
     const rendered = renderScopeTemplate(template, items, costCodes);
     setEstimate(est => ({ ...est, notes: rendered }));
     setSaved(false);

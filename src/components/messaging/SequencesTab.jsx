@@ -12,6 +12,7 @@ import { triggerSummary } from "@/lib/messaging";
 import { computeNodeStats, findNode, flattenNodes, workflowOf } from "@/lib/workflow";
 import WorkflowCanvas from "./WorkflowCanvas";
 import { STARTER_DRIPS } from "./starterDrips";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const fmt = (v) => (v ? format(new Date(v), "MMM d, h:mm a") : "—");
 const NODE_ICON = { email: Mail, sms: MessageSquare, wait: Clock, condition: GitBranch, action: Zap };
@@ -164,7 +165,7 @@ export default function SequencesTab({ onOpen }) {
 
   const remove = async (seq) => {
     const running = (enrBySeq[seq.id] || []).filter((e) => e.status === "active").length;
-    if (!window.confirm(`Delete "${seq.name}"?${running ? ` ${running} people in it will get nothing more.` : ""} Sent messages stay in the log.`)) return;
+    if (!await confirmAction(`Delete "${seq.name}"?${running ? ` ${running} people in it will get nothing more.` : ""} Sent messages stay in the log.`)) return;
     await base44.entities.MessageSequence.delete(seq.id);
     load();
   };

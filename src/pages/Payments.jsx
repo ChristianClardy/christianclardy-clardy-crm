@@ -15,6 +15,7 @@ import { getSelectedCompanyScope, subscribeToCompanyScope } from "@/lib/companyS
 import { cn } from "@/lib/utils";
 import { qbCall, qbAutoPush, useQbConnected } from "@/lib/quickbooks";
 import { isPartlyPaid, drawRemaining } from "@/lib/draws";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const statusStyles = {
   pending: "bg-slate-100 text-slate-600",
@@ -183,7 +184,7 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
   };
 
   const handleDeleteInvoice = async (invoice) => {
-    if (!confirm(invoice.qb_invoice_id
+    if (!await confirmAction(invoice.qb_invoice_id
       ? `Delete ${invoice.invoice_name || "this invoice"} from Clardy? It stays in QuickBooks; void or delete it there too if it shouldn't be collected.`
       : `Delete ${invoice.invoice_name || "this invoice"}?`)) return;
     await base44.entities.Invoice.delete(invoice.id);

@@ -37,6 +37,7 @@ import { apiFetch } from "@/lib/apiFetch";
 import { loadSavedRolePermissions, isAdmin } from "@/lib/useRolePermissions";
 import { loadDocuSignProfile } from "@/lib/docusignProfile";
 import { ROLES, MODULE_GROUPS, DEFAULT_PERMISSIONS } from "@/lib/permissions";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -350,7 +351,7 @@ function PermissionsTab() {
         </p>
         <div className="flex gap-2 shrink-0">
         {canEdit && (
-          <Button variant="outline" size="sm" onClick={() => { if (confirm("Reset every role to the recommended permissions? Click Save Changes afterwards to keep them.")) { setPermissions(DEFAULT_PERMISSIONS); setSaved(false); } }}>
+          <Button variant="outline" size="sm" onClick={async () => { if (await confirmAction("Reset every role to the recommended permissions? Click Save Changes afterwards to keep them.")) { setPermissions(DEFAULT_PERMISSIONS); setSaved(false); } }}>
             Reset to recommended
           </Button>
         )}
@@ -755,7 +756,7 @@ function DocuSignTab() {
   };
 
   const handleDisconnect = async () => {
-    if (!confirm("Disconnect DocuSign? You will need to reconnect to send documents.")) return;
+    if (!await confirmAction("Disconnect DocuSign? You will need to reconnect to send documents.")) return;
     setDisconnecting(true);
     const data = await loadDocuSignProfile();
     if (data) {
@@ -979,7 +980,7 @@ function LeadSourcesTab() {
   };
 
   const handleRemove = async (source) => {
-    if (!confirm(`Remove lead source "${source}"? Leads already using it will keep it, but it won't be offered for new leads.`)) return;
+    if (!await confirmAction(`Remove lead source "${source}"? Leads already using it will keep it, but it won't be offered for new leads.`)) return;
     setRemoving(source);
     try {
       await removeCustomLeadSource(source);
@@ -1086,7 +1087,7 @@ function DesignersTab() {
   };
 
   const handleRemove = async (name) => {
-    if (!confirm(`Remove designer "${name}"? Leads already assigned to them will keep it, but they won't be offered for new assignments.`)) return;
+    if (!await confirmAction(`Remove designer "${name}"? Leads already assigned to them will keep it, but they won't be offered for new assignments.`)) return;
     setRemoving(name);
     try {
       await removeDesigner(name);

@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import PhotoPicker from "@/components/app/PhotoPicker";
 import { uploadImages } from "@/lib/uploadImages";
 import { fmtLong, todayIso, taskRows } from "@/lib/schedule";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 // Inspections for one job, stored on permit_inspection_tasks (title = the
 // inspection, due_date = when it's scheduled; `completed` mirrors a pass so
@@ -168,7 +169,7 @@ function InspectionDialog({ item, defaults, project, rows, user, onClose, onSave
   };
 
   const remove = async () => {
-    if (!confirm(`Delete the ${item.title} inspection?`)) return;
+    if (!await confirmAction(`Delete the ${item.title} inspection?`)) return;
     await base44.entities.PermitInspectionTask.delete(item.id);
     onDeleted(item.id);
   };

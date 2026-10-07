@@ -21,6 +21,7 @@ import { TRADE_LABELS, tradeLabel, subTrades, subTradeLabels } from "@/lib/subTr
 import JobPicker from "@/components/settings/JobPicker";
 import EraseDataDialog from "@/components/privacy/EraseDataDialog";
 import { saveSubJobs, loadSubJobIds } from "@/lib/jobAssignments";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 // Subcontractor directory: contact info, compliance paperwork (insurance,
 // license, W-9, pool barrier policy), pay terms, and Subcontractor Portal access.
@@ -164,7 +165,7 @@ export default function SubcontractorsTab() {
       logins ? `${logins} app login${logins !== 1 ? "s" : ""} (they'll lose access)` : null,
     ].filter(Boolean).join(" and ");
     const msg = `Delete ${sub.name}?${extra ? `\n\nThis also removes ${extra} and their signed subcontractor agreements.` : ""}\n\nTo keep the history, choose "Mark inactive" instead.`;
-    if (!confirm(msg)) return;
+    if (!await confirmAction(msg)) return;
     await base44.entities.Subcontractor.delete(sub.id);
     load();
   };

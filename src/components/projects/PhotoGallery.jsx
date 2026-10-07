@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const CATEGORIES = [
   { value: "before", label: "Before", color: "bg-blue-100 text-blue-700" },
@@ -82,7 +83,7 @@ export default function PhotoGallery({ projectId }) {
   };
 
   const handleDelete = async (id) => {
-    if (confirm("Delete this photo?")) {
+    if (await confirmAction("Delete this photo?")) {
       await base44.entities.ProjectPhoto.delete(id);
       loadPhotos();
     }

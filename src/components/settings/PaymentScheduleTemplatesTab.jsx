@@ -14,6 +14,7 @@ import {
 import { Plus, Pencil, Trash2, GripVertical, DollarSign, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { hasBuilderFee, feePercentTotal, costPercentTotal } from "@/lib/drawSchedule";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -158,7 +159,7 @@ function TemplateDialog({ open, initial, companyId, onClose, onSaved }) {
   const handleSave = async () => {
     if (!form.name.trim()) return;
     if (withFee && Math.abs(feeTotal - 100) > 0.001) {
-      if (!confirm(`The builder fee shares add up to ${feeTotal}%, not 100%, so not all of the fee would be billed. Save anyway?`)) return;
+      if (!await confirmAction(`The builder fee shares add up to ${feeTotal}%, not 100%, so not all of the fee would be billed. Save anyway?`)) return;
     }
     setSaving(true);
     const payload = {
@@ -321,7 +322,7 @@ export default function PaymentScheduleTemplatesTab() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm("Delete this template?")) return;
+    if (!await confirmAction("Delete this template?")) return;
     await supabase.from("payment_schedule_templates").delete().eq("id", id);
     load();
   };

@@ -11,6 +11,7 @@ import PaymentSummaryReceiptModal from "@/components/payments/PaymentSummaryRece
 import { supabase } from "@/lib/supabase";
 import { qbAutoPush } from "@/lib/quickbooks";
 import { reconcileDraws, drawRemaining } from "@/lib/draws";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const emptyForm = {
   draw_id: "",
@@ -154,7 +155,7 @@ export default function ProjectPaymentManager({ projectId, contractValue = 0, ac
 
   const handleDelete = async (paymentId) => {
     const link = qbLinks[paymentId];
-    if (!confirm(link?.origin === "qb"
+    if (!await confirmAction(link?.origin === "qb"
       ? "Delete this payment from Clardy? It was recorded in QuickBooks and stays there; delete it in QuickBooks instead to remove it everywhere."
       : link ? "Delete this payment? It's also removed from QuickBooks." : "Delete this payment?")) return;
     if (link?.origin === "app") {

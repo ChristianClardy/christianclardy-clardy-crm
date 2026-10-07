@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Loader2, Save, Link as LinkIcon, Building2, Unlink, RefreshCw, Copy, Check, ChevronDown, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { qbCall, qbStatus } from "@/lib/quickbooks";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 // Settings → QuickBooks. Everything talks to /api/quickbooks
 // (api/_lib/quickbooks.js); tokens and the client secret stay on the server.
@@ -99,8 +100,8 @@ export default function QuickBooksTab() {
     window.location.href = auth_url;
   });
 
-  const disconnect = () => {
-    if (!confirm("Disconnect QuickBooks? Invoices, payments and bills stop syncing until you reconnect. Nothing is deleted in QuickBooks or in Clardy.")) return;
+  const disconnect = async () => {
+    if (!await confirmAction("Disconnect QuickBooks? Invoices, payments and bills stop syncing until you reconnect. Nothing is deleted in QuickBooks or in Clardy.")) return;
     run("disconnect", async () => { await qbCall("disconnect"); setOptions(null); await load(); });
   };
 

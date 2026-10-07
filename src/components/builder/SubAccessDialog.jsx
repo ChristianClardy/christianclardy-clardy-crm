@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { sendInvite, createTextInviteLink } from "@/lib/sendInvite";
 import { goToSettingsTab } from "@/lib/settingsNav";
 import { Textarea } from "@/components/ui/textarea";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 // Staff-only: who from a subcontractor has an app login, and inviting more.
 // Job assignments live in Settings → Job Assignments. Portal logins are never
@@ -67,7 +68,7 @@ export default function SubAccessDialog({ sub, onOpenChange, assignments, portal
   };
 
   const setLoginActive = async (login, active) => {
-    if (!active && !confirm(`Turn off app access for ${login.full_name || login.email}? They'll be signed out of everything.`)) return;
+    if (!active && !await confirmAction(`Turn off app access for ${login.full_name || login.email}? They'll be signed out of everything.`)) return;
     // Keyed by user_id (no `id` column), so this can't go through base44's update(id).
     const { error } = await supabase.from("subcontractor_portal_users").update({ active }).eq("user_id", login.user_id);
     if (error) { alert(`Could not update access: ${error.message}`); return; }

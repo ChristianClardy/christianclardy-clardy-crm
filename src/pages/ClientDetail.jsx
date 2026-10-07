@@ -49,6 +49,7 @@ import MessagesPanel from "@/components/messaging/MessagesPanel";
 import CustomerPortalDialog from "@/components/clients/CustomerPortalDialog";
 import EraseDataDialog from "@/components/privacy/EraseDataDialog";
 import { cn } from "@/lib/utils";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const statusStyles = {
   active: { label: "Active", class: "bg-emerald-100 text-emerald-700" },
@@ -125,7 +126,7 @@ export default function ClientDetail() {
   };
 
   const handleDeleteClient = async () => {
-    if (confirm("Are you sure you want to delete this client? This will not delete associated projects.")) {
+    if (await confirmAction("Are you sure you want to delete this client? This will not delete associated projects.")) {
       await base44.entities.Client.delete(clientId);
       navigate(createPageUrl("Clients"));
     }

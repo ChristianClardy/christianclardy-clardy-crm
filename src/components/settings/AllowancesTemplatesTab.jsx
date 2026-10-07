@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2, GripVertical, ReceiptText } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const rid = () => Math.random().toString(36).slice(2, 10);
 
@@ -202,7 +203,7 @@ export default function AllowancesTemplatesTab() {
   useEffect(() => { load(); }, [companyId]);
 
   const handleDelete = async (id) => {
-    if (!confirm("Delete this template?")) return;
+    if (!await confirmAction("Delete this template?")) return;
     await supabase.from("allowances_templates").delete().eq("id", id);
     load();
   };

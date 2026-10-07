@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 const UNITS = ["EA", "LF", "SF", "SY", "CY", "CF", "LB", "TON", "HR", "DAY", "GAL", "BAG", "ROLL", "SHEET", "LS", "BDL", "PC", "BOX", "PALLET"];
 
@@ -123,7 +124,7 @@ export default function AssemblyLibrary({ materials = [], costCodes = [], canMan
   };
 
   const handleDelete = async (id) => {
-    if (confirm("Delete this assembly?")) {
+    if (await confirmAction("Delete this assembly?")) {
       await base44.entities.Assembly.delete(id);
       load();
     }

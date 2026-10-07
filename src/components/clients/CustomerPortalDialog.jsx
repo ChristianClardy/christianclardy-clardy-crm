@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { sendInvite, createTextInviteLink } from "@/lib/sendInvite";
 import { TextLinkPanel } from "@/components/builder/SubAccessDialog";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
 // Customer Portal access for one client, opened from Client Detail. A
 // customer login sees only this client's projects: overall progress and a
@@ -97,7 +98,7 @@ export default function CustomerPortalDialog({ client, onClose }) {
                     </Button>
                   )}
                   {l.active ? (
-                    <Button size="sm" variant="outline" className="h-8" onClick={() => { if (confirm(`Turn off Customer Portal access for ${l.full_name || l.email}?`)) setActive(l, false); }}>
+                    <Button size="sm" variant="outline" className="h-8" onClick={async () => { if (await confirmAction(`Turn off Customer Portal access for ${l.full_name || l.email}?`)) setActive(l, false); }}>
                       <UserX className="w-4 h-4 mr-1" /> Turn off
                     </Button>
                   ) : (

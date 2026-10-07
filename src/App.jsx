@@ -1,4 +1,5 @@
 import { Toaster } from "@/components/ui/toaster"
+import { ConfirmDialogHost } from "@/components/ui/confirm-dialog"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { pagesConfig } from './pages.config'
@@ -253,6 +254,7 @@ function App() {
               <AuthenticatedApp />
             </Router>
             <Toaster />
+            <ConfirmDialogHost />
           </QueryClientProvider>
         </TenantProvider>
       </AuthProvider>
