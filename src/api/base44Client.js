@@ -184,6 +184,8 @@ export function getCurrentOrgId() {
 const NETWORK_ERROR = /load failed|failed to fetch|networkerror|network request failed|network connection was lost/i;
 const isNetworkError = (error) => !!error && NETWORK_ERROR.test(error.message || String(error));
 const RETRY_DELAYS_MS = [700, 1800];
+// Supabase's default max rows per response.
+const PAGE_SIZE = 1000;
 // Tables keyed by something other than a generated uuid `id`.
 const NO_UUID_ID_TABLES = new Set(['message_opt_outs', 'subcontractor_portal_users', 'pm_portal_users', 'customer_portal_users', 'quickbooks_credentials']);
 
@@ -233,14 +235,32 @@ function createEntity(tableName) {
     /** list(sortField?, limit?) → array */
     async list(sortField, limit) {
       warnIfNoOrg('list');
-      let query = supabase.from(tableName).select('*');
-      if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
-      const sort = parseSortField(sortField);
-      if (sort) query = query.order(sort.field, { ascending: sort.ascending });
-      if (limit) query = query.limit(limit);
-      const { data, error } = await withRetry(() => query);
-      if (error) reportError('list', tableName, error);
-      return (data || []).map(mapDates);
+      const buildQuery = () => {
+        let query = supabase.from(tableName).select('*');
+        if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
+        const sort = parseSortField(sortField);
+        if (sort) query = query.order(sort.field, { ascending: sort.ascending });
+        // Stable tiebreaker so pages never skip or repeat rows.
+        if (!NO_UUID_ID_TABLES.has(tableName)) query = query.order('id', { ascending: true });
+        return query;
+      };
+      if (!limit || limit <= PAGE_SIZE) {
+        let query = buildQuery();
+        if (limit) query = query.limit(limit);
+        const { data, error } = await withRetry(() => query);
+        if (error) reportError('list', tableName, error);
+        return (data || []).map(mapDates);
+      }
+      // Supabase caps each response at 1000 rows, so page through larger limits.
+      const rows = [];
+      for (let from = 0; from < limit; from += PAGE_SIZE) {
+        const to = Math.min(from + PAGE_SIZE, limit) - 1;
+        const { data, error } = await withRetry(() => buildQuery().range(from, to));
+        if (error) reportError('list', tableName, error);
+        rows.push(...(data || []));
+        if (!data || data.length < to - from + 1) break;
+      }
+      return rows.map(mapDates);
     },
 
     /** filter(filterObj, sortField?, limit?) → array */

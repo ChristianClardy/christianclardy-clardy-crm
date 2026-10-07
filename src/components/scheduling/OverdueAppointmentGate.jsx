@@ -49,7 +49,7 @@ export default function OverdueAppointmentGate() {
       // the newest events that get left out — not old, still-unresolved
       // appointments from months ago, which is exactly what must not happen.
       const [events, employees, leads] = await Promise.all([
-        base44.entities.CalendarEvent.list("start_datetime", 500),
+        base44.entities.CalendarEvent.list("start_datetime", 10000),
         base44.entities.Employee.list("full_name", 500),
         base44.entities.Lead.list("full_name", 2000),
       ]);

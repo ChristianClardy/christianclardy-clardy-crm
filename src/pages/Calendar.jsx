@@ -82,7 +82,16 @@ export default function Calendar() {
   }, []);
 
   const loadData = async () => {
-    setLoading(true);
+    try {
+      await fetchData();
+    } catch (err) {
+      console.error("Failed to load calendar:", err?.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchData = async () => {
     const me = await base44.auth.me().catch(() => null);
     setUser(me);
 
@@ -92,7 +101,7 @@ export default function Calendar() {
       base44.entities.Lead.list("-updated_date", 500),
       base44.entities.Employee.list("-updated_date", 500),
       base44.entities.ProjectSheet.list("-updated_date", 500),
-      base44.entities.CalendarEvent.list("start_datetime", 1000),
+      base44.entities.CalendarEvent.list("start_datetime", 10000),
     ]);
 
     setProjects(projectsData);
@@ -111,7 +120,6 @@ export default function Calendar() {
     setEmployees(employeesData.filter((employee) => employee.status === "active"));
     setProjectSheets(sheetsData);
     setCalendarEvents(eventsData);
-    setLoading(false);
   };
 
   const currentUserName = useMemo(() => employees.find((employee) => employee.email === user?.email)?.full_name || user?.full_name || "", [employees, user]);
