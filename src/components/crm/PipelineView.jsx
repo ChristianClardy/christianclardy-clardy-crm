@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
+import { ensureProjectForWonDeal } from "@/lib/leadConversion";
 import {
   Plus, Search, X, DollarSign, TrendingUp, Briefcase, Users,
   CalendarDays, UserRound, ChevronDown, AlertCircle,
@@ -590,6 +591,17 @@ export default function PipelineView() {
     } catch {
       // Revert
       setDeals((prev) => prev.map((d) => d.id === deal.id ? deal : d));
+      return;
+    }
+
+    // A won deal goes onto the Projects board. The deal move already saved,
+    // so a failure here mustn't revert the card.
+    if (targetStage.key === "Closed Won" && deal.stage !== "Closed Won") {
+      try {
+        await ensureProjectForWonDeal({ ...deal, ...updates });
+      } catch (err) {
+        console.error("Failed to create project for won deal:", err?.message || err);
+      }
     }
   };
 

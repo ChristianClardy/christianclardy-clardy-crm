@@ -95,7 +95,7 @@ export async function syncLeadContactToClient(lead, patch) {
 
 /**
  * Projects and Pipeline deals are named after the client when created
- * (createProjectFromLead / pushWonLeadToPipeline), and that name is a stored
+ * (ensureProjectForWonJob / pushWonLeadToPipeline), and that name is a stored
  * copy. When the client's name changes, rename any of their projects and
  * deals still carrying the old name — one given its own custom name is left
  * alone.
@@ -151,28 +151,72 @@ async function findExistingDealForLead(leadId) {
   return Array.isArray(matches) && matches.length > 0 ? matches[0] : null;
 }
 
-// When a lead reaches WON_STATUS, auto-create a Project in the "planning"
-// stage so the job is immediately visible on the Projects board.
-// Retries once after 4s to recover from Supabase auth-lock contention that
-// can cause a "Failed to fetch" right after the lead status update commits.
-async function createProjectFromLead(lead, client, contractValue) {
+// A job that's been won/approved gets a Project in the "planning" stage so
+// it's immediately visible on the Projects board. Every path that moves a job
+// along calls this — the lead Kanban (Won), the Prospects board (Approved)
+// and the Pipeline board (Closed Won) — so it skips creating one when the
+// client already has an open (not completed/cancelled) project, which also
+// makes winning the same job twice harmless.
+const CLOSED_PROJECT_STATUSES = ["completed", "cancelled"];
+
+async function findOpenProject({ clientId, name }) {
+  const rows = clientId
+    ? await base44.entities.Project.filter({ client_id: clientId })
+    : await base44.entities.Project.filter({ name });
+  return (rows || []).find((p) => !CLOSED_PROJECT_STATUSES.includes(p.status)) || null;
+}
+
+/**
+ * Ensures a won/approved job has a Project. `client` is the contact-book
+ * record (may be null for a Pipeline deal with no lead); `lead` supplies the
+ * address/notes/company when there is one. Returns the existing or new
+ * project. Retries once after 4s to recover from Supabase auth-lock
+ * contention that can cause a "Failed to fetch" right after a status update
+ * commits — re-checking first so a create that did land isn't duplicated.
+ */
+export async function ensureProjectForWonJob({ client = null, lead = null, name, contractValue } = {}) {
+  const projectName = (client?.name || lead?.full_name || name || "").trim();
+  if (!projectName) return null;
+  const lookup = { clientId: client?.id || null, name: projectName };
+
+  const existing = await findOpenProject(lookup);
+  if (existing) return existing;
+
+  const value = contractValue != null && contractValue !== ""
+    ? Number(contractValue)
+    : (Number(lead?.estimated_budget) || 0);
   const payload = {
-    name: client?.name || lead.full_name,
+    name: projectName,
     client_id: client?.id || null,
     status: "planning",
-    contract_value: contractValue != null ? Number(contractValue) : (Number(lead.estimated_budget) || 0),
-    address: lead.property_address || "",
-    notes: lead.notes || "",
-    company_id: lead.company_id || null,
+    contract_value: value,
+    address: lead?.property_address || client?.address || "",
+    notes: lead?.notes || "",
+    company_id: lead?.company_id || client?.company_id || null,
   };
 
   try {
     return await base44.entities.Project.create(payload);
   } catch (firstErr) {
-    // Auth-lock contention — wait for the lock to clear and retry once
     await new Promise((r) => setTimeout(r, 4000));
+    const landed = await findOpenProject(lookup);
+    if (landed) return landed;
     return await base44.entities.Project.create(payload);
   }
+}
+
+/**
+ * Pipeline board: a deal dragged to Closed Won. Uses the deal's lead (and its
+ * contact-book Client) when it came from one, otherwise just the deal title.
+ */
+export async function ensureProjectForWonDeal(deal) {
+  let lead = null;
+  let client = null;
+  if (deal.lead_id) {
+    lead = firstMatch(await base44.entities.Lead.filter({ id: deal.lead_id }));
+    if (lead) client = await ensureContactForLead(lead);
+  }
+  return ensureProjectForWonJob({ client, lead, name: deal.title, contractValue: deal.value });
 }
 
 // Reaching WON_STATUS pushes the lead's (and its contact-book Client's)
@@ -227,7 +271,7 @@ export async function setLeadStatus(lead, newStatus, { contractValue } = {}) {
       console.error("Failed to push won lead to Pipeline board:", err?.message || err);
     }
     try {
-      await createProjectFromLead(updatedLead, client, contractValue);
+      await ensureProjectForWonJob({ client, lead: updatedLead, contractValue });
     } catch (err) {
       console.error("Failed to auto-create project from won lead:", err?.message || err);
     }

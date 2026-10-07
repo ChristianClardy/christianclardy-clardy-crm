@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { X, Calendar, MessageSquare, CheckCircle, XCircle, ChevronRight } from "lucide-react";
 import { WORKFLOW_STAGES } from "./WorkflowBadge";
 import { cn } from "@/lib/utils";
+import { ensureProjectForWonJob } from "@/lib/leadConversion";
 
 export default function WorkflowDrawer({ prospect, onClose, onUpdated }) {
   const [stage, setStage] = useState(prospect.workflow_stage || "new_lead");
@@ -25,6 +26,17 @@ export default function WorkflowDrawer({ prospect, onClose, onUpdated }) {
     if (stage === "approved") updates.status = "active";
     // If dead lead, keep as prospect so it stays visible in prospects (just with dead stage)
     await base44.entities.Client.update(prospect.id, updates);
+    // Approving a job puts it on the Projects board, same as winning a lead.
+    if (stage === "approved" && prospect.workflow_stage !== "approved") {
+      try {
+        const [lead] = prospect.linked_lead_id
+          ? await base44.entities.Lead.filter({ id: prospect.linked_lead_id })
+          : [];
+        await ensureProjectForWonJob({ client: { ...prospect, ...updates }, lead: lead || null });
+      } catch (err) {
+        console.error("Failed to create project for approved prospect:", err?.message || err);
+      }
+    }
     setSaving(false);
     onUpdated();
   };
