@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44, getCurrentOrgId } from "@/api/base44Client";
-import { FileSignature, Paperclip, FileText, Send, Loader2, Trash2, Eye } from "lucide-react";
+import { FileSignature, Paperclip, FileText, Send, Loader2, Trash2, Eye, ArrowUp, ArrowDown, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -63,7 +63,11 @@ export default function ContractsPanel({ lead = null, deal = null, project: fixe
   const [selectedChangeOrderId, setSelectedChangeOrderId] = useState("");
   const [selectedDocIds, setSelectedDocIds] = useState([]);
   const [selectedEstimateIds, setSelectedEstimateIds] = useState([]);
-  const [signers, setSigners] = useState([{ name: "", email: "" }]);
+  // Signing order = list order. #1 is always the sales agent preparing the
+  // contract: the merge-field values (price, schedule, etc.) are locked to
+  // them in DocuSign (api/docusign-send.js), so the customer can't change them.
+  const agentSigner = () => ({ role: "agent", name: user?.full_name || "", email: user?.email || "" });
+  const [signers, setSigners] = useState(() => [agentSigner(), { role: "client", name: "", email: "" }]);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [sendOk, setSendOk] = useState(false);
@@ -135,7 +139,10 @@ export default function ContractsPanel({ lead = null, deal = null, project: fixe
       }
       setDocuments(docs || []);
       setEstimates(ests || []);
-      setSigners([{ name: contactClient?.name || "", email: contactClient?.email || "" }]);
+      setSigners((prev) => [
+        prev.find((sg) => sg.role === "agent") || agentSigner(),
+        { role: "client", name: contactClient?.name || "", email: contactClient?.email || "" },
+      ]);
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -200,8 +207,22 @@ export default function ContractsPanel({ lead = null, deal = null, project: fixe
   const toggleEstimate = (id) => setSelectedEstimateIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
 
   const updateSigner = (i, patch) => setSigners((prev) => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s));
-  const addSigner = () => setSigners((prev) => [...prev, { name: "", email: "" }]);
+  const addSigner = () => setSigners((prev) => [...prev, { role: "client", name: "", email: "" }]);
   const removeSigner = (i) => setSigners((prev) => prev.filter((_, idx) => idx !== i));
+  // Customers can be reordered among themselves; the agent stays #1.
+  const moveSigner = (i, dir) => setSigners((prev) => {
+    const j = i + dir;
+    if (j < 1 || j >= prev.length || prev[i].role === "agent") return prev;
+    const next = [...prev];
+    [next[i], next[j]] = [next[j], next[i]];
+    return next;
+  });
+
+  // The signed-in user loads after the panel can mount — fill in a blank agent.
+  useEffect(() => {
+    if (!user) return;
+    setSigners((prev) => prev.map((sg) => (sg.role === "agent" && !sg.name && !sg.email ? agentSigner() : sg)));
+  }, [user?.id]);
 
   // Renders the same PDF handleSend would upload, but only opens it locally —
   // no upload, no DocuSign call — so it's free to check before signers are
@@ -246,8 +267,10 @@ export default function ContractsPanel({ lead = null, deal = null, project: fixe
       }
       if (docs.length === 0) throw new Error("Select at least one contract template, document, or estimate with a generated PDF.");
 
+      const agent = signers.find((s) => s.role === "agent");
+      if (!agent?.name.trim() || !agent?.email.trim()) throw new Error("Add the sales agent's name and email — they sign first and own the contract details.");
       const validSigners = signers.filter((s) => s.name.trim() && s.email.trim());
-      if (validSigners.length === 0) throw new Error("Add at least one signer with a name and email.");
+      if (!validSigners.some((s) => s.role !== "agent")) throw new Error("Add at least one customer signer with a name and email.");
 
       const res = await apiFetch("/api/docusign-send", {
         method: "POST",
@@ -447,24 +470,45 @@ export default function ContractsPanel({ lead = null, deal = null, project: fixe
         </p>
       </div>
 
-      {/* Signers */}
+      {/* Signers — listed in signing order */}
       <div>
-        <label className="mb-1 block text-xs font-semibold text-slate-600">Signers</label>
+        <label className="mb-1 block text-xs font-semibold text-slate-600">Signers (in signing order)</label>
         <div className="space-y-2">
-          {signers.map((s, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <Input value={s.name} onChange={(e) => updateSigner(i, { name: e.target.value })} placeholder="Name" className="text-sm" />
-              <Input type="email" value={s.email} onChange={(e) => updateSigner(i, { email: e.target.value })} placeholder="Email" className="text-sm" />
-              {signers.length > 1 && (
-                <button type="button" onClick={() => removeSigner(i)} className="p-1.5 text-slate-300 hover:text-rose-500 flex-shrink-0">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-          ))}
+          {signers.map((s, i) => {
+            const isAgent = s.role === "agent";
+            return (
+              <div key={i}>
+                <div className="flex items-center gap-2">
+                  <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600">{i + 1}</span>
+                  <Input value={s.name} onChange={(e) => updateSigner(i, { name: e.target.value })} placeholder={isAgent ? "Sales agent name" : "Customer name"} className="text-sm" />
+                  <Input type="email" value={s.email} onChange={(e) => updateSigner(i, { email: e.target.value })} placeholder={isAgent ? "Sales agent email" : "Customer email"} className="text-sm" />
+                  {isAgent ? (
+                    <span className="w-[74px] flex-shrink-0" />
+                  ) : (
+                    <div className="flex flex-shrink-0 items-center">
+                      <button type="button" title="Sign earlier" disabled={i <= 1} onClick={() => moveSigner(i, -1)} className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-25">
+                        <ArrowUp className="h-3.5 w-3.5" />
+                      </button>
+                      <button type="button" title="Sign later" disabled={i === signers.length - 1} onClick={() => moveSigner(i, 1)} className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-25">
+                        <ArrowDown className="h-3.5 w-3.5" />
+                      </button>
+                      <button type="button" title="Remove signer" disabled={signers.filter((x) => x.role !== "agent").length <= 1} onClick={() => removeSigner(i)} className="p-1.5 text-slate-300 hover:text-rose-500 disabled:opacity-25">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {isAgent && (
+                  <p className="ml-8 mt-1 flex items-center gap-1 text-[11px] text-slate-400">
+                    <Lock className="h-3 w-3" /> Sales agent signs first. Contract price and all merge-field details are locked to them — the customer can't change them. Place their signature with <code className="bg-slate-100 px-1 rounded">**agent_signature**</code>.
+                  </p>
+                )}
+              </div>
+            );
+          })}
         </div>
         <button type="button" onClick={addSigner} className="mt-1.5 text-xs font-medium text-amber-600 hover:text-amber-700">
-          + Add signer
+          + Add customer signer
         </button>
       </div>
 

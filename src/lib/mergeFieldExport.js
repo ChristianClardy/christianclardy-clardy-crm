@@ -1,13 +1,13 @@
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
-import { MERGE_SOURCES, SIGNATURE_FIELD, anchorForSource } from "@/lib/contractMergeSources";
+import { MERGE_SOURCES, SIGNATURE_FIELDS, anchorForSource } from "@/lib/contractMergeSources";
 
 const INTRO =
   "Anchor text goes literally into an uploaded Word/PDF contract template (or is inserted automatically into an in-app template body). " +
   "Merge field is the underlying data source it resolves to when a contract is sent.";
 
 function allRows() {
-  return [...MERGE_SOURCES, SIGNATURE_FIELD].map((s) => ({
+  return [...MERGE_SOURCES, ...SIGNATURE_FIELDS].map((s) => ({
     group: s.group || "Other",
     label: s.label,
     description: s.description,

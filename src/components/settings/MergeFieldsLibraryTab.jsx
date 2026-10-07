@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { Copy, Check, FileSignature, ScrollText, FileText, FileSpreadsheet, FileType } from "lucide-react";
-import { MERGE_SOURCES, SIGNATURE_FIELD, anchorForSource } from "@/lib/contractMergeSources";
+import { MERGE_SOURCES, SIGNATURE_FIELDS, anchorForSource } from "@/lib/contractMergeSources";
 import { downloadMergeFieldPdf, downloadMergeFieldExcel, downloadMergeFieldWord } from "@/lib/mergeFieldExport";
 import { Button } from "@/components/ui/button";
 
@@ -36,7 +36,7 @@ function CopyToken({ text }) {
 export default function MergeFieldsLibraryTab() {
   const grouped = useMemo(() => {
     const byGroup = new Map();
-    for (const s of [...MERGE_SOURCES, SIGNATURE_FIELD]) {
+    for (const s of [...MERGE_SOURCES, ...SIGNATURE_FIELDS]) {
       const g = s.group || "Other";
       if (!byGroup.has(g)) byGroup.set(g, []);
       byGroup.get(g).push(s);

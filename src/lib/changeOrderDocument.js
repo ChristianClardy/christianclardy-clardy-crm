@@ -32,6 +32,9 @@ export function defaultChangeOrderBody(changeOrder, { alwaysShowItems = false } 
     "By signing below, the Owner authorizes {{company.name}} to perform the work described above. The contract price and schedule are adjusted as shown. All other terms of the original contract remain in effect.",
     "",
     "",
+    "Contractor signature ({{company.name}}): **agent_signature**",
+    "",
+    "",
     "Owner signature: **signature**",
   ].join("\n");
 }

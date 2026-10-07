@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Search, PenLine } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { MERGE_SOURCES, SIGNATURE_FIELD, anchorForSource } from "@/lib/contractMergeSources";
+import { MERGE_SOURCES, SIGNATURE_FIELDS, anchorForSource } from "@/lib/contractMergeSources";
 
 // Searchable panel of insertable merge tokens for a 'text' mode Contract
 // Template body. Each row is click-to-insert (onInsert) and draggable via
@@ -20,7 +20,8 @@ export default function MergeFieldPicker({ onInsert }) {
     };
 
     const byGroup = new Map();
-    if (matches(SIGNATURE_FIELD)) byGroup.set("Signature", [SIGNATURE_FIELD]);
+    const sigs = SIGNATURE_FIELDS.filter(matches);
+    if (sigs.length) byGroup.set("Signature", sigs);
     for (const s of MERGE_SOURCES) {
       if (!matches(s)) continue;
       const g = s.group || "Other";
@@ -65,7 +66,7 @@ export default function MergeFieldPicker({ onInsert }) {
                     title={s.description}
                     className="w-full flex items-start gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left hover:border-amber-300 hover:bg-amber-50 transition-colors cursor-grab active:cursor-grabbing"
                   >
-                    {s === SIGNATURE_FIELD && <PenLine className="h-3 w-3 text-amber-500 mt-0.5 flex-shrink-0" />}
+                    {SIGNATURE_FIELDS.includes(s) && <PenLine className="h-3 w-3 text-amber-500 mt-0.5 flex-shrink-0" />}
                     <span className="min-w-0">
                       <span className="block text-xs font-medium text-slate-800 truncate">{s.label}</span>
                       <span className="block font-mono text-[10px] text-slate-400 truncate">{token}</span>

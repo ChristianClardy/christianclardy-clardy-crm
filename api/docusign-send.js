@@ -90,9 +90,11 @@ module.exports = async function handler(req, res) {
 
     // Merge fields render as locked (non-editable) anchor-string text tabs —
     // DocuSign finds the literal token text (e.g. "{{client_name}}") in the
-    // document and stamps the resolved value there. Attached to the first
-    // signer since every envelope has at least one; the signer never edits
-    // them because `locked: true`.
+    // document and stamps the resolved value there. They belong to the sales
+    // agent (the signer with role "agent", who prepares the contract and signs
+    // first), so the contract price and other details are the agent's and the
+    // customer has nothing to edit. Without an agent (older callers) they go
+    // on the first signer. `locked: true` either way.
     const textTabs = [];
     documents.forEach((d, i) => {
       for (const mf of d.merge_fields || []) {
@@ -122,6 +124,10 @@ module.exports = async function handler(req, res) {
 
     const emailSubject = subject || `Please sign: ${documents[0].file_name}`;
 
+    // Signing order is the order the app sends them in.
+    const agentIdx = signers.findIndex((sg) => sg.role === 'agent');
+    const tabOwnerIdx = agentIdx === -1 ? 0 : agentIdx;
+
     // Build envelope
     const envelopeBody = {
       emailSubject,
@@ -133,12 +139,13 @@ module.exports = async function handler(req, res) {
           recipientId: String(i + 1),
           routingOrder: String(i + 1),
           tabs: {
+            // The agent signs at **agent_signature**; customers at **signature**.
             signHereTabs: [{
-              anchorString: '**signature**',
+              anchorString: signer.role === 'agent' ? '**agent_signature**' : '**signature**',
               anchorIgnoreIfNotPresent: 'true',
               anchorXOffset: '0', anchorYOffset: '0', anchorUnits: 'pixels',
             }],
-            ...(i === 0 && textTabs.length > 0 ? { textTabs } : {}),
+            ...(i === tabOwnerIdx && textTabs.length > 0 ? { textTabs } : {}),
           },
         })),
       },

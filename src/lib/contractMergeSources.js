@@ -150,9 +150,9 @@ export const MERGE_SOURCES = [
 // export of it since it's a real anchor a template author needs to place.
 export const SIGNATURE_FIELD = {
   value: "**signature**",
-  label: "Signer's Signature",
+  label: "Customer's Signature",
   group: "Signature",
-  description: "Where the signer's signature goes. DocuSign finds this marker and places the signature block there.",
+  description: "Where the customer's signature goes. DocuSign finds this marker and places the signature block there.",
 };
 
 // Canonical anchor text for a merge source: the literal string a template
@@ -160,8 +160,19 @@ export const SIGNATURE_FIELD = {
 // into an in-app body ('text' mode, see MergeFieldPicker.jsx). Every source
 // uses the same {{dotted.path}} shape so the library, the picker, and any
 // exported reference doc all agree on one anchor per field.
+// The sales agent signs first (ContractsPanel.jsx); their signature goes at
+// this marker, the customer's at **signature**.
+export const AGENT_SIGNATURE_FIELD = {
+  value: "**agent_signature**",
+  label: "Sales Agent's Signature",
+  group: "Signature",
+  description: "Where the sales agent's signature goes. The agent is signer #1 and owns the contract details, so the customer can't change them.",
+};
+
+export const SIGNATURE_FIELDS = [SIGNATURE_FIELD, AGENT_SIGNATURE_FIELD];
+
 export function anchorForSource(source) {
-  return source.value === SIGNATURE_FIELD.value ? source.value : `{{${source.value}}}`;
+  return SIGNATURE_FIELDS.some((f) => f.value === source.value) ? source.value : `{{${source.value}}}`;
 }
 
 function formatCurrency(n) {

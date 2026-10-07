@@ -121,7 +121,8 @@ async function filingTarget(row) {
 // "Signed Contract - Lezlee Burt - 2026-09-14.pdf"
 // "Signed Change Order CO-2 - Lezlee Burt - 2026-10-05.pdf"
 async function signedFilename(row, completedAt) {
-  const who = row.signers?.[0]?.name
+  // Named for the customer, not the sales agent who signs first.
+  const who = (row.signers || []).find((sg) => sg.role !== 'agent')?.name
     || (row.subject || '').replace(/^Contract package:\s*/i, '').trim()
     || 'Client';
   const date = (completedAt || new Date().toISOString()).slice(0, 10);
