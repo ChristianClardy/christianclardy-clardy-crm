@@ -33,6 +33,8 @@ export const AuthProvider = ({ children }) => {
         full_name: u.user_metadata?.full_name || u.email,
         role:      u.user_metadata?.role || 'user',
         ...u.user_metadata,
+        // Staff invites must choose a password before using the app (api/invite.js).
+        needsPassword: !!u.app_metadata?.needs_password,
       });
       setIsAuthenticated(true);
       setAuthError(null);

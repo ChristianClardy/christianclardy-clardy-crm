@@ -25,6 +25,8 @@
 // ?action=erase (staff): "Delete personal data" for a client or
 // subcontractor (body { entity_type, entity_id, reason }); see
 // api/_lib/privacy.js. Lives here to stay within Vercel's function limit.
+// ?action=set-password (signed in): sets the caller's password and clears the
+// needs_password flag that staff invites put on the login.
 // ?action=redeem (public): trades a /join link's token for a one-time sign-in
 // token (see src/pages/JoinPortal.jsx). The join token is HMAC-signed and
 // works for an active sub, PM or customer login, or, for a staff-link token,
@@ -252,6 +254,40 @@ async function emailSignInLink(email) {
   return res.ok;
 }
 
+// Flags a staff login as "must choose a password" (app_metadata, which only
+// the service role can change). The app shows SetPassword until
+// ?action=set-password clears it, so an invite link alone can't be used to
+// skip choosing one.
+async function requirePassword(userId) {
+  const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+    method: 'PUT',
+    headers: adminHeaders(),
+    body: JSON.stringify({ app_metadata: { needs_password: true } }),
+  });
+  if (!r.ok) throw new Error('Could not require a password for this login.');
+}
+
+// Any signed-in user: sets their password and clears needs_password in one
+// step, so the flag only goes away once a password really exists.
+async function handleSetPassword(req, res) {
+  const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  const password = String((req.body || {}).password || '');
+  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${token}` },
+  });
+  const user = await userRes.json().catch(() => ({}));
+  if (!userRes.ok || !user?.id) return res.status(401).json({ error: 'Your sign-in link has expired. Ask for a new invite link.' });
+  const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${user.id}`, {
+    method: 'PUT',
+    headers: adminHeaders(),
+    body: JSON.stringify({ password, app_metadata: { needs_password: false } }),
+  });
+  const out = await r.json().catch(() => ({}));
+  if (!r.ok) return res.status(400).json({ error: out?.msg || out?.message || 'Could not set your password.' });
+  return res.status(200).json({ success: true });
+}
+
 function joinUrl(req, userId, opts) {
   const host = req.headers['x-forwarded-host'] || req.headers.host;
   const proto = req.headers['x-forwarded-proto'] || 'https';
@@ -339,6 +375,7 @@ async function handleStaffLink(req, res) {
     if (!userId) throw new Error('Login created but no user id came back; access was not granted.');
     try {
       await grantStaff(userId, email);
+      await requirePassword(userId);
     } catch (err) {
       await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, { method: 'DELETE', headers: adminHeaders() });
       throw new Error(`Could not grant access: ${err.message}`);
@@ -358,6 +395,7 @@ async function handleStaffLink(req, res) {
     return res.status(400).json({ error: err.message });
   }
   await grantStaff(existingId, email);
+  await requirePassword(existingId);
   return res.status(200).json({ url: joinUrl(req, existingId, { staff: true }), days: JOIN_LINK_DAYS, existing: true });
 }
 
@@ -429,6 +467,14 @@ module.exports = async function handler(req, res) {
   if (action === 'redeem') {
     try {
       await handleRedeem(req, res);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+    return;
+  }
+  if (action === 'set-password') {
+    try {
+      await handleSetPassword(req, res);
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -515,6 +561,7 @@ module.exports = async function handler(req, res) {
           return;
         }
         await grantStaff(existingId, email);
+        await requirePassword(existingId);
         const emailed = await emailSignInLink(email);
         res.status(200).json({ success: true, existing: true, emailed });
         return;
@@ -542,6 +589,7 @@ module.exports = async function handler(req, res) {
         await insertRow(...portalRow(kind, body, userId, email, caller));
       } else {
         await grantStaff(userId, email);
+        await requirePassword(userId);
       }
     } catch (linkErr) {
       // Don't leave a half-set-up login behind; the invite can simply be re-sent.

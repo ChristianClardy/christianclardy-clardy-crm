@@ -108,6 +108,10 @@ const AuthenticatedApp = () => {
     );
   }
 
+  // Opened an invite link but never chose a password (left or reloaded the
+  // set-password screen): keep them there until they do.
+  if (user?.needsPassword) return <SetPassword />;
+
   // Subcontractor login — portal only, no CRM. Checked before onboarding
   // since subs never belong to an organization.
   if (portalUser) {

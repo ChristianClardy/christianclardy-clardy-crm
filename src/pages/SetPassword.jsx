@@ -54,12 +54,22 @@ export default function SetPassword() {
       return;
     }
     setLoading(true);
-    const { error: updateErr } = await supabase.auth.updateUser({ password });
-    if (updateErr) {
-      setError(updateErr.message);
+    // Set on the server so it can also clear the invite's "must choose a
+    // password" flag (api/invite.js ?action=set-password).
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/invite?action=set-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
+      body: JSON.stringify({ password }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(json.error || 'Could not set your password.');
       setLoading(false);
       return;
     }
+    // Fresh token without the flag, so the app stops showing this screen.
+    await supabase.auth.refreshSession();
     const { data: { user } } = await supabase.auth.getUser();
     setAccount({ email: user?.email || '', portal_role: user?.user_metadata?.portal_role || null });
     setDone(true);
