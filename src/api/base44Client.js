@@ -165,6 +165,31 @@ const COMPANY_SCOPED_TABLES = new Set([
   'message_templates', 'message_sequences', 'message_enrollments', 'messages',
 ]);
 
+// Archived (inactive) companies hold records kept for reference only, so
+// list()/filter() leave them out of every view, "All" included, unless that
+// archived company is the one picked in the switcher. get() is unaffected,
+// so direct links still open.
+let _archivedCompanyIds = null;
+function loadArchivedCompanyIds() {
+  if (!_archivedCompanyIds) {
+    _archivedCompanyIds = supabase.from('company_profiles').select('id').eq('is_active', false)
+      .then(({ data, error }) => (error ? [] : (data || []).map((c) => c.id)))
+      .catch(() => []);
+  }
+  return _archivedCompanyIds;
+}
+
+async function hiddenCompanyIds(tableName) {
+  if (!COMPANY_SCOPED_TABLES.has(tableName)) return [];
+  const archived = await loadArchivedCompanyIds();
+  const scope = getSelectedCompanyScope();
+  return archived.filter((id) => id !== scope);
+}
+
+function excludeCompanies(query, ids) {
+  return ids.length ? query.or(`company_id.is.null,company_id.not.in.(${ids.join(',')})`) : query;
+}
+
 // Foreign keys that tie a record to a specific job; see create().
 const JOB_PARENT_KEYS = ['project_id', 'estimate_id', 'invoice_id'];
 
@@ -235,8 +260,9 @@ function createEntity(tableName) {
     /** list(sortField?, limit?) → array */
     async list(sortField, limit) {
       warnIfNoOrg('list');
+      const hidden = await hiddenCompanyIds(tableName);
       const buildQuery = () => {
-        let query = supabase.from(tableName).select('*');
+        let query = excludeCompanies(supabase.from(tableName).select('*'), hidden);
         if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
         const sort = parseSortField(sortField);
         if (sort) query = query.order(sort.field, { ascending: sort.ascending });
@@ -266,7 +292,7 @@ function createEntity(tableName) {
     /** filter(filterObj, sortField?, limit?) → array */
     async filter(filterObj, sortField, limit) {
       warnIfNoOrg('filter');
-      let query = supabase.from(tableName).select('*');
+      let query = excludeCompanies(supabase.from(tableName).select('*'), await hiddenCompanyIds(tableName));
       if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
       for (const [key, val] of Object.entries(filterObj ?? {})) {
         if (val !== undefined && val !== null && val !== "null" && val !== "undefined") query = query.eq(key, val);

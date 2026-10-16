@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Building2 } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getSelectedCompanyScope, setSelectedCompanyScope } from "@/lib/companyScope";
 
 export default function CompanyScopeSwitcher() {
@@ -14,10 +14,14 @@ export default function CompanyScopeSwitcher() {
 
   const loadCompanies = async () => {
     const data = await base44.entities.CompanyProfile.list("name", 200);
-    setCompanies(data.filter((company) => company.is_active !== false));
+    setCompanies(data);
   };
 
-  if (companies.length === 0) return null;
+  const active = companies.filter((company) => company.is_active !== false);
+  const archived = companies.filter((company) => company.is_active === false);
+  const isArchived = (id) => archived.some((company) => company.id === id);
+
+  if (active.length === 0) return null;
 
   return (
     <div className="px-4 pb-4">
@@ -28,8 +32,12 @@ export default function CompanyScopeSwitcher() {
         <Select
           value={selected}
           onValueChange={(value) => {
+            const reload = isArchived(value) || isArchived(selected);
             setSelected(value);
             setSelectedCompanyScope(value);
+            // Archived records are left out at fetch time (base44Client), so
+            // entering or leaving an archived company needs a fresh load.
+            if (reload) window.location.reload();
           }}
         >
           <SelectTrigger className="border-[#5a4f48] bg-[#3d3530] text-[#f5f0eb]">
@@ -37,9 +45,20 @@ export default function CompanyScopeSwitcher() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All companies</SelectItem>
-            {companies.map((company) => (
+            {active.map((company) => (
               <SelectItem key={company.id} value={company.id}>{company.name}</SelectItem>
             ))}
+            {archived.length > 0 && (
+              <>
+                <SelectSeparator />
+                <SelectGroup>
+                  <SelectLabel className="text-xs text-slate-400">Archived</SelectLabel>
+                  {archived.map((company) => (
+                    <SelectItem key={company.id} value={company.id}>{company.name}</SelectItem>
+                  ))}
+                </SelectGroup>
+              </>
+            )}
           </SelectContent>
         </Select>
       </div>
