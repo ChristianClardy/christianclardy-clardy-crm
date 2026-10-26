@@ -1,5 +1,5 @@
 // Remote MCP server — lets Claude (claude.ai custom connector, Claude Code,
-// etc.) read and write this CRM's leads/clients/estimates/projects/payments
+// etc.) read and write this CRM's companies/leads/clients/estimates/projects/payments
 // data directly, so a conversation and Clardy.io stay in sync (same tables).
 //
 // Auth: the URL itself carries a long random secret as the [token] path
@@ -31,6 +31,36 @@ function errorResult(err) {
   return { content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true };
 }
 
+// Lets every tool take a company by name ("Turfn Texas") or id. Exact name
+// match wins, then a unique partial match; anything ambiguous or unknown is an
+// error that lists the real companies, so a record never silently lands in
+// the default company (the inherit_company_id() trigger's fallback).
+async function resolveCompanyId(company) {
+  if (!company) return undefined;
+  const rows = await sbList('company_profiles', { select: 'id,name,code', limit: 500 });
+  const needle = company.trim().toLowerCase();
+  const byId = rows.find((r) => r.id === company.trim());
+  if (byId) return byId.id;
+  const exact = rows.filter((r) => r.name?.toLowerCase() === needle || r.code?.toLowerCase() === needle);
+  if (exact.length === 1) return exact[0].id;
+  const partial = rows.filter((r) => r.name?.toLowerCase().includes(needle));
+  if (exact.length === 0 && partial.length === 1) return partial[0].id;
+  const names = rows.map((r) => r.name).join(', ');
+  throw new Error(partial.length > 1 || exact.length > 1
+    ? `"${company}" matches more than one company (${(exact.length ? exact : partial).map((r) => r.name).join(', ')}). Be more specific.`
+    : `No company named "${company}". Existing companies: ${names}. Use create_company to add it.`);
+}
+
+// Swaps a tool's `company` input for the company_id column.
+async function withCompany({ company, ...rest }) {
+  const company_id = await resolveCompanyId(company);
+  return company_id ? { ...rest, company_id } : rest;
+}
+
+const companyInput = z.string().optional().describe('Company name or id this record belongs to (see list_companies). If omitted on create, it falls back to the linked job/client\'s company, then Principle Outdoor Living.');
+const companyFilter = z.string().optional().describe('Only records for this company (name or id)');
+const PROJECT_STATUSES = ['planning', 'in_progress', 'on_hold', 'completed', 'cancelled'];
+
 function buildServer() {
   const server = new McpServer({ name: 'clardy-crm', version: '1.0.0' });
 
@@ -40,12 +70,15 @@ function buildServer() {
     inputSchema: {
       status: z.string().optional().describe('Exact match against leads.status — call list_lead_statuses first if unsure of the exact wording'),
       search: z.string().optional().describe('Matches against full_name, email, or phone'),
+      company: companyFilter,
       limit: z.number().int().positive().max(200).optional(),
     },
     annotations: { readOnlyHint: true },
-  }, async ({ status, search, limit }) => {
+  }, async ({ status, search, company, limit }) => {
     try {
       const filters = {};
+      const companyId = await resolveCompanyId(company);
+      if (companyId) filters.company_id = `eq.${companyId}`;
       if (status) filters.status = `eq.${status}`;
       if (search) filters.or = `(full_name.ilike.*${search}*,email.ilike.*${search}*,phone.ilike.*${search}*)`;
       const rows = await sbList('leads', { filters, order: 'created_at.desc', limit: limit || 50 });
@@ -77,7 +110,7 @@ function buildServer() {
   });
 
   server.registerTool('create_lead', {
-    description: 'Create a new lead.',
+    description: 'Create a new lead, optionally for a specific company (e.g. company: "Turfn Texas").',
     inputSchema: {
       full_name: z.string(),
       phone: z.string().optional(),
@@ -89,10 +122,11 @@ function buildServer() {
       assigned_sales_rep: z.string().optional(),
       notes: z.string().optional(),
       status: z.string().optional().describe('Call list_lead_statuses first if unsure of the exact wording — defaults to whatever the DB default is if omitted'),
+      company: companyInput,
     },
     annotations: { destructiveHint: false },
   }, async (input) => {
-    try { return textResult(await sbInsert('leads', input)); } catch (err) { return errorResult(err); }
+    try { return textResult(await sbInsert('leads', await withCompany(input))); } catch (err) { return errorResult(err); }
   });
 
   server.registerTool('update_lead', {
@@ -108,20 +142,23 @@ function buildServer() {
       next_action: z.string().optional(),
       notes: z.string().optional(),
       status: z.string().optional().describe('Call list_lead_statuses first if unsure of the exact wording'),
+      company: z.string().optional().describe('Move the lead to this company (name or id)'),
     },
     annotations: { destructiveHint: true },
   }, async ({ id, ...patch }) => {
-    try { return textResult(await sbUpdate('leads', id, patch)); } catch (err) { return errorResult(err); }
+    try { return textResult(await sbUpdate('leads', id, await withCompany(patch))); } catch (err) { return errorResult(err); }
   });
 
   // ── Clients ──────────────────────────────────────────────────────────────
   server.registerTool('list_clients', {
     description: 'List clients (contact book), optionally text-searched by name/email/phone/company.',
-    inputSchema: { search: z.string().optional(), limit: z.number().int().positive().max(200).optional() },
+    inputSchema: { search: z.string().optional(), company: companyFilter, limit: z.number().int().positive().max(200).optional() },
     annotations: { readOnlyHint: true },
-  }, async ({ search, limit }) => {
+  }, async ({ search, company, limit }) => {
     try {
       const filters = {};
+      const companyId = await resolveCompanyId(company);
+      if (companyId) filters.company_id = `eq.${companyId}`;
       if (search) filters.or = `(name.ilike.*${search}*,email.ilike.*${search}*,phone.ilike.*${search}*,company.ilike.*${search}*)`;
       const rows = await sbList('clients', { filters, order: 'created_at.desc', limit: limit || 50 });
       return textResult(rows);
@@ -139,18 +176,58 @@ function buildServer() {
     } catch (err) { return errorResult(err); }
   });
 
+  server.registerTool('create_client', {
+    description: 'Create a client (contact book entry), optionally for a specific company. Check list_clients first to avoid duplicates.',
+    inputSchema: {
+      name: z.string(),
+      email: z.string().optional(),
+      phone: z.string().optional(),
+      address: z.string().optional(),
+      notes: z.string().optional(),
+      linked_lead_id: z.string().optional().describe('Lead this contact came from, if any'),
+      company: companyInput,
+    },
+    annotations: { destructiveHint: false },
+  }, async (input) => {
+    try {
+      const client = await sbInsert('clients', { status: 'active', ...(await withCompany(input)) });
+      if (input.linked_lead_id) await sbUpdate('leads', input.linked_lead_id, { linked_contact_id: client.id });
+      return textResult(client);
+    } catch (err) { return errorResult(err); }
+  });
+
+  server.registerTool('update_client', {
+    description: 'Update fields on an existing client, including moving it to another company.',
+    inputSchema: {
+      id: z.string(),
+      name: z.string().optional(),
+      email: z.string().optional(),
+      phone: z.string().optional(),
+      address: z.string().optional(),
+      notes: z.string().optional(),
+      status: z.string().optional(),
+      company: z.string().optional().describe('Move the client to this company (name or id)'),
+    },
+    annotations: { destructiveHint: true },
+  }, async ({ id, ...patch }) => {
+    try { return textResult(await sbUpdate('clients', id, await withCompany(patch))); } catch (err) { return errorResult(err); }
+  });
+
   // ── Estimates / proposals ───────────────────────────────────────────────
   server.registerTool('list_estimates', {
     description: "List estimates — this is what Christian calls a 'proposal' once it's sent to a client; there's no separate proposals table.",
     inputSchema: {
       client_id: z.string().optional(),
       status: z.string().optional().describe('e.g. draft, sent, approved — free text, matches the estimates.status column'),
+      company: companyFilter,
       limit: z.number().int().positive().max(200).optional(),
     },
     annotations: { readOnlyHint: true },
-  }, async ({ client_id, status, limit }) => {
+  }, async ({ client_id, status, company, limit }) => {
     try {
       const filters = {};
+      const companyId = await resolveCompanyId(company);
+      if (companyId) filters.company_id = `eq.${companyId}`;
       if (client_id) filters.client_id = `eq.${client_id}`;
       if (status) filters.status = `eq.${status}`;
       const rows = await sbList('estimates', { filters, order: 'created_at.desc', limit: limit || 50 });
@@ -189,10 +266,11 @@ function buildServer() {
       terms: z.string().optional(),
       notes: z.string().optional(),
       status: z.string().optional(),
+      company: companyInput,
     },
     annotations: { destructiveHint: false },
   }, async (input) => {
-    try { return textResult(await sbInsert('estimates', input)); } catch (err) { return errorResult(err); }
+    try { return textResult(await sbInsert('estimates', await withCompany(input))); } catch (err) { return errorResult(err); }
   });
 
   server.registerTool('update_estimate', {
@@ -216,13 +294,16 @@ function buildServer() {
     description: 'List projects, optionally filtered by client or status (planning, in_progress, on_hold, completed, cancelled).',
     inputSchema: {
       client_id: z.string().optional(),
-      status: z.enum(['planning', 'in_progress', 'on_hold', 'completed', 'cancelled']).optional(),
+      status: z.enum(PROJECT_STATUSES).optional(),
+      company: companyFilter,
       limit: z.number().int().positive().max(200).optional(),
     },
     annotations: { readOnlyHint: true },
-  }, async ({ client_id, status, limit }) => {
+  }, async ({ client_id, status, company, limit }) => {
     try {
       const filters = {};
+      const companyId = await resolveCompanyId(company);
+      if (companyId) filters.company_id = `eq.${companyId}`;
       if (client_id) filters.client_id = `eq.${client_id}`;
       if (status) filters.status = `eq.${status}`;
       const rows = await sbList('projects', { filters, order: 'created_at.desc', limit: limit || 50 });
@@ -241,20 +322,50 @@ function buildServer() {
     } catch (err) { return errorResult(err); }
   });
 
+  server.registerTool('create_project', {
+    description: 'Create a project (job), optionally for a specific company. Link it to a client with client_id (create_client first if needed).',
+    inputSchema: {
+      name: z.string(),
+      client_id: z.string().optional(),
+      company: companyInput,
+      status: z.enum(PROJECT_STATUSES).optional().describe('Defaults to planning'),
+      contract_value: z.number().optional(),
+      address: z.string().optional(),
+      description: z.string().optional(),
+      project_manager: z.string().optional(),
+      start_date: z.string().optional().describe('YYYY-MM-DD'),
+      end_date: z.string().optional().describe('YYYY-MM-DD'),
+      notes: z.string().optional(),
+    },
+    annotations: { destructiveHint: false },
+  }, async (input) => {
+    try {
+      const payload = { status: 'planning', ...(await withCompany(input)) };
+      // Same fallback the app's lead conversion uses: the client's company.
+      if (!payload.company_id && payload.client_id) {
+        const client = await sbGetById('clients', payload.client_id, 'company_id');
+        if (client?.company_id) payload.company_id = client.company_id;
+      }
+      return textResult(await sbInsert('projects', payload));
+    } catch (err) { return errorResult(err); }
+  });
+
   server.registerTool('update_project', {
     description: 'Update fields on an existing project, e.g. status, dates, project manager, notes.',
     inputSchema: {
       id: z.string(),
-      status: z.enum(['planning', 'in_progress', 'on_hold', 'completed', 'cancelled']).optional(),
+      status: z.enum(PROJECT_STATUSES).optional(),
       project_manager: z.string().optional(),
       start_date: z.string().optional(),
       end_date: z.string().optional(),
       percent_complete: z.number().optional(),
+      contract_value: z.number().optional(),
       notes: z.string().optional(),
+      company: z.string().optional().describe('Move the project to this company (name or id)'),
     },
     annotations: { destructiveHint: true },
   }, async ({ id, ...patch }) => {
-    try { return textResult(await sbUpdate('projects', id, patch)); } catch (err) { return errorResult(err); }
+    try { return textResult(await sbUpdate('projects', id, await withCompany(patch))); } catch (err) { return errorResult(err); }
   });
 
   // ── Payments & finance ───────────────────────────────────────────────────
@@ -317,11 +428,53 @@ function buildServer() {
 
   // ── Companies ────────────────────────────────────────────────────────────
   server.registerTool('list_companies', {
-    description: "List Christian's business brands (company_profiles) — useful for resolving a company name to a company_id.",
+    description: "List Christian's business brands (company_profiles). Every create/list tool also accepts a company name directly, so this is mostly for checking what exists. is_active=false means archived.",
     inputSchema: {},
     annotations: { readOnlyHint: true },
   }, async () => {
-    try { return textResult(await sbList('company_profiles', { select: 'id,name,address,phone,email', order: 'name.asc' })); }
+    try { return textResult(await sbList('company_profiles', { select: 'id,name,code,address,phone,email,is_active', order: 'name.asc' })); }
+    catch (err) { return errorResult(err); }
+  });
+
+  server.registerTool('create_company', {
+    description: 'Add a new business brand (company), the same as Settings → Companies → Add Company. It shows up in the sidebar company switcher right away.',
+    inputSchema: {
+      name: z.string(),
+      code: z.string().optional().describe('Short code, e.g. "TT"'),
+      address: z.string().optional(),
+      phone: z.string().optional(),
+      email: z.string().optional(),
+      website: z.string().optional(),
+      license_number: z.string().optional(),
+      notes: z.string().optional(),
+    },
+    annotations: { destructiveHint: false },
+  }, async (input) => {
+    try {
+      const existing = await sbList('company_profiles', { select: 'id,name,is_active', limit: 500 });
+      const dup = existing.find((r) => r.name?.trim().toLowerCase() === input.name.trim().toLowerCase());
+      if (dup) return errorResult(new Error(`A company named "${dup.name}" already exists (id ${dup.id}${dup.is_active === false ? ', archived' : ''}).`));
+      return textResult(await sbInsert('company_profiles', { ...input, is_active: true }));
+    } catch (err) { return errorResult(err); }
+  });
+
+  server.registerTool('update_company', {
+    description: 'Update a company\'s details, or archive/unarchive it with is_active.',
+    inputSchema: {
+      company: z.string().describe('Company name or id'),
+      name: z.string().optional(),
+      code: z.string().optional(),
+      address: z.string().optional(),
+      phone: z.string().optional(),
+      email: z.string().optional(),
+      website: z.string().optional(),
+      license_number: z.string().optional(),
+      notes: z.string().optional(),
+      is_active: z.boolean().optional().describe('false archives it (hides its records everywhere, including "All")'),
+    },
+    annotations: { destructiveHint: true },
+  }, async ({ company, ...patch }) => {
+    try { return textResult(await sbUpdate('company_profiles', await resolveCompanyId(company), patch)); }
     catch (err) { return errorResult(err); }
   });
 
