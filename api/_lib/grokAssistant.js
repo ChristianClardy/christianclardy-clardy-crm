@@ -18,6 +18,7 @@ const { InMemoryTransport } = require('@modelcontextprotocol/sdk/inMemory.js');
 const { buildServer } = require('./crmTools.js');
 const { getStaffCaller, READ_ONLY_MESSAGE } = require('./staffAuth.js');
 const { sbGetById } = require('./supabaseAdmin.js');
+const BRIEFING = require('./clardyBriefing.js');
 
 const XAI_URL = 'https://api.x.ai/v1/responses';
 // GROK is the name the key was first saved under in Vercel.
@@ -75,6 +76,8 @@ async function instructions(user, context = {}) {
     'Use the tools to look things up; never invent ids, names, amounts or dates. Look records up by name before acting on them. Lead stages have no fixed list — check list_lead_statuses before setting one.',
     'When a request needs a change, call the create/update/record tool directly: the app shows the change to the user and runs it only if they approve, so don\'t ask "should I?" first. If they decline, accept that and don\'t retry.',
     'Answer briefly and plainly. Format money like $12,500. Use short lists or small tables when comparing records.',
+    '',
+    BRIEFING,
   ].join('\n');
 }
 
