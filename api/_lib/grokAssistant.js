@@ -9,7 +9,7 @@
 // gets read tools only.
 //
 // The conversation lives at xAI (previous_response_id chains each turn onto
-// the last), so nothing is stored here. Needs XAI_API_KEY in Vercel's env
+// the last), so nothing is stored here. Needs XAI_API_KEY (or GROK) in Vercel's env
 // vars (never VITE_-prefixed); XAI_MODEL overrides the model. This is the one
 // paid-API feature in the app — every message costs xAI credits.
 
@@ -20,6 +20,8 @@ const { getStaffCaller, READ_ONLY_MESSAGE } = require('./staffAuth.js');
 const { sbGetById } = require('./supabaseAdmin.js');
 
 const XAI_URL = 'https://api.x.ai/v1/responses';
+// GROK is the name the key was first saved under in Vercel.
+const XAI_API_KEY = process.env.XAI_API_KEY || process.env.GROK;
 const MODEL = process.env.XAI_MODEL || 'grok-4.3';
 const MAX_ROUNDS = 8;
 const MAX_TOOL_OUTPUT = 60000;
@@ -43,7 +45,7 @@ function toXaiTools(tools) {
 async function callXai(body) {
   const res = await fetch(XAI_URL, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${process.env.XAI_API_KEY}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${XAI_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: MODEL, ...body }),
   });
   const data = await res.json().catch(() => ({}));
@@ -102,7 +104,7 @@ module.exports = async function grokAssistant(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return; }
   const user = await getStaffCaller(req).catch(() => null);
   if (!user) { res.status(401).json({ error: 'Sign in with a staff account to use Grok.' }); return; }
-  if (!process.env.XAI_API_KEY) {
+  if (!XAI_API_KEY) {
     res.status(503).json({ error: "Grok isn't switched on yet: add an XAI_API_KEY (from console.x.ai) to Vercel's environment variables and redeploy." });
     return;
   }
