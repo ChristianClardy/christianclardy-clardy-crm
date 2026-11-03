@@ -38,6 +38,7 @@ import { loadSavedRolePermissions, isAdmin } from "@/lib/useRolePermissions";
 import { loadDocuSignProfile } from "@/lib/docusignProfile";
 import { ROLES, MODULE_GROUPS, DEFAULT_PERMISSIONS } from "@/lib/permissions";
 import { confirmAction } from "@/components/ui/confirm-dialog";
+import { fetchMyCompanyAccess, fetchCompanyAssignments, saveCompanyAssignments } from "@/lib/companyAccess";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -71,25 +72,46 @@ function TeamTab() {
   const [portalFor, setPortalFor] = useState(null); // employee whose Builder Portal access is open
   const [inviteFor, setInviteFor] = useState(null); // employee getting a full Clardy login
   const [removing, setRemoving]   = useState(null); // employee being removed
+  const [isOwner, setIsOwner]     = useState(false);
+  const [companies, setCompanies] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [companyIds, setCompanyIds] = useState([]);
 
   useEffect(() => { load(); }, []);
 
   const load = async () => {
-    const [data, logins] = await Promise.all([
+    const [data, logins, access] = await Promise.all([
       base44.entities.Employee.list("-created_date"),
       base44.entities.PmPortalUser.list("email").catch(() => []),
+      fetchMyCompanyAccess(),
     ]);
     setEmployees(data);
     setPmLogins(logins);
+    const owner = !!access?.isOwner;
+    setIsOwner(owner);
+    if (owner) {
+      const [companyRows, assignmentRows] = await Promise.all([
+        base44.entities.CompanyProfile.list("name", 200),
+        fetchCompanyAssignments().catch(() => []),
+      ]);
+      setCompanies(companyRows || []);
+      setAssignments(assignmentRows || []);
+    }
     setLoading(false);
   };
   const loginFor = (emp) => pmLogins.find((l) => l.employee_id === emp.id);
 
-  const openNew  = () => { setEditing(null); setForm(EMPTY_EMPLOYEE); setDupError(""); setInitialJobs([]); setJobs([]); setDialogOpen(true); };
+  const activeCompanyIds = companies.filter((c) => c.is_active !== false).map((c) => c.id);
+  const openNew  = () => {
+    setEditing(null); setForm(EMPTY_EMPLOYEE); setDupError(""); setInitialJobs([]); setJobs([]);
+    setCompanyIds(activeCompanyIds);
+    setDialogOpen(true);
+  };
   const openEdit = (emp) => {
     setDupError("");
     setEditing(emp);
     setInitialJobs([]); setJobs([]);
+    setCompanyIds(assignments.filter((a) => a.employee_id === emp.id).map((a) => a.company_id));
     loadPmJobIds(emp.full_name).then((ids) => { setInitialJobs(ids); setJobs(ids); });
     setForm({
       full_name:  emp.full_name  || "",
@@ -120,8 +142,19 @@ function TeamTab() {
         : `A team member with email "${dup.email}" already exists.`);
       return;
     }
+    let savedId = editing?.id;
     if (editing) await base44.entities.Employee.update(editing.id, form);
-    else         await base44.entities.Employee.create(form);
+    else {
+      const created = await base44.entities.Employee.create(form);
+      savedId = created?.id;
+    }
+    if (isOwner && savedId) {
+      try {
+        await saveCompanyAssignments(savedId, companyIds);
+      } catch (err) {
+        alert(err?.message || "Couldn't save which companies they can see.");
+      }
+    }
     // Their jobs follow their name, so a rename carries the jobs with it.
     if (form.role === "project_manager" || initialJobs.length) {
       await savePmJobs(form.full_name, initialJobs, form.role === "project_manager" ? jobs : initialJobs, { renamedFrom: editing?.full_name });
@@ -179,6 +212,16 @@ function TeamTab() {
                     <p className="text-xs text-slate-500 truncate">
                       {[emp.department, emp.email, emp.phone].filter(Boolean).join(" · ") || "No contact info"}
                     </p>
+                    {isOwner && (
+                      <p className="text-[11px] text-slate-400 truncate">
+                        {assignments.some((a) => a.employee_id === emp.id)
+                          ? companies
+                              .filter((c) => assignments.some((a) => a.employee_id === emp.id && a.company_id === c.id))
+                              .map((c) => c.name)
+                              .join(", ")
+                          : "No companies assigned"}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 shrink-0">
@@ -275,6 +318,42 @@ function TeamTab() {
               <Input value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))} className="mt-1 h-9 text-sm" placeholder="e.g. Field, Office, Sales" /></div>
             <div><Label className="text-xs">Notes</Label>
               <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="mt-1 text-sm" rows={2} /></div>
+            {isOwner && companies.length > 0 && (
+              <div>
+                <Label className="text-xs">Companies</Label>
+                <p className="text-[11px] text-slate-500 mb-1.5">Which brands they can see and work in. Your login always sees every company.</p>
+                <div className="space-y-1.5 rounded-lg border border-slate-200 p-2">
+                  {companies.filter((c) => c.is_active !== false).map((c) => (
+                    <label key={c.id} className="flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        className="accent-amber-600"
+                        checked={companyIds.includes(c.id)}
+                        onChange={() => setCompanyIds((ids) => ids.includes(c.id) ? ids.filter((id) => id !== c.id) : [...ids, c.id])}
+                      />
+                      <span className="truncate">{c.name}</span>
+                    </label>
+                  ))}
+                  {companies.some((c) => c.is_active === false) && (
+                    <p className="pt-1 text-[11px] uppercase tracking-wide text-slate-400">Archived</p>
+                  )}
+                  {companies.filter((c) => c.is_active === false).map((c) => (
+                    <label key={c.id} className="flex items-center gap-2 text-sm text-slate-500">
+                      <input
+                        type="checkbox"
+                        className="accent-amber-600"
+                        checked={companyIds.includes(c.id)}
+                        onChange={() => setCompanyIds((ids) => ids.includes(c.id) ? ids.filter((id) => id !== c.id) : [...ids, c.id])}
+                      />
+                      <span className="truncate">{c.name}</span>
+                    </label>
+                  ))}
+                </div>
+                {companyIds.length === 0 && (
+                  <p className="mt-1 text-[11px] text-amber-700">With none checked, they only see records that aren't filed under a company yet.</p>
+                )}
+              </div>
+            )}
             <div className="flex justify-end gap-3 pt-2 border-t border-slate-200">
               <Button type="button" variant="outline" size="sm" onClick={() => setDialogOpen(false)}>Cancel</Button>
               <Button type="submit" size="sm" className="bg-gradient-to-r from-amber-500 to-orange-500">

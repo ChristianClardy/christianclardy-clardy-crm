@@ -17,7 +17,7 @@ const { Client } = require('@modelcontextprotocol/sdk/client/index.js');
 const { InMemoryTransport } = require('@modelcontextprotocol/sdk/inMemory.js');
 const { buildServer } = require('./crmTools.js');
 const { getStaffCaller, READ_ONLY_MESSAGE } = require('./staffAuth.js');
-const { sbGetById } = require('./supabaseAdmin.js');
+const { sbGetById, bindUserJwt } = require('./supabaseAdmin.js');
 const BRIEFING = require('./clardyBriefing.js');
 
 const XAI_URL = 'https://api.x.ai/v1/responses';
@@ -107,6 +107,8 @@ module.exports = async function grokAssistant(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST only' }); return; }
   const user = await getStaffCaller(req).catch(() => null);
   if (!user) { res.status(401).json({ error: 'Sign in with a staff account to use Grok.' }); return; }
+  // Tool queries then run as this person, so they only see their brands.
+  bindUserJwt((req.headers.authorization || '').replace(/^Bearer\s+/i, ''));
   if (!XAI_API_KEY) {
     res.status(503).json({ error: "Grok isn't switched on yet: add an XAI_API_KEY (from console.x.ai) to Vercel's environment variables and redeploy." });
     return;

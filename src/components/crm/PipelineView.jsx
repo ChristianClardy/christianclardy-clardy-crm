@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import ContractsPanel from "@/components/crm/ContractsPanel";
 import { useRolePermissions } from "@/lib/useRolePermissions";
+import { scopeFilter, useCompanyScope } from "@/lib/companyScope";
 
 // ─── Stage definitions ────────────────────────────────────────────────────────
 
@@ -496,19 +497,25 @@ export default function PipelineView() {
 
   // ── Derived data ──────────────────────────────────────────────────────────
 
+  const companyScope = useCompanyScope();
+  const scopedDeals = useMemo(
+    () => scopeFilter(deals, companyScope, "brand_company_id"),
+    [deals, companyScope]
+  );
+
   const leadMap = useMemo(
     () => Object.fromEntries(leads.map((l) => [l.id, l.full_name])),
     [leads]
   );
 
   const assignees = useMemo(() => {
-    const set = new Set(deals.map((d) => d.assigned_to).filter(Boolean));
+    const set = new Set(scopedDeals.map((d) => d.assigned_to).filter(Boolean));
     return [...set].sort();
-  }, [deals]);
+  }, [scopedDeals]);
 
   const filteredDeals = useMemo(() => {
     const q = search.toLowerCase();
-    return deals.filter((d) => {
+    return scopedDeals.filter((d) => {
       const matchSearch =
         !q ||
         (d.title || "").toLowerCase().includes(q) ||
@@ -516,7 +523,7 @@ export default function PipelineView() {
       const matchAssigned = !filterAssigned || d.assigned_to === filterAssigned;
       return matchSearch && matchAssigned;
     });
-  }, [deals, search, filterAssigned, leadMap]);
+  }, [scopedDeals, search, filterAssigned, leadMap]);
 
   const stageDeals = useMemo(() =>
     Object.fromEntries(
@@ -526,7 +533,7 @@ export default function PipelineView() {
   );
 
   // Summary bar numbers (use all deals, not filtered, for pipeline total)
-  const allActiveDeals = useMemo(() => deals.filter((d) => d.stage !== "Closed Lost"), [deals]);
+  const allActiveDeals = useMemo(() => scopedDeals.filter((d) => d.stage !== "Closed Lost"), [scopedDeals]);
   const pipelineValue = useMemo(() => allActiveDeals.reduce((s, d) => s + (Number(d.value) || 0), 0), [allActiveDeals]);
   const expectedValue = useMemo(() =>
     allActiveDeals.reduce((s, d) => {

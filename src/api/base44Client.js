@@ -110,7 +110,7 @@ const TABLE_OPTIONAL_FIELDS = {
   subcontractors: new Set(['license_exp','workers_comp_exp','coi_url','w9_on_file','hourly_rate','payment_terms','trades']),
   company_profiles: new Set(['invoice_company_name','invoice_logo_url','invoice_header_title','invoice_accent_color','invoice_intro_text','invoice_footer_text','invoice_scope_label','color']),
   clients: new Set(['first_name','last_name','customer_number']),
-  deals: new Set(['won_at','lost_at','lost_reason','company_id','lead_id','probability','close_date']),
+  deals: new Set(['won_at','lost_at','lost_reason','company_id','lead_id','probability','close_date','brand_company_id']),
   crm_companies: new Set(['website','industry','company_size','annual_revenue','city','state']),
   crm_activities: new Set(['outcome','duration_min','scheduled_at','completed_at','deal_id','company_id','lead_id','created_by']),
 };
@@ -331,6 +331,12 @@ function createEntity(tableName) {
       if (COMPANY_SCOPED_TABLES.has(tableName) && !payload.company_id && !hasJobParent) {
         const scope = getSelectedCompanyScope();
         if (scope !== 'all') payload.company_id = scope;
+      }
+      // deals.company_id is the CRM customer, not the brand. The brand lives
+      // on brand_company_id so the Pipeline board follows the sidebar.
+      if (tableName === 'deals' && !payload.brand_company_id) {
+        const scope = getSelectedCompanyScope();
+        if (scope && scope !== 'all' && scope !== 'none') payload.brand_company_id = scope;
       }
       if (!payload.id && !NO_UUID_ID_TABLES.has(tableName)) {
         const id = newId();
