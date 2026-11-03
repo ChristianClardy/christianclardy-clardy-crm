@@ -38,6 +38,7 @@ import OverdueAppointmentGate from "@/components/scheduling/OverdueAppointmentGa
 import CompanyScopeSwitcher from "@/components/company/CompanyScopeSwitcher";
 import InstallAppButton from "@/components/app/InstallAppButton";
 import InstallNudge from "@/components/app/InstallNudge";
+import GrokAssistant from "@/components/assistant/GrokAssistant";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/ThemeContext";
 import { useTenant } from "@/lib/TenantContext";
@@ -255,6 +256,7 @@ export default function Layout({ children, currentPageName }) {
           renders twice for the mobile/desktop asides) so it never shows the
           blocking modal more than once. */}
       <OverdueAppointmentGate />
+      <GrokAssistant currentPageName={currentPageName} />
 
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
