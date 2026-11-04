@@ -81,13 +81,15 @@ CREATE TRIGGER guard_owner_flag
 -- Current owner: the staff-org login for Christian Clardy. This email is
 -- used only here, never by the app. If it doesn't match (the address
 -- changed before this ran), fall back to the single active admin of the
--- staff org so someone can still manage assignments.
+-- staff org so someone can still manage assignments. Skipped when an owner
+-- already exists, so running this file again does not take the flag back.
 UPDATE organization_members om
 SET is_owner = true
 FROM auth.users u
 WHERE om.user_id = u.id
   AND om.organization_id = public.staff_org_id()
-  AND lower(u.email) = 'christianclardy7@gmail.com';
+  AND lower(u.email) = 'christianclardy7@gmail.com'
+  AND NOT EXISTS (SELECT 1 FROM organization_members WHERE is_owner);
 
 UPDATE organization_members
 SET is_owner = true
@@ -432,44 +434,54 @@ $$;
 REVOKE ALL ON FUNCTION public.can_access_deal(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.can_access_deal(uuid) TO authenticated;
 
--- Comments, files, DocuSign envelopes, and notifications point at a parent
--- with entity_type + entity_id. Unknown types stay visible so a new kind of
--- record isn't hidden until this function learns it.
-CREATE OR REPLACE FUNCTION public.can_access_linked_entity(p_type text, p_id uuid) RETURNS boolean
+-- Comments and attachments store entity_id as uuid. docusign_envelopes.entity_id
+-- is text in production (sometimes a uuid, sometimes not). One text argument
+-- covers both: policies pass entity_id::text. A value that is not a uuid
+-- stays visible, same as an unknown entity type, so a non-id string is not
+-- hidden from the whole staff.
+DROP FUNCTION IF EXISTS public.can_access_linked_entity(text, uuid);
+
+CREATE OR REPLACE FUNCTION public.can_access_linked_entity(p_type text, p_id text) RETURNS boolean
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   kind text := lower(COALESCE(p_type, ''));
+  uid uuid;
   brand uuid;
 BEGIN
   IF auth.uid() IS NULL OR NOT public.is_staff() OR public.is_owner() THEN
     RETURN true;
   END IF;
-  IF p_id IS NULL OR kind = '' THEN
+  IF p_id IS NULL OR btrim(p_id) = '' OR kind = '' THEN
     RETURN true;
   END IF;
+  BEGIN
+    uid := p_id::uuid;
+  EXCEPTION WHEN invalid_text_representation THEN
+    RETURN true;
+  END;
 
   IF kind IN ('project', 'job') THEN
-    RETURN public.can_access_project(p_id);
+    RETURN public.can_access_project(uid);
   ELSIF kind = 'lead' THEN
-    RETURN public.can_access_lead(p_id);
+    RETURN public.can_access_lead(uid);
   ELSIF kind IN ('client', 'contact') THEN
-    RETURN public.can_access_client(p_id);
+    RETURN public.can_access_client(uid);
   ELSIF kind = 'estimate' THEN
-    RETURN public.can_access_estimate(p_id);
+    RETURN public.can_access_estimate(uid);
   ELSIF kind = 'invoice' THEN
-    RETURN public.can_access_invoice(p_id);
+    RETURN public.can_access_invoice(uid);
   ELSIF kind = 'deal' THEN
-    RETURN public.can_access_deal(p_id);
+    RETURN public.can_access_deal(uid);
   ELSIF kind = 'task' THEN
-    SELECT company_id INTO brand FROM tasks WHERE id = p_id;
+    SELECT company_id INTO brand FROM tasks WHERE id = uid;
     IF NOT FOUND THEN RETURN false; END IF;
     RETURN brand IS NULL OR public.can_access_company(brand);
   ELSIF kind = 'document' THEN
-    SELECT company_id INTO brand FROM documents WHERE id = p_id;
+    SELECT company_id INTO brand FROM documents WHERE id = uid;
     IF NOT FOUND THEN RETURN false; END IF;
     RETURN brand IS NULL OR public.can_access_company(brand);
   ELSIF kind IN ('change_order', 'changeorder') THEN
-    SELECT company_id INTO brand FROM change_orders WHERE id = p_id;
+    SELECT company_id INTO brand FROM change_orders WHERE id = uid;
     IF NOT FOUND THEN RETURN false; END IF;
     RETURN brand IS NULL OR public.can_access_company(brand);
   ELSIF kind IN ('subcontractor', 'employee', 'material') THEN
@@ -479,8 +491,8 @@ BEGIN
   END IF;
 END $$;
 
-REVOKE ALL ON FUNCTION public.can_access_linked_entity(text, uuid) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.can_access_linked_entity(text, uuid) TO authenticated;
+REVOKE ALL ON FUNCTION public.can_access_linked_entity(text, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.can_access_linked_entity(text, text) TO authenticated;
 
 -- ── Policies ────────────────────────────────────────────────────────────────
 -- RESTRICTIVE, so they AND with staff_only / portal_scope. Non-staff pass
@@ -639,7 +651,7 @@ $policy$);
 
 SELECT public.attach_company_scope(t, $policy$
   NOT (SELECT public.is_staff())
-  OR (SELECT public.can_access_linked_entity(entity_type, entity_id))
+  OR (SELECT public.can_access_linked_entity(entity_type, entity_id::text))
 $policy$)
 FROM (VALUES
   ('comments'), ('attachments'), ('docusign_envelopes'), ('notifications')
