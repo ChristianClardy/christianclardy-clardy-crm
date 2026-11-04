@@ -89,7 +89,7 @@ async function getSettings(companyId) {
 
 // Loads whatever the message is about. The person messaged is the lead, else
 // the client, else the project's client.
-async function loadContext({ lead_id, client_id, project_id, company_id }) {
+async function loadContext({ lead_id, client_id, project_id, company_id, event } = {}) {
   const lead = lead_id ? await sbGetById('leads', lead_id) : null;
   const project = project_id ? await sbGetById('projects', project_id) : null;
   const cid = client_id || lead?.linked_contact_id || project?.client_id;
@@ -114,10 +114,15 @@ async function loadContext({ lead_id, client_id, project_id, company_id }) {
       rep_name: lead?.assigned_sales_rep || project?.project_manager || '',
       project_name: project?.name || '',
       project_status: project?.status ? String(project.status).replace(/_/g, ' ') : '',
-      company_name: settings.from_name || settings.company?.name || '',
+      company_name: String(settings.from_name || settings.company?.name || '').trim(),
       company_phone: settings.company?.phone || '',
       company_email: settings.company?.email || '',
       company_website: settings.company?.website || '',
+      brand_name: String(settings.from_name || settings.company?.name || '').trim(),
+      brand_phone: settings.company?.phone || '',
+      appointment_title: event?.title || '',
+      appointment_date: event?.start_utc ? new Intl.DateTimeFormat('en-US', { timeZone: settings.timezone || 'America/Chicago', weekday: 'long', month: 'long', day: 'numeric' }).format(event.start_utc) : '',
+      appointment_time: event?.start_utc ? new Intl.DateTimeFormat('en-US', { timeZone: settings.timezone || 'America/Chicago', hour: 'numeric', minute: '2-digit' }).format(event.start_utc) : '',
       today: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: settings.timezone || 'America/Chicago' }),
     },
   };
@@ -654,5 +659,6 @@ function status() {
 module.exports = {
   processDue, sendNow, broadcast, status,
   handleInboundSms, handleTwilioStatus, handleResendWebhook, validTwilioSignature,
-  readUnsubscribe, optOut, normalizeEmail, escapeHtml,
+  readUnsubscribe, optOut, normalizeEmail, normalizePhone, escapeHtml,
+  loadContext, deliver, render, isQuiet, nextSendableTime,
 };

@@ -20,6 +20,11 @@ export const MERGE_FIELDS = [
   { key: "company_phone",   label: "Company phone",   sample: "(555) 010-2030" },
   { key: "company_email",   label: "Company email",   sample: "hello@example.com" },
   { key: "company_website", label: "Company website", sample: "example.com" },
+  { key: "brand_name",      label: "Brand name",      sample: "Principle Outdoor Living" },
+  { key: "brand_phone",     label: "Brand phone",     sample: "(555) 010-2030" },
+  { key: "appointment_title", label: "Appointment",   sample: "Site visit" },
+  { key: "appointment_date",  label: "Appointment date", sample: "Tuesday, November 10" },
+  { key: "appointment_time",  label: "Appointment time", sample: "2:00 PM" },
   { key: "today",           label: "Today's date",    sample: "October 5, 2026" },
 ];
 const SAMPLE = Object.fromEntries(MERGE_FIELDS.map((f) => [f.key, f.sample]));
@@ -89,6 +94,9 @@ export const STATUS_STYLE = {
   complained: "bg-rose-100 text-rose-700",
   failed:     "bg-rose-100 text-rose-700",
   skipped:    "bg-slate-100 text-slate-500",
+  queued:     "bg-amber-100 text-amber-800",
+  dry_run:    "bg-violet-100 text-violet-700",
+  sending:    "bg-amber-100 text-amber-800",
 };
 
 async function call(action, { method = "GET", body } = {}) {
@@ -107,6 +115,8 @@ export const messagingApi = {
   send: (body) => call("messaging-send", { method: "POST", body }),
   broadcast: (body) => call("messaging-broadcast", { method: "POST", body }),
   runQueue: () => call("messaging-tick"),
+  previewFollowups: (body) => call("followups-preview", { method: "POST", body }),
+  dryRunFollowups: (body) => call("followups-tick", { method: "POST", body }),
 };
 
 // Every row of a table (Supabase caps one request at 1,000), for audiences

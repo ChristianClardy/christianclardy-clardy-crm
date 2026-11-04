@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, FileText, Inbox, Megaphone, Settings2, Zap } from "lucide-react";
+import { AlertTriangle, AlarmClock, FileText, Inbox, Megaphone, Settings2, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { messagingApi } from "@/lib/messaging";
 import SequencesTab from "@/components/messaging/SequencesTab";
@@ -8,10 +8,12 @@ import BroadcastTab from "@/components/messaging/BroadcastTab";
 import InboxTab from "@/components/messaging/InboxTab";
 import TemplatesTab from "@/components/messaging/TemplatesTab";
 import MessagingSettingsTab from "@/components/messaging/MessagingSettingsTab";
+import FollowupsTab from "@/components/messaging/FollowupsTab";
 
 // Messaging & Automations: drips, broadcasts, inbox, templates, sender setup.
 // Engine: api/_lib/messaging.js. Tables: 057_messaging_automations.sql.
 const tabs = [
+  { key: "followups", label: "Follow-ups", icon: AlarmClock, description: "Stage follow-ups and appointment reminders. Off until you turn a rule on. Dry run logs the message and does not contact anyone." },
   { key: "drips",     label: "Drips",     icon: Zap,       description: "Automatic email and text sequences for new leads, stage changes and project milestones." },
   { key: "broadcast", label: "Broadcast", icon: Megaphone, description: "Send one email or text to many leads or clients at once." },
   { key: "inbox",     label: "Inbox",     icon: Inbox,     description: "Text replies, and every email and text sent from the CRM." },
@@ -95,6 +97,7 @@ export default function Automations() {
         </button>
       )}
 
+      {active === "followups" && <FollowupsTab />}
       {active === "drips" && <SequencesTab key={dripsKey} onOpen={openDrip} />}
       {active === "broadcast" && <BroadcastTab />}
       {/* Kept mounted so the unread count on the tab stays current. */}
