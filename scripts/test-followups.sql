@@ -1,4 +1,5 @@
--- Proves 063_followup_rules.sql on a throwaway database. Not production.
+-- Proves 063 on top of the 062 that is on main (can_access_linked_entity(text, text),
+-- attach_* helpers revoked). Throwaway database only. Not production.
 --   createdb followup_test
 --   psql -v ON_ERROR_STOP=1 -d followup_test -f scripts/test-followups.sql
 
@@ -36,6 +37,24 @@ LANGUAGE sql STABLE AS $$
   )::uuid;
 $$;
 
+CREATE TABLE IF NOT EXISTS auth.users (
+  id uuid PRIMARY KEY,
+  email text
+);
+CREATE TABLE IF NOT EXISTS organization_members (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid,
+  user_id uuid,
+  role text,
+  status text
+);
+CREATE TABLE IF NOT EXISTS employees (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  full_name text,
+  email text,
+  role text,
+  status text
+);
 CREATE TABLE IF NOT EXISTS company_profiles (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text,
@@ -44,7 +63,11 @@ CREATE TABLE IF NOT EXISTS company_profiles (
   email text,
   website text
 );
-CREATE TABLE IF NOT EXISTS clients (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text);
+CREATE TABLE IF NOT EXISTS clients (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid,
+  name text
+);
 CREATE TABLE IF NOT EXISTS projects (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id uuid,
@@ -56,6 +79,19 @@ CREATE TABLE IF NOT EXISTS leads (
   company_id uuid,
   full_name text
 );
+CREATE TABLE IF NOT EXISTS estimates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid
+);
+CREATE TABLE IF NOT EXISTS invoices (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid
+);
+CREATE TABLE IF NOT EXISTS deals (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  lead_id uuid,
+  company_id uuid
+);
 CREATE TABLE IF NOT EXISTS calendar_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   title text,
@@ -64,7 +100,9 @@ CREATE TABLE IF NOT EXISTS calendar_events (
 );
 CREATE TABLE IF NOT EXISTS todo_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  title text
+  title text,
+  linked_client_id uuid,
+  linked_project_id uuid
 );
 CREATE TABLE IF NOT EXISTS messages (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -77,38 +115,31 @@ CREATE TABLE IF NOT EXISTS message_opt_outs (
   PRIMARY KEY (channel, address)
 );
 
-CREATE TABLE IF NOT EXISTS test_access (
-  user_id uuid PRIMARY KEY,
-  is_staff boolean NOT NULL DEFAULT false,
-  is_owner boolean NOT NULL DEFAULT false,
-  is_viewer boolean NOT NULL DEFAULT false
-);
-CREATE TABLE IF NOT EXISTS user_company_access (
-  user_id uuid,
-  company_id uuid,
-  PRIMARY KEY (user_id, company_id)
-);
-
-CREATE OR REPLACE FUNCTION public.update_updated_at() RETURNS trigger
-LANGUAGE plpgsql AS $$ BEGIN NEW.updated_at = now(); RETURN NEW; END $$;
-
+-- The bits of the app 062 calls. is_staff matches production: a member of the
+-- staff org who is not a portal login. is_viewer is the view-only login.
+CREATE OR REPLACE FUNCTION public.staff_org_id() RETURNS uuid
+LANGUAGE sql IMMUTABLE AS $$ SELECT '2c9485d2-9b17-48d4-bea7-72770c1e9eb9'::uuid $$;
+CREATE OR REPLACE FUNCTION public.is_sub_user() RETURNS boolean
+LANGUAGE sql STABLE AS $$ SELECT false $$;
+CREATE OR REPLACE FUNCTION public.is_pm_user() RETURNS boolean
+LANGUAGE sql STABLE AS $$ SELECT false $$;
+CREATE OR REPLACE FUNCTION public.is_customer_user() RETURNS boolean
+LANGUAGE sql STABLE AS $$ SELECT false $$;
 CREATE OR REPLACE FUNCTION public.is_staff() RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
-  SELECT COALESCE((SELECT is_staff FROM test_access WHERE user_id = auth.uid()), false);
-$$;
-CREATE OR REPLACE FUNCTION public.is_owner() RETURNS boolean
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
-  SELECT COALESCE((SELECT is_owner FROM test_access WHERE user_id = auth.uid()), false);
+  SELECT EXISTS (
+      SELECT 1 FROM organization_members
+      WHERE user_id = auth.uid()
+        AND organization_id = public.staff_org_id()
+        AND COALESCE(status, 'active') = 'active'
+    )
+    AND NOT public.is_sub_user()
+    AND NOT public.is_pm_user()
+    AND NOT public.is_customer_user();
 $$;
 CREATE OR REPLACE FUNCTION public.is_viewer() RETURNS boolean
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
-  SELECT COALESCE((SELECT is_viewer FROM test_access WHERE user_id = auth.uid()), false);
-$$;
-CREATE OR REPLACE FUNCTION public.can_access_company(p_company uuid) RETURNS boolean
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
-  SELECT public.is_owner() OR EXISTS (
-    SELECT 1 FROM user_company_access WHERE user_id = auth.uid() AND company_id = p_company
-  );
+LANGUAGE sql STABLE AS $$
+  SELECT auth.uid() = '33333333-3333-4333-8333-333333333333';
 $$;
 CREATE OR REPLACE FUNCTION public.block_viewer_writes() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
@@ -119,53 +150,32 @@ BEGIN
   END IF;
   RETURN NULL;
 END $$;
-
-CREATE OR REPLACE FUNCTION public.guard_brand_write() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-BEGIN
-  IF auth.uid() IS NULL OR NOT public.is_staff() OR public.is_owner() THEN
-    IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
-    RETURN NEW;
-  END IF;
-  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
-  IF TG_OP = 'UPDATE' AND NEW.company_id IS NOT DISTINCT FROM OLD.company_id THEN
-    RETURN NEW;
-  END IF;
-  IF NEW.company_id IS NULL OR NOT public.can_access_company(NEW.company_id) THEN
-    RAISE EXCEPTION 'You are not assigned to that company' USING ERRCODE = '42501';
-  END IF;
-  RETURN NEW;
-END $$;
-
-CREATE OR REPLACE FUNCTION public.attach_company_scope(p_table text, p_using text) RETURNS void
-LANGUAGE plpgsql AS $$
-BEGIN
-  EXECUTE format('DROP POLICY IF EXISTS company_scope ON public.%I', p_table);
-  EXECUTE format(
-    'CREATE POLICY company_scope ON public.%I AS RESTRICTIVE FOR ALL TO public USING (%s) WITH CHECK (%s)',
-    p_table, p_using, p_using
-  );
-END $$;
-CREATE OR REPLACE FUNCTION public.attach_brand_guard(p_table text, p_shared_null boolean) RETURNS void
-LANGUAGE plpgsql AS $$
-BEGIN
-  EXECUTE format('DROP TRIGGER IF EXISTS zz_guard_brand ON public.%I', p_table);
-  EXECUTE format(
-    'CREATE TRIGGER zz_guard_brand BEFORE INSERT OR UPDATE OR DELETE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.guard_brand_write(%L)',
-    p_table, CASE WHEN p_shared_null THEN 'true' ELSE 'false' END
-  );
-END $$;
+CREATE OR REPLACE FUNCTION public.update_updated_at() RETURNS trigger
+LANGUAGE plpgsql AS $$ BEGIN NEW.updated_at = now(); RETURN NEW; END $$;
 
 GRANT EXECUTE ON FUNCTION public.is_staff() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.is_owner() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.is_viewer() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.can_access_company(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.block_viewer_writes() TO authenticated;
 
+INSERT INTO auth.users (id, email) VALUES
+  ('11111111-1111-4111-8111-111111111111', 'christianclardy7@gmail.com'),
+  ('22222222-2222-4222-8222-222222222222', 'roofing@example.com'),
+  ('33333333-3333-4333-8333-333333333333', 'viewer@example.com');
+INSERT INTO organization_members (organization_id, user_id, role, status) VALUES
+  ('2c9485d2-9b17-48d4-bea7-72770c1e9eb9', '11111111-1111-4111-8111-111111111111', 'admin', 'active'),
+  ('2c9485d2-9b17-48d4-bea7-72770c1e9eb9', '22222222-2222-4222-8222-222222222222', 'user', 'active'),
+  ('2c9485d2-9b17-48d4-bea7-72770c1e9eb9', '33333333-3333-4333-8333-333333333333', 'user', 'active');
+INSERT INTO employees (id, full_name, email, role, status) VALUES
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'Christian Clardy', 'christian@principleoutdoorliving.com', 'admin', 'active'),
+  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Roofing Bookkeeper', 'roofing@example.com', 'bookkeeper', 'active'),
+  ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'View Only', 'viewer@example.com', 'office', 'active');
 INSERT INTO company_profiles (id, name, is_active) VALUES
   ('687dd747-560c-4ce4-8d84-b181db5edbc4', 'Principle Outdoor Living ', true),
   ('98e7d9f3-32e1-409c-8b2d-8b1c14b428f8', 'Principle Roofing Solutions', true),
   ('a7c41e00-0000-4000-8000-000000000325', 'Archived – March 2026 Lead Import', false);
 
+-- The file that is on main, then the follow-up migration.
+\ir ../supabase/migrations/062_employee_company_access.sql
 \ir ../supabase/migrations/063_followup_rules.sql
 
 CREATE OR REPLACE FUNCTION public._expect(label text, got int, want int) RETURNS void
@@ -243,18 +253,21 @@ SELECT public.expire_followup_dispatches();
 SELECT public._expect('expired hold skipped', (
   SELECT count(*)::int FROM followup_log WHERE dedupe_key = 'live:old' AND status = 'skipped'), 1);
 
--- Company access: the owner sees every brand. Roofing does not see outdoor rules.
-INSERT INTO test_access (user_id, is_staff, is_owner) VALUES
-  ('11111111-1111-4111-8111-111111111111', true, true),
-  ('22222222-2222-4222-8222-222222222222', true, false),
-  ('33333333-3333-4333-8333-333333333333', true, false);
-INSERT INTO user_company_access (user_id, company_id)
-VALUES ('22222222-2222-4222-8222-222222222222', '98e7d9f3-32e1-409c-8b2d-8b1c14b428f8');
-UPDATE test_access SET is_viewer = true WHERE user_id = '33333333-3333-4333-8333-333333333333';
-INSERT INTO user_company_access (user_id, company_id)
-VALUES ('33333333-3333-4333-8333-333333333333', '98e7d9f3-32e1-409c-8b2d-8b1c14b428f8');
+-- Live 062: linked-entity check is (text, text), and the attach helpers are
+-- not granted to staff. 063 still installed its rules without calling them.
+SELECT public._expect('linked entity is (text, text)', (
+  SELECT count(*)::int FROM pg_proc p
+  JOIN pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = 'public' AND p.proname = 'can_access_linked_entity'
+    AND pg_get_function_identity_arguments(p.oid) = 'p_type text, p_id text'), 1);
+SELECT public._expect('attach helper not granted to staff', (
+  SELECT count(*)::int FROM information_schema.routine_privileges
+  WHERE routine_schema = 'public' AND routine_name = 'attach_company_scope' AND grantee = 'authenticated'), 0);
 
-GRANT SELECT ON test_access, user_company_access TO authenticated;
+-- 062 assigns every employee to every active brand. Leave roofing on roofing only.
+DELETE FROM employee_company_assignments
+WHERE employee_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+  AND company_id <> '98e7d9f3-32e1-409c-8b2d-8b1c14b428f8';
 
 BEGIN;
 SET LOCAL ROLE authenticated;

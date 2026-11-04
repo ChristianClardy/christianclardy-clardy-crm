@@ -15,14 +15,21 @@
 --
 -- Not applied to production by the agent. Run it yourself, on a copy first
 -- if you want, then here.
+--
+-- 062 is already on production. Its attach_company_scope / attach_brand_guard
+-- helpers are revoked from everyone but the role that ran that file ("not
+-- part of the app API"), and can_access_linked_entity takes (text, text).
+-- This file does not call those helpers. It uses is_owner(), can_access_company(),
+-- is_staff(), and guard_brand_write(), which are the functions 062 left granted.
 
 DO $$
 BEGIN
   IF to_regprocedure('public.is_owner()') IS NULL
      OR to_regprocedure('public.can_access_company(uuid)') IS NULL
-     OR to_regprocedure('public.attach_company_scope(text,text)') IS NULL
-     OR to_regprocedure('public.attach_brand_guard(text,boolean)') IS NULL THEN
-    RAISE EXCEPTION 'Apply 062_employee_company_access.sql before 063_followup_rules.sql';
+     OR to_regprocedure('public.is_staff()') IS NULL
+     OR to_regprocedure('public.guard_brand_write()') IS NULL
+     OR to_regprocedure('public.block_viewer_writes()') IS NULL THEN
+    RAISE EXCEPTION 'Apply 062_employee_company_access.sql (and 055) before 063_followup_rules.sql';
   END IF;
   IF to_regclass('public.messages') IS NULL OR to_regclass('public.message_opt_outs') IS NULL THEN
     RAISE EXCEPTION 'Apply 057_messaging_automations.sql before 063_followup_rules.sql';
@@ -284,24 +291,51 @@ DROP POLICY IF EXISTS followup_log_read ON followup_log;
 CREATE POLICY followup_log_read ON followup_log FOR SELECT TO authenticated
   USING ((SELECT public.is_staff()));
 
-SELECT public.attach_company_scope('followup_rules', $policy$
-  NOT (SELECT public.is_staff())
-  OR (SELECT public.is_owner())
-  OR (SELECT public.can_access_company(company_id))
-$policy$);
-SELECT public.attach_company_scope('followup_settings', $policy$
-  NOT (SELECT public.is_staff())
-  OR (SELECT public.is_owner())
-  OR (SELECT public.can_access_company(company_id))
-$policy$);
-SELECT public.attach_company_scope('followup_log', $policy$
-  NOT (SELECT public.is_staff())
-  OR (SELECT public.is_owner())
-  OR (SELECT public.can_access_company(company_id))
-$policy$);
+-- Same restrictive brand rule as 062, written out here so this file does not
+-- execute the helpers 062 revoked after it finished.
+DROP POLICY IF EXISTS company_scope ON followup_rules;
+CREATE POLICY company_scope ON followup_rules AS RESTRICTIVE FOR ALL TO public
+  USING (
+    NOT (SELECT public.is_staff())
+    OR (SELECT public.is_owner())
+    OR (SELECT public.can_access_company(company_id))
+  )
+  WITH CHECK (
+    NOT (SELECT public.is_staff())
+    OR (SELECT public.is_owner())
+    OR (SELECT public.can_access_company(company_id))
+  );
+DROP POLICY IF EXISTS company_scope ON followup_settings;
+CREATE POLICY company_scope ON followup_settings AS RESTRICTIVE FOR ALL TO public
+  USING (
+    NOT (SELECT public.is_staff())
+    OR (SELECT public.is_owner())
+    OR (SELECT public.can_access_company(company_id))
+  )
+  WITH CHECK (
+    NOT (SELECT public.is_staff())
+    OR (SELECT public.is_owner())
+    OR (SELECT public.can_access_company(company_id))
+  );
+DROP POLICY IF EXISTS company_scope ON followup_log;
+CREATE POLICY company_scope ON followup_log AS RESTRICTIVE FOR ALL TO public
+  USING (
+    NOT (SELECT public.is_staff())
+    OR (SELECT public.is_owner())
+    OR (SELECT public.can_access_company(company_id))
+  )
+  WITH CHECK (
+    NOT (SELECT public.is_staff())
+    OR (SELECT public.is_owner())
+    OR (SELECT public.can_access_company(company_id))
+  );
 
-SELECT public.attach_brand_guard('followup_rules', false);
-SELECT public.attach_brand_guard('followup_settings', false);
+DROP TRIGGER IF EXISTS zz_guard_brand ON followup_rules;
+CREATE TRIGGER zz_guard_brand BEFORE INSERT OR UPDATE OR DELETE ON followup_rules
+  FOR EACH ROW EXECUTE FUNCTION public.guard_brand_write('false');
+DROP TRIGGER IF EXISTS zz_guard_brand ON followup_settings;
+CREATE TRIGGER zz_guard_brand BEFORE INSERT OR UPDATE OR DELETE ON followup_settings
+  FOR EACH ROW EXECUTE FUNCTION public.guard_brand_write('false');
 
 DROP TRIGGER IF EXISTS viewer_read_only ON followup_rules;
 CREATE TRIGGER viewer_read_only BEFORE INSERT OR UPDATE OR DELETE ON followup_rules
