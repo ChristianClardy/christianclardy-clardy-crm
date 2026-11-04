@@ -2,18 +2,30 @@
 // fetch-based pattern api/docusign-send.js already uses (service-role key,
 // direct PostgREST calls), factored out so the MCP tool handlers stay short.
 
+const { AsyncLocalStorage } = require('async_hooks');
+
 const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+// When set, PostgREST runs as that signed-in user, so RLS (including which
+// brands they can see) applies. Cron, webhooks, and the owner MCP connector
+// leave this empty and keep the service role, which bypasses RLS.
+const userJwtStore = new AsyncLocalStorage();
+
+function bindUserJwt(jwt) {
+  if (jwt) userJwtStore.enterWith(jwt);
+}
+
 async function sbFetch(path, options = {}) {
   if (!SERVICE_KEY) throw new Error('Server misconfiguration: missing SUPABASE_SERVICE_ROLE_KEY.');
+  const userJwt = userJwtStore.getStore();
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...options,
     headers: {
       apikey: SERVICE_KEY,
-      Authorization: `Bearer ${SERVICE_KEY}`,
       'Content-Type': 'application/json',
       ...options.headers,
+      Authorization: userJwt ? `Bearer ${userJwt}` : `Bearer ${SERVICE_KEY}`,
     },
   });
   const text = await res.text();
@@ -62,4 +74,4 @@ async function sbUpdate(table, id, data) {
   return rows[0];
 }
 
-module.exports = { sbFetch, sbList, sbGetById, sbInsert, sbUpdate };
+module.exports = { sbFetch, sbList, sbGetById, sbInsert, sbUpdate, bindUserJwt };

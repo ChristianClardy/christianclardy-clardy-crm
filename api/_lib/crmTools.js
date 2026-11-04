@@ -3,10 +3,9 @@
 // Claude) and the in-app Grok assistant (api/_lib/grokAssistant.js), so both
 // see exactly the same tools and stay in step when one is added.
 //
-// Uses the service-role key like every other api/ function in this repo
-// (see api/docusign-send.js) — bypasses RLS the same way the rest of the app
-// already effectively does (this repo's tables use USING(true) RLS; real
-// scoping is client-side only, src/lib/companyScope.js).
+// The in-app assistant calls these as the signed-in user (bindUserJwt in
+// grokAssistant.js), so company RLS applies. The remote MCP connector does
+// not: its secret URL is the owner's, and it keeps the service role.
 
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { z } = require('zod');

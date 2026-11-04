@@ -229,6 +229,7 @@ async function pushWonLeadToPipeline(lead, client) {
     probability: 100,
     assigned_to: lead.assigned_sales_rep || "",
     lead_id: lead.id,
+    brand_company_id: lead.company_id || null,
     won_at: new Date().toISOString(),
   };
 

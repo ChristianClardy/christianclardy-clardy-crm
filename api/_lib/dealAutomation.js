@@ -52,6 +52,7 @@ async function advanceFromLead(leadId) {
       probability: 100,
       assigned_to: lead.assigned_sales_rep || '',
       lead_id: leadId,
+      brand_company_id: lead.company_id || null,
       won_at: wonAt,
     });
   }
