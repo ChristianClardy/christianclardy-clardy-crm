@@ -20,10 +20,16 @@
 //   POST ?action=twilio-inbound       → Twilio: incoming text (signature checked)
 //   POST ?action=twilio-status        → Twilio: delivery update
 //   POST ?action=resend-webhook       → Resend: delivered/opened/bounced
+//
+// Follow-ups and appointment reminders (api/_lib/followups.js):
+//   GET  ?action=followups-tick       → cron only: honor each brand's mode
+//   POST ?action=followups-tick       → staff: dry run for one company (never sends)
+//   POST ?action=followups-preview    → staff: who a rule would catch, nothing written
 
 const { syncEnvelope } = require('./_lib/docusign.js');
 const quickbooks = require('./_lib/quickbooks.js');
 const messaging = require('./_lib/messaging.js');
+const followups = require('./_lib/followups.js');
 const { getStaffCaller, requireStaff } = require('./_lib/staffAuth.js');
 
 const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
@@ -299,6 +305,31 @@ async function handleMessaging(action, req, res) {
   return res.status(400).json({ error: 'Unknown messaging action' });
 }
 
+async function handleFollowups(action, req, res) {
+  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+  // Scheduled calls are the only path that can send. A person using the
+  // screen always gets a dry run, even if they ask otherwise.
+  if (!isCron(req)) {
+    const staff = await requireStaff(req, res);
+    if (!staff) return;
+    try {
+      await followups.assertCompanyAccess(req, body.company_id);
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message });
+    }
+    if (action === 'followups-preview') {
+      if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
+      return res.status(200).json(await followups.preview({ companyId: body.company_id, ruleId: body.rule_id || null }));
+    }
+    if (req.method !== 'POST') return res.status(405).json({ error: 'POST required' });
+    return res.status(200).json(await followups.processDue({
+      companyId: body.company_id, forceDryRun: true, budgetMs: 20000,
+    }));
+  }
+  if (action !== 'followups-tick') return res.status(400).json({ error: 'Preview is for signed-in staff.' });
+  return res.status(200).json(await followups.processDue({ budgetMs: 45000 }));
+}
+
 const MESSAGING_ACTIONS = new Set([
   'messaging-tick', 'messaging-status', 'messaging-send', 'messaging-broadcast',
   'unsubscribe', 'twilio-inbound', 'twilio-status', 'resend-webhook',
@@ -311,6 +342,7 @@ module.exports = async function handler(req, res) {
 
   try {
     if (MESSAGING_ACTIONS.has(action)) return await handleMessaging(action, req, res);
+    if (action === 'followups-tick' || action === 'followups-preview') return await handleFollowups(action, req, res);
     if (action === 'calendar') return await handleCalendar(req, res);
     if (action === 'stage-alerts') return await handleStageAlerts(req, res);
     if (action === 'docusign-sync') return await handleDocusignSync(req, res);
@@ -321,7 +353,7 @@ module.exports = async function handler(req, res) {
       if (!(await quickbooks.getConnection())) return res.status(200).json({ skipped: 'QuickBooks not connected' });
       return res.status(200).json(await quickbooks.sync({ force: true }));
     }
-    return res.status(400).json({ error: 'action query param required: calendar, stage-alerts, docusign-sync, or qb-sync' });
+    return res.status(400).json({ error: 'action query param required: calendar, stage-alerts, docusign-sync, qb-sync, or followups-tick' });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

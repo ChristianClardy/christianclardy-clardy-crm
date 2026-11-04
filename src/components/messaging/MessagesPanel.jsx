@@ -19,6 +19,7 @@ const byId = (list) => Array.from(new Map(list.map((x) => [x.id, x])).values());
 export default function MessagesPanel({ leadId, clientId, name, email, phone, stage }) {
   const { can, readOnly } = useRolePermissions();
   const [messages, setMessages] = useState([]);
+  const [followups, setFollowups] = useState([]);
   const [enrollments, setEnrollments] = useState([]);
   const [sequences, setSequences] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -38,6 +39,13 @@ export default function MessagesPanel({ leadId, clientId, name, email, phone, st
     ]);
     const msgs = byId([...ml, ...mc]).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     setMessages(msgs);
+    const ors = [leadId && `lead_id.eq.${leadId}`, clientId && `client_id.eq.${clientId}`].filter(Boolean);
+    if (ors.length) {
+      const { data } = await supabase.from("followup_log").select("id,created_at,channel,status,reason,subject,body,message_id,show_on_timeline")
+        .or(ors.join(",")).eq("show_on_timeline", true).order("created_at", { ascending: true }).limit(200);
+      const linked = new Set(msgs.map((m) => m.id));
+      setFollowups((data || []).filter((row) => row.show_on_timeline !== false && !linked.has(row.message_id)));
+    } else setFollowups([]);
     setEnrollments(byId([...el, ...ec]));
     setSequences(seqs);
     setLoading(false);
@@ -120,18 +128,35 @@ export default function MessagesPanel({ leadId, clientId, name, email, phone, st
       <div className="mt-4 max-h-[520px] space-y-3 overflow-y-auto">
         {loading ? (
           <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-        ) : !messages.length ? (
+        ) : !messages.length && !followups.length ? (
           <p className="text-sm text-slate-500">No emails or texts yet.</p>
-        ) : messages.map((m) => {
+        ) : [...followups.map((row) => ({ ...row, _followup: true })), ...messages].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).map((m) => {
+          if (m._followup) {
+            return (
+              <div key={`f-${m.id}`} className="flex justify-end">
+                <div className="max-w-[85%] rounded-2xl bg-violet-50 px-4 py-3 text-sm text-slate-800">
+                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                    <Zap className="h-3 w-3" />
+                    <span>Follow-up · {m.channel === "todo" ? "To-do" : m.channel === "sms" || m.channel === "rep_sms" ? "Text" : "Email"}</span>
+                    <span>· {m.created_at ? format(new Date(m.created_at), "MMM d, h:mm a") : ""}</span>
+                    <Badge className={`h-4 px-1.5 text-[10px] ${STATUS_STYLE[m.status] || ""}`}>{(m.status || "").replace("_", " ")}</Badge>
+                  </div>
+                  {m.subject && <p className="font-semibold">{m.subject}</p>}
+                  {m.body && <p className="whitespace-pre-wrap">{m.body}</p>}
+                  {m.reason && <p className="mt-1 text-[11px] text-slate-500">{m.reason}</p>}
+                </div>
+              </div>
+            );
+          }
           const inbound = m.direction === "inbound";
           return (
             <div key={m.id} className={`flex ${inbound ? "justify-start" : "justify-end"}`}>
               <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${inbound ? "bg-slate-100 text-slate-800" : m.channel === "email" ? "bg-blue-50 text-slate-800" : "bg-emerald-50 text-slate-800"}`}>
                 <div className="mb-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
                   {m.channel === "email" ? <Mail className="h-3 w-3" /> : <MessageSquare className="h-3 w-3" />}
-                  <span>{inbound ? "From them" : m.sent_by === "automation" ? `Drip: ${seqName[m.sequence_id] || "automation"}` : m.sent_by}</span>
+                  <span>{inbound ? "From them" : m.sent_by?.startsWith("follow-up") ? m.sent_by : m.sent_by === "automation" ? `Drip: ${seqName[m.sequence_id] || "automation"}` : m.sent_by}</span>
                   <span>· {m.created_at ? format(new Date(m.created_at), "MMM d, h:mm a") : ""}</span>
-                  <Badge className={`h-4 px-1.5 text-[10px] ${STATUS_STYLE[m.status] || ""}`}>{m.status}</Badge>
+                  <Badge className={`h-4 px-1.5 text-[10px] ${STATUS_STYLE[m.status] || ""}`}>{(m.status || "").replace("_", " ")}</Badge>
                 </div>
                 {m.subject && <p className="font-semibold">{m.subject}</p>}
                 <p className="whitespace-pre-wrap">{m.body}</p>

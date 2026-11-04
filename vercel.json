@@ -25,6 +25,10 @@
     {
       "path": "/api/cron?action=messaging-tick",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron?action=followups-tick",
+      "schedule": "0 16 * * *"
     }
   ],
   "headers": [
