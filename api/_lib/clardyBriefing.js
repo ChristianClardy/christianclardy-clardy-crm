@@ -41,6 +41,9 @@ An "estimate" becomes a "proposal" once it's sent; there's no separate proposals
 ## Contracts and signing
 Contracts and change orders are sent through DocuSign from the Contracts tab, using contract templates with merge fields. The sales agent signs first and the customer second. Signed PDFs are filed automatically in the project's Files → Contracts as "Signed Contract - <signer> - <date>.pdf".
 
+## Files
+Leads and clients have a Files section before a job exists, with the same categories as a project: site photo, permit, contract, proposal, invoice, important misc, other. Upload, or use attach_document to file a proposal or invoice (a file URL) onto a lead, client, or project. One file is one attachment row. Linking a lead to a client re-links that lead's files onto the client (or onto the client's only open project). Creating a project re-links files still on that client and its leads onto the project. Nothing is copied, and files already on another project stay there.
+
 ## Projects (jobs)
 Project statuses: planning, in_progress, on_hold, completed, cancelled. Each project has a client, a company, a contract value, a project manager and dates.
 - Schedule: the project sheet. Rows have tasks grouped in sections, durations in workdays (Mon–Fri) and finish-to-start dependencies; statuses are Not Started / In Progress / Completed / Blocked / On Hold, and rows can be milestones, need an inspection, or have a booked subcontractor. Calendar, dashboards, alerts and reports all read it.
