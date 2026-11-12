@@ -344,6 +344,20 @@ test('replaces a Drive link in place and refuses to replace a stored file', asyn
   assert.equal(stored.deps.calls.some((call) => call.url.includes('/storage/')), false);
 });
 
+test('the assistant route is an action on the existing upload function', async () => {
+  const handler = require('../upload.js');
+  const res = mockRes();
+  await handler({
+    method: 'POST',
+    url: '/api/assistant-upload',
+    query: { action: 'assistant' },
+    headers: { authorization: 'Bearer nope', 'content-type': 'application/json' },
+    body: {},
+  }, res);
+  assert.equal(res.statusCode, 500);
+  assert.match(res.body.error, /not configured/);
+});
+
 test('accepts a multipart upload with the same storage path and attachment row', async () => {
   const deps = backend();
   const server = http.createServer((req, res) => {

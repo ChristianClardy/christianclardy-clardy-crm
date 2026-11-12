@@ -2,6 +2,8 @@
 
 `POST /api/assistant-upload` lets an external assistant file a document into Clardy.io. The assistant authenticates with its own bearer token. It does not use a staff login, and it never sees the Supabase service role key.
 
+The Hobby plan allows 12 serverless functions, and this app is already at that cap. `vercel.json` rewrites `/api/assistant-upload` to the existing `/api/upload?action=assistant` function. Do not add `api/assistant-upload.js` back as its own file; that 13th function fails the Vercel deploy.
+
 The route uploads the bytes to the public storage bucket `Attachements` at `uploads/{epoch-ms}-{random}.{ext}`, then inserts one `attachments` row. Migration 064 sets `origin_entity_type` / `origin_entity_id` and re-links the row onto the contact or the open project. The response is read back after that, so `entity_type` and `entity_id` are where the file ended up.
 
 The route only writes storage and `attachments`. It does not change a lead, client, or project, so it does not send email or SMS.
