@@ -1,5 +1,6 @@
 import { base44 } from "@/api/base44Client";
 import { LEAD_STAGES, PROSPECT_THRESHOLD_STAGE, WON_STATUS } from "@/lib/leadStages";
+import { carryContactFilesToProject, carryLeadFiles, carryRecordFiles } from "@/lib/carryFiles";
 
 // Deal.stage key the Pipeline board (PipelineView.jsx) uses for a won deal.
 const PIPELINE_WON_STAGE = "Closed Won";
@@ -52,6 +53,15 @@ export async function ensureContactForLead(lead) {
 
   if (lead.linked_contact_id !== client.id) {
     await base44.entities.Lead.update(lead.id, { linked_contact_id: client.id });
+  }
+
+  // Files uploaded on the lead now belong to the contact (or to its only
+  // open project). A failure here must not undo the link — the project page
+  // also reads files that are still on the lead.
+  try {
+    await carryLeadFiles(lead.id, client.id);
+  } catch (err) {
+    console.error("Failed to carry lead files onto the contact:", err?.message || err);
   }
 
   return client;
@@ -180,7 +190,7 @@ export async function ensureProjectForWonJob({ client = null, lead = null, name,
   const lookup = { clientId: client?.id || null, name: projectName };
 
   const existing = await findOpenProject(lookup);
-  if (existing) return existing;
+  if (existing) return carryFilesOntoProject(existing, client, lead, false);
 
   const value = contractValue != null && contractValue !== ""
     ? Number(contractValue)
@@ -196,13 +206,33 @@ export async function ensureProjectForWonJob({ client = null, lead = null, name,
   };
 
   try {
-    return await base44.entities.Project.create(payload);
+    return await carryFilesOntoProject(await base44.entities.Project.create(payload), client, lead, true);
   } catch (firstErr) {
     await new Promise((r) => setTimeout(r, 4000));
     const landed = await findOpenProject(lookup);
-    if (landed) return landed;
-    return await base44.entities.Project.create(payload);
+    if (landed) return carryFilesOntoProject(landed, client, lead, false);
+    return carryFilesOntoProject(await base44.entities.Project.create(payload), client, lead, true);
   }
+}
+
+// A project we just created always receives files still on the contact.
+// An existing project receives them only when it is that contact's only open
+// job — same rule as carry_lead_files — so a second open job doesn't take
+// files that are still shared on the contact.
+async function carryFilesOntoProject(project, client, lead, created) {
+  if (!project?.id) return project;
+  try {
+    if (client?.id) {
+      const projects = await base44.entities.Project.filter({ client_id: client.id }).catch(() => []);
+      const open = (projects || []).filter((p) => !CLOSED_PROJECT_STATUSES.includes(p.status));
+      if (created || open.length === 1) await carryContactFilesToProject(client.id, project.id);
+    } else if (lead?.id) {
+      await carryRecordFiles("lead", lead.id, "project", project.id);
+    }
+  } catch (err) {
+    console.error("Failed to carry files onto project:", err?.message || err);
+  }
+  return project;
 }
 
 /**

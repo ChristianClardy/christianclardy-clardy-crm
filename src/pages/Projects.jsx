@@ -34,7 +34,7 @@ import TimelineChart from "@/components/timeline/TimelineChart";
 import ProjectCalendarView from "@/components/projects/ProjectCalendarView";
 import TemplatePicker from "@/components/projects/TemplatePicker";
 import { getSelectedCompanyScope, subscribeToCompanyScope } from "@/lib/companyScope";
-import { cn } from "@/lib/utils";
+import { carryContactFilesToProject } from "@/lib/carryFiles";
 
 export default function Projects() {
   // Contract values only for roles with money access (as on a project page).
@@ -146,6 +146,13 @@ export default function Projects() {
       sync_locked: true,
     };
     const newProject = await base44.entities.Project.create(data);
+    if (clientId) {
+      try {
+        await carryContactFilesToProject(clientId, newProject.id);
+      } catch (err) {
+        console.error("Failed to carry contact files onto project:", err?.message || err);
+      }
+    }
     
     // If a template is selected, create a project sheet from it
     if (selectedTemplate) {

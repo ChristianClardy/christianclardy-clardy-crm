@@ -10,6 +10,7 @@
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { z } = require('zod');
 const { sbList, sbGetById, sbInsert, sbUpdate } = require('./supabaseAdmin.js');
+const { carryLeadFiles, carryContactFilesToProject } = require('./carryFiles.js');
 
 function textResult(value) {
   return { content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) }] };
@@ -178,7 +179,10 @@ function buildServer() {
   }, async (input) => {
     try {
       const client = await sbInsert('clients', { status: 'active', ...(await withCompany(input)) });
-      if (input.linked_lead_id) await sbUpdate('leads', input.linked_lead_id, { linked_contact_id: client.id });
+      if (input.linked_lead_id) {
+        await sbUpdate('leads', input.linked_lead_id, { linked_contact_id: client.id });
+        await carryLeadFiles(input.linked_lead_id, client.id);
+      }
       return textResult(client);
     } catch (err) { return errorResult(err); }
   });
@@ -333,7 +337,9 @@ function buildServer() {
         const client = await sbGetById('clients', payload.client_id, 'company_id');
         if (client?.company_id) payload.company_id = client.company_id;
       }
-      return textResult(await sbInsert('projects', payload));
+      const project = await sbInsert('projects', payload);
+      if (project?.client_id) await carryContactFilesToProject(project.client_id, project.id);
+      return textResult(project);
     } catch (err) { return errorResult(err); }
   });
 
@@ -601,6 +607,47 @@ function buildServer() {
   }, async ({ company, ...patch }) => {
     try { return textResult(await sbUpdate('company_profiles', await resolveCompanyId(company), patch)); }
     catch (err) { return errorResult(err); }
+  });
+
+  // ── Files ────────────────────────────────────────────────────────────────
+  const FILE_CATEGORIES = ['photo', 'permit', 'contract', 'proposal', 'invoice', 'misc', 'other'];
+  server.registerTool('attach_document', {
+    description: "File a document onto a lead, client, or project so it shows in that record's Files section. Use this for proposals and invoices (category proposal or invoice) as well as contracts, permits and photos. Pass exactly one of lead_id, client_id, or project_id, plus a URL the app can open. The row is re-linked onto the project when the contact becomes a job — it is not copied.",
+    inputSchema: {
+      filename: z.string(),
+      url: z.string().describe('Public URL of the file'),
+      lead_id: z.string().optional(),
+      client_id: z.string().optional(),
+      project_id: z.string().optional(),
+      category: z.enum(FILE_CATEGORIES).optional().describe('Defaults to other. Use proposal or invoice for those documents.'),
+      file_type: z.string().optional().describe('MIME type, e.g. application/pdf'),
+    },
+    annotations: { destructiveHint: false },
+  }, async ({ filename, url, lead_id, client_id, project_id, category, file_type }) => {
+    try {
+      const targets = [lead_id, client_id, project_id].filter(Boolean);
+      if (targets.length !== 1) throw new Error('Pass exactly one of lead_id, client_id, or project_id.');
+      const entity_type = lead_id ? 'lead' : client_id ? 'client' : 'project';
+      const entity_id = lead_id || client_id || project_id;
+      const row = await sbInsert('attachments', {
+        entity_type,
+        entity_id,
+        filename,
+        url,
+        category: category || 'other',
+        uploaded_by: 'Assistant',
+        ...(file_type ? { file_type } : {}),
+      });
+      if (entity_type === 'lead') {
+        const lead = await sbGetById('leads', entity_id, 'linked_contact_id');
+        if (lead?.linked_contact_id) await carryLeadFiles(entity_id, lead.linked_contact_id);
+      } else if (entity_type === 'client') {
+        const projects = await sbList('projects', { select: 'id,status', filters: { client_id: `eq.${entity_id}` }, limit: 100 });
+        const open = projects.filter((project) => ['planning', 'in_progress', 'on_hold'].includes(project.status));
+        if (open.length === 1) await carryContactFilesToProject(entity_id, open[0].id);
+      }
+      return textResult(await sbGetById('attachments', row.id) || row);
+    } catch (err) { return errorResult(err); }
   });
 
   return server;

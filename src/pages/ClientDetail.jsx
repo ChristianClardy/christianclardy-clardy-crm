@@ -45,6 +45,7 @@ import ClientWorkflowControl from "@/components/clients/ClientWorkflowControl";
 import AppointmentsPanel from "@/components/scheduling/AppointmentsPanel";
 import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
 import ContactHistoryPanel from "@/components/crm/ContactHistoryPanel";
+import ClientFiles from "@/components/files/ClientFiles";
 import MessagesPanel from "@/components/messaging/MessagesPanel";
 import CustomerPortalDialog from "@/components/clients/CustomerPortalDialog";
 import EraseDataDialog from "@/components/privacy/EraseDataDialog";
@@ -274,6 +275,8 @@ export default function ClientDetail() {
           </div>
         )}
       </div>
+
+      <ClientFiles clientId={clientId} linkedLeadId={client.linked_lead_id || ""} />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <AppointmentsPanel title="Appointments" linkedClientId={clientId} defaultLocation={client.address || ""} />

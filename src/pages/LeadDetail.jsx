@@ -9,6 +9,7 @@ import LeadFormDialog from "@/components/crm/LeadFormDialog";
 import ContractsPanel from "@/components/crm/ContractsPanel";
 import LeadFollowUpPanel from "@/components/crm/LeadFollowUpPanel";
 import ContactHistoryPanel from "@/components/crm/ContactHistoryPanel";
+import LeadFiles from "@/components/files/LeadFiles";
 import MessagesPanel from "@/components/messaging/MessagesPanel";
 import NextStepsPanel from "@/components/scheduling/NextStepsPanel";
 import AppointmentsPanel from "@/components/scheduling/AppointmentsPanel";
@@ -315,6 +316,8 @@ export default function LeadDetail() {
           </div>
         </div>
       )}
+
+      <LeadFiles lead={lead} />
 
       <AppointmentsPanel
         title="Appointments"
