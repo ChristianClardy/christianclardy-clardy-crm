@@ -8,6 +8,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { ORG_ISOLATED_TABLES, tenantIsolationOn } from '@/lib/tenantCatalog';
 import { getSelectedCompanyScope } from '@/lib/companyScope';
 import { apiFetch } from '@/lib/apiFetch';
 import { READ_ONLY_MESSAGE, blocksWrite, isReadOnly } from '@/lib/readOnly';
@@ -250,6 +251,10 @@ function createEntity(tableName) {
   const isGlobal = GLOBAL_TABLES.has(tableName);
   const isOrgScoped = ORG_SCOPED_TABLES.has(tableName);
   const needsOrg = () => _currentOrgId && isOrgScoped;
+  // Extra tables are filtered only after migration 065. Before that the
+  // rpc is missing and queries stay exactly as they are today.
+  const isolated = async () => _currentOrgId && ORG_ISOLATED_TABLES.has(tableName) && !isOrgScoped && await tenantIsolationOn();
+  const scopeOrg = async (query) => ((needsOrg() || await isolated()) ? query.eq('organization_id', _currentOrgId) : query);
   const warnIfNoOrg = (op) => {
     if (!isGlobal && !_currentOrgId) {
       console.warn(`[base44] ${op} on "${tableName}" called before org loaded — results may be unscoped`);
@@ -261,9 +266,10 @@ function createEntity(tableName) {
     async list(sortField, limit) {
       warnIfNoOrg('list');
       const hidden = await hiddenCompanyIds(tableName);
+      const useOrg = needsOrg() || await isolated();
       const buildQuery = () => {
         let query = excludeCompanies(supabase.from(tableName).select('*'), hidden);
-        if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
+        if (useOrg) query = query.eq('organization_id', _currentOrgId);
         const sort = parseSortField(sortField);
         if (sort) query = query.order(sort.field, { ascending: sort.ascending });
         // Stable tiebreaker so pages never skip or repeat rows.
@@ -293,7 +299,7 @@ function createEntity(tableName) {
     async filter(filterObj, sortField, limit) {
       warnIfNoOrg('filter');
       let query = excludeCompanies(supabase.from(tableName).select('*'), await hiddenCompanyIds(tableName));
-      if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
+      query = await scopeOrg(query);
       for (const [key, val] of Object.entries(filterObj ?? {})) {
         if (val !== undefined && val !== null && val !== "null" && val !== "undefined") query = query.eq(key, val);
       }
@@ -307,8 +313,7 @@ function createEntity(tableName) {
 
     /** get(id) → single record */
     async get(id) {
-      let query = supabase.from(tableName).select('*').eq('id', id);
-      if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
+      let query = await scopeOrg(supabase.from(tableName).select('*').eq('id', id));
       const { data, error } = await withRetry(() => query.single());
       if (error) reportError('get', tableName, error);
       return mapDates(data);
@@ -319,7 +324,7 @@ function createEntity(tableName) {
       guardReadOnly('create', tableName);
       const payload = cleanForWrite(record);
       // Auto-inject organization_id so every new record is scoped to the active org
-      if (needsOrg() && !payload.organization_id) {
+      if ((needsOrg() || await isolated()) && !payload.organization_id) {
         payload.organization_id = _currentOrgId;
       }
       // Auto-tag with the active company scope so new records aren't orphaned —
@@ -367,16 +372,14 @@ function createEntity(tableName) {
     async update(id, record) {
       guardReadOnly('update', tableName);
       const payload = cleanForWrite(record);
-      let query = supabase.from(tableName).update(payload).eq('id', id);
-      if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
+      let query = await scopeOrg(supabase.from(tableName).update(payload).eq('id', id));
       let { error } = await withRetry(() => query);
       // If a column is missing from the schema cache, strip optional fields and retry once
       if (error?.message?.includes('schema cache') || error?.message?.includes('Could not find')) {
         const optional = TABLE_OPTIONAL_FIELDS[tableName];
         if (optional) {
           const stripped = Object.fromEntries(Object.entries(payload).filter(([k]) => !optional.has(k)));
-          let q2 = supabase.from(tableName).update(stripped).eq('id', id);
-          if (needsOrg()) q2 = q2.eq('organization_id', _currentOrgId);
+          let q2 = await scopeOrg(supabase.from(tableName).update(stripped).eq('id', id));
           ({ error } = await q2);
         }
       }
@@ -390,8 +393,7 @@ function createEntity(tableName) {
     /** delete(id) */
     async delete(id) {
       guardReadOnly('delete', tableName);
-      let query = supabase.from(tableName).delete().eq('id', id);
-      if (needsOrg()) query = query.eq('organization_id', _currentOrgId);
+      let query = await scopeOrg(supabase.from(tableName).delete().eq('id', id));
       const { error } = await withRetry(() => query);
       if (error) reportError('delete', tableName, error);
     },

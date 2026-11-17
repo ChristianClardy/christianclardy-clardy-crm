@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { tenantDemo, PREVIEW_USER } from '@/lib/tenantPreview';
 
 const AuthContext = createContext();
 
@@ -10,11 +11,17 @@ export const AuthProvider = ({ children }) => {
   const [authError, setAuthError]                 = useState(null);
 
   useEffect(() => {
+    if (tenantDemo()) {
+      setUser(PREVIEW_USER);
+      setIsAuthenticated(true);
+      setIsLoadingAuth(false);
+      return;
+    }
     // Check active session on mount
     supabase.auth.getSession().then(({ data: { session } }) => {
       handleSession(session);
       setIsLoadingAuth(false);
-    });
+    }).catch(() => setIsLoadingAuth(false));
 
     // Listen for auth changes (login, logout, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {

@@ -35,6 +35,7 @@
 const crypto = require('crypto');
 const { getStaffCaller, READ_ONLY_MESSAGE } = require('./_lib/staffAuth.js');
 const privacy = require('./_lib/privacy.js');
+const billing = require('./_lib/billing.js');
 
 const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -70,10 +71,21 @@ async function insertRow(table, row) {
   }
 }
 
-async function grantStaff(userId, email) {
-  const orgId = await rpc('staff_org_id');
+async function orgIdForUser(userId) {
+  if (!userId) return null;
+  const rows = await fetch(
+    `${SUPABASE_URL}/rest/v1/organization_members?select=organization_id,is_owner,status&user_id=eq.${encodeURIComponent(userId)}`,
+    { headers: adminHeaders() }
+  ).then((r) => r.json());
+  const active = (Array.isArray(rows) ? rows : []).filter((r) => (r.status || 'active') === 'active');
+  active.sort((a, b) => Number(b.is_owner === true) - Number(a.is_owner === true));
+  return active[0]?.organization_id || null;
+}
+
+async function grantStaff(userId, email, orgId) {
+  const target = orgId || await rpc('staff_org_id');
   const existing = await fetch(
-    `${SUPABASE_URL}/rest/v1/organization_members?select=id&user_id=eq.${userId}&organization_id=eq.${orgId}`,
+    `${SUPABASE_URL}/rest/v1/organization_members?select=id&user_id=eq.${userId}&organization_id=eq.${target}`,
     { headers: adminHeaders() }
   ).then((r) => r.json());
   if (existing.length) {
@@ -85,7 +97,7 @@ async function grantStaff(userId, email) {
     return;
   }
   await insertRow('organization_members', {
-    organization_id: orgId,
+    organization_id: target,
     user_id: userId,
     role: 'user',
     status: 'active',
@@ -188,12 +200,7 @@ async function exists(table, id) {
 }
 
 async function isStaffUser(userId) {
-  const orgId = await rpc('staff_org_id');
-  const rows = await fetch(
-    `${SUPABASE_URL}/rest/v1/organization_members?select=id&user_id=eq.${userId}&organization_id=eq.${orgId}&or=(status.eq.active,status.is.null)`,
-    { headers: adminHeaders() }
-  ).then((r) => r.json());
-  return Array.isArray(rows) && rows.length > 0;
+  return !!(await orgIdForUser(userId)) && !(await getPortalLogin(userId));
 }
 
 // Re-inviting an email that already has a login: bring that login back
@@ -348,16 +355,10 @@ async function handleTextLink(req, res, caller) {
 // Active member of the staff org and not a portal-only login, i.e. is_staff()
 // for a given user (041_customer_portal.sql).
 async function isStaffUser(userId) {
-  const orgId = await rpc('staff_org_id');
-  const rows = await fetch(
-    `${SUPABASE_URL}/rest/v1/organization_members?select=status&user_id=eq.${userId}&organization_id=eq.${orgId}`,
-    { headers: adminHeaders() },
-  ).then((r) => r.json());
-  const active = Array.isArray(rows) && rows.some((r) => (r.status || 'active') === 'active');
-  return active && !(await getPortalLogin(userId));
+  return !!(await orgIdForUser(userId)) && !(await getPortalLogin(userId));
 }
 
-async function handleStaffLink(req, res) {
+async function handleStaffLink(req, res, caller) {
   const { email: rawEmail, full_name } = req.body || {};
   const email = String(rawEmail || '').trim().toLowerCase();
   if (!email) return res.status(400).json({ error: 'Email is required.' });
@@ -374,7 +375,7 @@ async function handleStaffLink(req, res) {
     const userId = created?.id || created?.user?.id;
     if (!userId) throw new Error('Login created but no user id came back; access was not granted.');
     try {
-      await grantStaff(userId, email);
+      await grantStaff(userId, email, await orgIdForUser(caller.id));
       await requirePassword(userId);
     } catch (err) {
       await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, { method: 'DELETE', headers: adminHeaders() });
@@ -394,7 +395,7 @@ async function handleStaffLink(req, res) {
   } catch (err) {
     return res.status(400).json({ error: err.message });
   }
-  await grantStaff(existingId, email);
+  await grantStaff(existingId, email, await orgIdForUser(caller.id));
   await requirePassword(existingId);
   return res.status(200).json({ url: joinUrl(req, existingId, { staff: true }), days: JOIN_LINK_DAYS, existing: true });
 }
@@ -452,6 +453,49 @@ async function handleRedeem(req, res) {
   return res.status(200).json({ token_hash: tokenHash, email: user.email, full_name: portalUser.full_name || null, portal: login.kind });
 }
 
+async function handleBilling(req, res, action) {
+  if (action === 'billing-webhook') {
+    const status = billing.publicStatus();
+    if (!status.configured && status.mode !== 'test') {
+      return res.status(501).json({ error: 'stripe_not_configured', missing: status.missing });
+    }
+    const raw = typeof req.rawBody === 'string' ? req.rawBody : null;
+    if (!raw) {
+      return res.status(501).json({
+        error: 'stripe_webhook_needs_raw_body',
+        message: 'Signature checks need the raw request body. Vercel currently parses JSON before this function runs.',
+      });
+    }
+    const ok = billing.verifyStripeSignature(raw, req.headers['stripe-signature'], process.env.STRIPE_WEBHOOK_SECRET);
+    if (!ok) return res.status(400).json({ error: 'invalid_signature' });
+    const update = billing.subscriptionUpdateFromEvent(JSON.parse(raw));
+    if (!update) return res.status(200).json({ received: true, ignored: true });
+    await rpc('apply_subscription_status', {
+      p_org: update.orgId,
+      p_status: update.status,
+      p_stripe_customer: update.stripeCustomer,
+      p_stripe_subscription: update.stripeSubscription,
+      p_period_end: update.periodEnd,
+    });
+    return res.status(200).json({ received: true });
+  }
+
+  const caller = await getStaffCaller(req);
+  if (!caller) return res.status(401).json({ error: 'Sign in with a staff account to do this.' });
+  if (action === 'billing-status') return res.status(200).json(billing.publicStatus());
+
+  const orgId = await orgIdForUser(caller.id);
+  if (!orgId) return res.status(400).json({ error: 'No workspace for this login.' });
+  const origin = `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}`;
+  const result = await billing.createCheckout({
+    orgId,
+    planKey: (req.body || {}).plan_key,
+    origin,
+    customerEmail: caller.email,
+  });
+  return res.status(result.status).json(result.body);
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).send('Method Not Allowed');
@@ -464,6 +508,14 @@ module.exports = async function handler(req, res) {
   }
 
   const action = req.query?.action;
+  if (action === 'billing-status' || action === 'billing-checkout' || action === 'billing-webhook') {
+    try {
+      await handleBilling(req, res, action);
+    } catch (err) {
+      res.status(err.status || 500).json({ error: err.message });
+    }
+    return;
+  }
   if (action === 'redeem') {
     try {
       await handleRedeem(req, res);
@@ -500,7 +552,7 @@ module.exports = async function handler(req, res) {
       const caller = await getStaffCaller(req);
       if (!caller) return res.status(401).json({ error: 'Only signed-in staff can send invites.' });
       if (caller.isViewer) return res.status(403).json({ error: READ_ONLY_MESSAGE });
-      await handleStaffLink(req, res);
+      await handleStaffLink(req, res, caller);
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -560,7 +612,7 @@ module.exports = async function handler(req, res) {
           res.status(400).json({ error: err.message });
           return;
         }
-        await grantStaff(existingId, email);
+        await grantStaff(existingId, email, await orgIdForUser(caller.id));
         await requirePassword(existingId);
         const emailed = await emailSignInLink(email);
         res.status(200).json({ success: true, existing: true, emailed });
@@ -588,7 +640,7 @@ module.exports = async function handler(req, res) {
       if (kind) {
         await insertRow(...portalRow(kind, body, userId, email, caller));
       } else {
-        await grantStaff(userId, email);
+        await grantStaff(userId, email, await orgIdForUser(caller.id));
         await requirePassword(userId);
       }
     } catch (linkErr) {

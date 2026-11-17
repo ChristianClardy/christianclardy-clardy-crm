@@ -30,6 +30,7 @@ import {
   Eye,
   LogOut,
   Send,
+  Landmark,
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { useState } from "react";
@@ -44,12 +45,13 @@ import { useTheme } from "@/lib/ThemeContext";
 import { useTenant } from "@/lib/TenantContext";
 import { useRolePermissions, exitPreview } from "@/lib/useRolePermissions";
 import { ROLES } from "@/lib/permissions";
+import { ROLE_MODULE_TENANT } from "@/lib/tenantCatalog";
 
 export default function Layout({ children, currentPageName }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
-  const { organization } = useTenant();
+  const { organization, moduleEnabled, isPlatformAdmin } = useTenant();
   const { user, logout } = useAuth();
 
   const crmPages = new Set(["CRM", "Pipeline", "CRMContacts", "CRMCompanies", "CRMActivities", "CRMDashboard"]);
@@ -60,7 +62,11 @@ export default function Layout({ children, currentPageName }) {
   // lock and opens the "no access" page (ModuleGate).
   const { can, loading: permsLoading, previewing, readOnly } = useRolePermissions();
   const previewLabel = previewing ? ROLES.find((r) => r.key === previewing)?.label || previewing : null;
-  const locked = (item) => !!item.module && !permsLoading && !can(item.module);
+  const locked = (item) => {
+    const tenantKey = ROLE_MODULE_TENANT[item.module];
+    if (tenantKey && !moduleEnabled(tenantKey)) return true;
+    return !!item.module && !permsLoading && !can(item.module);
+  };
   const LockMark = ({ item }) => (locked(item) ? <Lock className="w-3.5 h-3.5 ml-auto opacity-70" aria-label="No access" /> : null);
 
   const navigation = [
@@ -93,6 +99,7 @@ export default function Layout({ children, currentPageName }) {
     { name: "Material Library", href: createPageUrl("MaterialLibrary"), icon: Package },
     { name: "Workspace Items", href: createPageUrl("WorkplaceItems"), icon: Wrench, module: "workspace_items" },
     { name: "Settings", href: createPageUrl("Settings"), icon: ShieldCheck, module: "settings" },
+    ...(isPlatformAdmin ? [{ name: "Workspaces", href: createPageUrl("Platform"), icon: Landmark }] : []),
   ];
 
   const isActive = (href) => {

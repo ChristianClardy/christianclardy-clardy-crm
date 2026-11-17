@@ -3,9 +3,9 @@ import { HardHat, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 export default function Login() {
-  // No sign-up: accounts only come from invites (Settings, or a sub's
-  // Subcontractor Portal invite), and public sign-ups are off in Supabase.
-  const [mode, setMode]         = useState('login');   // 'login' | 'reset' | 'update_password'
+  // 'signup' creates a login, then Onboarding creates the workspace.
+  // Supabase has to allow email sign-ups or this shows their error.
+  const [mode, setMode]         = useState('login');   // 'login' | 'signup' | 'reset' | 'update_password'
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
@@ -34,6 +34,21 @@ export default function Login() {
       setMessage({ type: 'error', text: error.message });
     } else {
       window.location.href = '/';
+    }
+    setLoading(false);
+  };
+
+  const handleSignup = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    clearMessage();
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) {
+      setMessage({ type: 'error', text: error.message });
+    } else if (data.session) {
+      window.location.href = '/';
+    } else {
+      setMessage({ type: 'success', text: 'Check your email to confirm the account, then sign in to name your workspace.' });
     }
     setLoading(false);
   };
@@ -68,6 +83,7 @@ export default function Login() {
   };
 
   const submit = mode === 'login'            ? handleLogin
+               : mode === 'signup'           ? handleSignup
                : mode === 'update_password'  ? handleUpdatePassword
                :                               handleReset;
 
@@ -86,7 +102,7 @@ export default function Login() {
         {/* Card */}
         <div className="rounded-2xl p-8 shadow-lg" style={{ backgroundColor: '#fff', border: '1px solid #ddd5c8' }}>
           <h2 className="text-lg font-semibold mb-6" style={{ color: '#3d3530' }}>
-            {mode === 'login' ? 'Sign in' : mode === 'update_password' ? 'Set new password' : 'Reset password'}
+            {mode === 'login' ? 'Sign in' : mode === 'signup' ? 'Create account' : mode === 'update_password' ? 'Set new password' : 'Reset password'}
           </h2>
 
           {message && (
@@ -160,7 +176,7 @@ export default function Login() {
               style={{ backgroundColor: '#3d3530', color: '#f5f0eb', opacity: loading ? 0.7 : 1 }}
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {mode === 'login' ? 'Sign in' : mode === 'update_password' ? 'Update password' : 'Send reset link'}
+              {mode === 'login' ? 'Sign in' : mode === 'signup' ? 'Create account' : mode === 'update_password' ? 'Update password' : 'Send reset link'}
             </button>
           </form>
 
@@ -173,8 +189,20 @@ export default function Login() {
                     Forgot password?
                   </button>
                 </p>
-                <p className="text-xs">Need an account? Ask your Principle Outdoor Living admin for an invite.</p>
+                <p className="text-xs">Need an account? Ask your admin for an invite.</p>
+                <p className="text-xs">
+                  <button type="button" onClick={() => { setMode('signup'); clearMessage(); }} className="hover:underline" style={{ color: '#b5965a' }}>
+                    Start your own workspace
+                  </button>
+                </p>
               </>
+            )}
+            {mode === 'signup' && (
+              <p>
+                <button type="button" onClick={() => { setMode('login'); clearMessage(); }} className="hover:underline" style={{ color: '#a89e96' }}>
+                  Already have an account? Sign in
+                </button>
+              </p>
             )}
             {mode === 'reset' && (
               <p>
