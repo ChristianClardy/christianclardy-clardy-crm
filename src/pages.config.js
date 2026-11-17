@@ -62,6 +62,7 @@ import MaterialLibrary from './pages/MaterialLibrary';
 import Municipalities from './pages/Municipalities';
 import MyTodos from './pages/MyTodos';
 import OperationsDashboard from './pages/OperationsDashboard';
+import Platform from './pages/Platform';
 import Payments from './pages/Payments';
 import ProjectDetail from './pages/ProjectDetail';
 import ProjectManagerDashboard from './pages/ProjectManagerDashboard';
@@ -92,6 +93,7 @@ export const PAGES = {
     "MyTodos": MyTodos,
     "OperationsDashboard": OperationsDashboard,
     "Payments": Payments,
+    "Platform": Platform,
     "ProjectDetail": ProjectDetail,
     "ProjectManagerDashboard": ProjectManagerDashboard,
     "Projects": Projects,

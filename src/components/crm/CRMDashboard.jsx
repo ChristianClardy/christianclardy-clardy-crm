@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCompanyScope, scopeFilter } from "@/lib/companyScope";
-import { LEAD_STAGES, DEAD_LEAD_STATUSES } from "@/lib/leadStages";
+import { DEAD_LEAD_STATUSES, usePipelineStages } from "@/lib/leadStages";
 
 const WON_STATUS = "Contract Signed/Deposit Collected (Won)";
 const LOST_STATUS = "Lost/No Decision";
@@ -71,15 +71,18 @@ function MetricCard({ icon: Icon, label, value, sub, accent }) {
 // ─── Pipeline by stage ─────────────────────────────────────────────────────────
 
 function PipelineChart({ leads }) {
+  const stageNames = usePipelineStages();
   const stages = useMemo(() => {
-    const grouped = Object.fromEntries(LEAD_STAGES.map((stage) => [stage, { count: 0, value: 0 }]));
+    const grouped = Object.fromEntries(stageNames.map((stage) => [stage, { count: 0, value: 0 }]));
+    const fallback = grouped["New Lead"] ? "New Lead" : stageNames[0];
     for (const lead of leads) {
-      const stage = grouped[lead.status] ? lead.status : "New Lead";
+      const stage = grouped[lead.status] ? lead.status : fallback;
+      if (!stage || !grouped[stage]) continue;
       grouped[stage].count++;
       grouped[stage].value += Number(lead.estimated_budget) || 0;
     }
-    return LEAD_STAGES.map((stage) => ({ stage, ...grouped[stage] }));
-  }, [leads]);
+    return stageNames.map((stage) => ({ stage, ...(grouped[stage] || { count: 0, value: 0 }) }));
+  }, [leads, stageNames]);
 
   const maxCount = Math.max(...stages.map((s) => s.count), 1);
 

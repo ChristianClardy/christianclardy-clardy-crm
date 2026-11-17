@@ -24,28 +24,17 @@ export default function Onboarding() {
     setLoading(true);
     setError("");
     try {
-      const slug = orgName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-      const { data: org, error: orgErr } = await supabase
-        .from("organizations")
-        .insert({ name: orgName.trim(), slug: `${slug}-${Date.now()}` })
-        .select()
-        .single();
-      if (orgErr) throw orgErr;
-
-      const { error: memErr } = await supabase
-        .from("organization_members")
-        .insert({ organization_id: org.id, user_id: user.id, role: "admin", status: "active" });
-      if (memErr) throw memErr;
-
-      // Create company profile (always; optional fields only included if filled)
-      const profilePayload = { name: orgName.trim() };
+      const profilePayload = {};
       if (profile.phone.trim())          profilePayload.phone          = profile.phone.trim();
       if (profile.email.trim())          profilePayload.email          = profile.email.trim();
       if (profile.address.trim())        profilePayload.address        = profile.address.trim();
       if (profile.website.trim())        profilePayload.website        = profile.website.trim();
       if (profile.license_number.trim()) profilePayload.license_number = profile.license_number.trim();
-      await supabase.from("company_profiles").insert(profilePayload);
-
+      const { error: orgErr } = await supabase.rpc("create_tenant", {
+        p_name: orgName.trim(),
+        p_profile: profilePayload,
+      });
+      if (orgErr) throw orgErr;
       await reload();
     } catch (err) {
       setError(err.message || "Failed to create organization.");
@@ -60,29 +49,8 @@ export default function Onboarding() {
     setLoading(true);
     setError("");
     try {
-      // Look up invitation
-      const { data: inv, error: invErr } = await supabase
-        .from("organization_invitations")
-        .select("*")
-        .eq("token", inviteToken.trim())
-        .is("accepted_at", null)
-        .gt("expires_at", new Date().toISOString())
-        .maybeSingle();
-
-      if (invErr) throw invErr;
-      if (!inv) throw new Error("Invite not found or expired. Ask your admin to resend.");
-
-      // Accept invitation
-      const { error: memErr } = await supabase
-        .from("organization_members")
-        .insert({ organization_id: inv.organization_id, user_id: user.id, role: inv.role, status: "active" });
-      if (memErr && !memErr.message.includes("duplicate")) throw memErr;
-
-      await supabase
-        .from("organization_invitations")
-        .update({ accepted_at: new Date().toISOString() })
-        .eq("id", inv.id);
-
+      const { error: joinErr } = await supabase.rpc("accept_org_invite", { p_token: inviteToken.trim() });
+      if (joinErr) throw joinErr;
       await reload();
     } catch (err) {
       setError(err.message || "Failed to join organization.");

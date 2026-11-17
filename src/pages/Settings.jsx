@@ -39,6 +39,11 @@ import { loadDocuSignProfile } from "@/lib/docusignProfile";
 import { ROLES, MODULE_GROUPS, DEFAULT_PERMISSIONS } from "@/lib/permissions";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { fetchMyCompanyAccess, fetchCompanyAssignments, saveCompanyAssignments } from "@/lib/companyAccess";
+import WorkspaceTab from "@/components/settings/WorkspaceTab";
+import BillingTab from "@/components/settings/BillingTab";
+import { tenantIsolationOn } from "@/lib/tenantCatalog";
+import { tenantDemo } from "@/lib/tenantPreview";
+import { Blocks, CreditCard } from "lucide-react";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -1333,6 +1338,8 @@ const TAB_GROUPS = [
     label: "Company",
     tabs: [
       { key: "organization", label: "Organization", icon: Building2, description: "Organization details, members, and pending invitations." },
+      { key: "workspace", label: "Workspace", icon: Blocks, description: "Modules, branding, pipeline stages, custom fields, tax, and price lists for this company." },
+      { key: "billing", label: "Billing", icon: CreditCard, description: "Plan and subscription. Job payments are separate and stay the record of truth." },
       { key: "companies",    label: "Companies",    icon: Building2, description: "The companies you run work under, used by the sidebar company switcher." },
       { key: "appearance",   label: "Appearance",   icon: Palette,   description: "Color scheme and light / dark mode." },
     ],
@@ -1356,14 +1363,18 @@ const TAB_GROUPS = [
 
 const ALL_TABS = TAB_GROUPS.flatMap((g) => g.tabs);
 const DEFAULT_TAB = "teamSubs";
+const TENANT_TABS = new Set(["workspace", "billing"]);
 
-const tabFromUrl = () => {
+const tabFromUrl = (ready) => {
   const t = new URLSearchParams(window.location.search).get("tab");
+  if (!ready && TENANT_TABS.has(t)) return DEFAULT_TAB;
   return ALL_TABS.some((x) => x.key === t) ? t : DEFAULT_TAB;
 };
 
 const TAB_CONTENT = {
   organization:   OrganizationTab,
+  workspace:      WorkspaceTab,
+  billing:        BillingTab,
   teamSubs:       TeamSubsTab,
   jobAssignments: JobAssignmentsTab,
   permissions:    PermissionsTab,
@@ -1378,16 +1389,25 @@ const TAB_CONTENT = {
 };
 
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState(tabFromUrl);
+  const [tenantReady, setTenantReady] = useState(() => !!tenantDemo());
+  const [activeTab, setActiveTab] = useState(() => tabFromUrl(!!tenantDemo()));
   // Bumped on every navigation so a tab re-reads its own URL params (e.g.
   // "?people=subcontractors") when a link jumps to it again.
   const [navKey, setNavKey] = useState(0);
 
   useEffect(() => {
-    const onPop = () => { setActiveTab(tabFromUrl()); setNavKey((n) => n + 1); };
+    if (tenantDemo()) return;
+    tenantIsolationOn().then((ready) => {
+      setTenantReady(ready);
+      if (!ready) setActiveTab((current) => TENANT_TABS.has(current) ? DEFAULT_TAB : current);
+    });
+  }, []);
+
+  useEffect(() => {
+    const onPop = () => { setActiveTab(tabFromUrl(tenantReady)); setNavKey((n) => n + 1); };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
-  }, []);
+  }, [tenantReady]);
 
   const select = (key) => {
     if (key === activeTab) return;
@@ -1398,6 +1418,10 @@ export default function Settings() {
     window.scrollTo({ top: 0 });
   };
 
+  const visibleGroups = TAB_GROUPS.map((g) => ({
+    ...g,
+    tabs: g.tabs.filter((t) => tenantReady || !TENANT_TABS.has(t.key)),
+  })).filter((g) => g.tabs.length);
   const current = ALL_TABS.find((t) => t.key === activeTab);
   const Content = TAB_CONTENT[activeTab];
 
@@ -1415,7 +1439,7 @@ export default function Settings() {
           onChange={(e) => select(e.target.value)}
           className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800"
         >
-          {TAB_GROUPS.map((g) => (
+          {visibleGroups.map((g) => (
             <optgroup key={g.label} label={g.label}>
               {g.tabs.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
             </optgroup>
@@ -1426,7 +1450,7 @@ export default function Settings() {
       <div className="flex gap-6">
         <nav className="hidden lg:block w-56 shrink-0">
           <div className="sticky top-6 space-y-5">
-            {TAB_GROUPS.map((g) => (
+            {visibleGroups.map((g) => (
               <div key={g.label}>
                 <p className="px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{g.label}</p>
                 <div className="space-y-0.5">

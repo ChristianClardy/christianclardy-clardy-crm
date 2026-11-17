@@ -43,6 +43,7 @@ import SubPortalLayout from './components/app/SubPortalLayout';
 import ModuleGate from './components/app/ModuleGate';
 import ProjectReport from './pages/ProjectReport';
 import { usePortalUser } from '@/lib/portalUser';
+import { tenantDemo } from '@/lib/tenantPreview';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -79,11 +80,14 @@ const LEGAL_PAGES = {
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, user } = useAuth();
-  const { loading: tenantLoading, needsOnboarding } = useTenant();
+  const { loading: tenantLoading, needsOnboarding, accessRevoked } = useTenant();
   const { loading: portalLoading, portalUser, pmUser, customerUser, isStaff } = usePortalUser(isAuthenticated ? user?.id : null);
 
   const LegalPage = LEGAL_PAGES[window.location.pathname.replace(/\/$/, '').toLowerCase()];
   if (LegalPage) return <LegalPage />;
+
+  // Screenshot harness only. Production never calls installTenantDemo().
+  if (tenantDemo()?.screen === 'onboarding') return <Onboarding />;
 
   // Invite link clicked — show password-set screen regardless of auth state
   if (isInviteFlow) return <SetPassword />;
@@ -141,13 +145,14 @@ const AuthenticatedApp = () => {
     );
   }
 
-  // Signed up on their own instead of being invited — no access to anything.
-  if (!isStaff) return <NoAccess />;
-
-  // Authenticated but no org — show onboarding
+  // A new signup has no organization yet. Create one before the staff check,
+  // which is false until that membership exists.
   if (needsOnboarding) {
     return <Onboarding />;
   }
+
+  // Signed up on their own instead of being invited — no access to anything.
+  if (!isStaff || accessRevoked) return <NoAccess />;
 
   // Render the main app
   return (

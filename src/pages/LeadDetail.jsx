@@ -16,10 +16,8 @@ import AppointmentsPanel from "@/components/scheduling/AppointmentsPanel";
 import LostReasonDialog from "@/components/crm/LostReasonDialog";
 import DesignerAssignmentDialog from "@/components/crm/DesignerAssignmentDialog";
 import { promoteLeadToProspect, setLeadStatus, markLeadLost, reactivateLead, assignDesignerAndSetInDesign, updateLeadDesigner } from "@/lib/leadConversion";
-import { LEAD_STAGES, PROSPECT_THRESHOLD_STAGE } from "@/lib/leadStages";
+import { LEAD_STAGES, PROSPECT_THRESHOLD_STAGE, usePipelineStages } from "@/lib/leadStages";
 import { useRolePermissions } from "@/lib/useRolePermissions";
-
-const funnelSteps = LEAD_STAGES;
 
 export default function LeadDetail() {
   const navigate = useNavigate();
@@ -27,6 +25,7 @@ export default function LeadDetail() {
   const leadId = urlParams.get("id");
   const [lead, setLead] = useState(null);
   const { can } = useRolePermissions();
+  const funnelSteps = usePipelineStages();
   const canContracts = can("contracts");
   const [followUps, setFollowUps] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -86,7 +85,7 @@ export default function LeadDetail() {
     };
   }, [leadId]);
 
-  const activeStepIndex = useMemo(() => Math.max(funnelSteps.indexOf(lead?.status || "New Lead"), 0), [lead]);
+  const activeStepIndex = useMemo(() => Math.max(funnelSteps.indexOf(lead?.status || "New Lead"), 0), [lead, funnelSteps]);
 
   // Once a lead has reached In Design (or moved further along), the designer
   // can be assigned or changed directly — not just at the moment it first
