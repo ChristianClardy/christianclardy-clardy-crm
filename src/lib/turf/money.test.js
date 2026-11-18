@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { eeMidlandLines, eeMidlandOrder } from "./fixtures.js";
-import { orderTotals } from "./money.js";
+import { orderTotals, paymentAppliesToOrder } from "./money.js";
 
 test("Midland draft invoice totals flag unpriced lines", () => {
   const totals = orderTotals(eeMidlandOrder(), eeMidlandLines());
@@ -90,4 +90,11 @@ test("migration seeds the catalog and Midland order, not sample schedule rows", 
   }
   const orderInsert = sql.slice(sql.indexOf("EE-MID-2026-11") - 400, sql.indexOf("EE-MID-2026-11") + 200);
   assert.match(orderInsert, /NULL/);
+});
+
+test("a distribution payment applies to that order and not to a turf order", () => {
+  assert.equal(paymentAppliesToOrder({ turf_order_id: "turf-1" }, "turf-1"), true);
+  assert.equal(paymentAppliesToOrder({ distribution_order_id: "order-1" }, "order-1"), true);
+  assert.equal(paymentAppliesToOrder({ distribution_order_id: "order-2" }, "order-1"), false);
+  assert.equal(paymentAppliesToOrder({ turf_order_id: "turf-1" }, "order-1"), false);
 });

@@ -31,7 +31,7 @@ import {
   LogOut,
   Send,
   Landmark,
-  Sprout,
+  CalendarRange,
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { useEffect, useState } from "react";
@@ -44,8 +44,10 @@ import GrokAssistant from "@/components/assistant/GrokAssistant";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/ThemeContext";
 import { useTenant } from "@/lib/TenantContext";
-import { supabase } from "@/lib/supabase";
-import { DISTRIBUTION_MODULE, INSTALL_MODULE, TURF_COMPANY_ID } from "@/lib/turf/constants";
+import { getSelectedCompanyScope, subscribeToCompanyScope } from "@/lib/companyScope";
+import { showOperationsNav } from "@/lib/operations/access";
+import { loadCompanyOperations } from "@/lib/operations/company";
+import { DISTRIBUTION_MODULE, INSTALL_MODULE } from "@/lib/turf/constants";
 import { useRolePermissions, exitPreview } from "@/lib/useRolePermissions";
 import { ROLES } from "@/lib/permissions";
 import { ROLE_MODULE_TENANT } from "@/lib/tenantCatalog";
@@ -55,15 +57,27 @@ export default function Layout({ children, currentPageName }) {
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
   const { organization, moduleEnabled, isPlatformAdmin } = useTenant();
-  const [turfCompany, setTurfCompany] = useState(false);
+  const [companyScope, setCompanyScope] = useState(getSelectedCompanyScope);
+  const [operationsCompany, setOperationsCompany] = useState(null);
+  useEffect(() => subscribeToCompanyScope(setCompanyScope), []);
   useEffect(() => {
     let live = true;
-    supabase.from("company_profiles").select("id").eq("id", TURF_COMPANY_ID).maybeSingle()
-      .then(({ data }) => { if (live) setTurfCompany(!!data); })
-      .catch(() => { if (live) setTurfCompany(false); });
+    setOperationsCompany(null);
+    if (!companyScope || companyScope === "all" || companyScope === "none") return undefined;
+    loadCompanyOperations(companyScope)
+      .then((row) => { if (live) setOperationsCompany(row); })
+      .catch(() => {
+        if (live) setOperationsCompany({ id: companyScope, name: "", operations_enabled: false, columnsReady: false, found: false });
+      });
     return () => { live = false; };
-  }, []);
-  const showTurf = turfCompany && (moduleEnabled(INSTALL_MODULE) || moduleEnabled(DISTRIBUTION_MODULE));
+  }, [companyScope]);
+  const operationsProfile = operationsCompany?.id === companyScope ? operationsCompany : null;
+  const showOperations = showOperationsNav({
+    companyId: companyScope,
+    enabled: operationsProfile?.operations_enabled === true,
+    columnsReady: operationsProfile ? operationsProfile.columnsReady : undefined,
+    turfModulesOn: moduleEnabled(INSTALL_MODULE) || moduleEnabled(DISTRIBUTION_MODULE),
+  });
   const { user, logout } = useAuth();
 
   const crmPages = new Set(["CRM", "Pipeline", "CRMContacts", "CRMCompanies", "CRMActivities", "CRMDashboard"]);
@@ -85,7 +99,7 @@ export default function Layout({ children, currentPageName }) {
     { name: "Dashboard", href: createPageUrl("Dashboard"), icon: LayoutDashboard, module: "dashboard" },
     { name: "Sales Dashboard", href: createPageUrl("SalesDashboard"), icon: CheckSquare, module: "sales_dashboard" },
     { name: "Projects", href: createPageUrl("Projects"), icon: FolderKanban, module: "projects" },
-    ...(showTurf ? [{ name: "Turf'n Texas", href: createPageUrl("Turf"), icon: Sprout }] : []),
+    ...(showOperations ? [{ name: "Operations", href: createPageUrl("Operations"), icon: CalendarRange }] : []),
     { name: "Builder Portal", href: createPageUrl("Builder"), icon: ClipboardList, module: "builder_portal" },
     { name: "Subcontractor Portal", href: createPageUrl("BuilderPortal"), icon: HardHat, module: "subcontractors" },
     {

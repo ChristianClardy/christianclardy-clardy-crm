@@ -3,12 +3,12 @@ import { ORDER_STATUSES, PURCHASE_STATUSES } from "@/lib/turf/constants";
 import { blankLine, blankOrder } from "@/lib/turf/fixtures";
 import { lineFromProduct } from "@/lib/turf/model";
 import { downloadInvoicePdf } from "@/lib/turf/invoicePdf";
-import { formatMoney, formatTotal, orderTotals, sumPayments } from "@/lib/turf/money";
+import { formatMoney, formatTotal, orderTotals, paymentAppliesToOrder, sumPayments } from "@/lib/turf/money";
 import InvoiceSheet from "./InvoiceSheet";
 
 const inputClass = "mt-1 h-9 w-full rounded-md border border-slate-200 px-2 text-sm";
 
-export default function DistributionPanel({ model, readOnly, focusId, onSaveOrder, onSavePurchase, onDeletePurchase, onRecordPayment }) {
+export default function DistributionPanel({ model, readOnly, focusId, onSaveOrder, onSavePurchase, onDeletePurchase, onRecordPayment, brand = "turf" }) {
   const [selected, setSelected] = useState(focusId || null);
   useEffect(() => { if (focusId) setSelected(focusId); }, [focusId]);
   const order = (model.orders || []).find((row) => row.id === selected);
@@ -70,16 +70,18 @@ export default function DistributionPanel({ model, readOnly, focusId, onSaveOrde
       onSavePurchase={onSavePurchase}
       onDeletePurchase={onDeletePurchase}
       onRecordPayment={onRecordPayment}
+      brand={brand}
     />
   );
 }
 
-function OrderEditor({ order, lines, model, readOnly, onBack, onSaveOrder, onSavePurchase, onDeletePurchase, onRecordPayment }) {
+function OrderEditor({ order, lines, model, readOnly, onBack, onSaveOrder, onSavePurchase, onDeletePurchase, onRecordPayment, brand = "turf" }) {
   const [form, setForm] = useState(order);
   const [rows, setRows] = useState(lines);
   const [pay, setPay] = useState({ amount: "", date: "", reference: "" });
   const totals = orderTotals(form, rows);
-  const collected = sumPayments(model.payments, (payment) => payment.turf_order_id === order.id);
+  const collected = sumPayments(model.payments, (payment) => paymentAppliesToOrder(payment, order.id));
+  const turfBrand = brand !== "generic";
   const balance = Math.round((totals.total - collected) * 100) / 100;
   const purchases = (model.purchases || []).filter((purchase) => purchase.order_id === order.id);
   const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
@@ -167,7 +169,7 @@ function OrderEditor({ order, lines, model, readOnly, onBack, onSaveOrder, onSav
                 if (!product) return;
                 setRows((current) => [...current, lineFromProduct(order.id, product, current.length + 1)]);
               }}>
-                <option value="">Add from catalog</option>
+                <option value="">Add a product</option>
                 {(model.products || []).filter((product) => product.active !== false).map((product) => (
                   <option key={product.id} value={product.id}>{product.name}{product.sell_unknown || product.sell_price == null ? " (no sell price)" : ""}</option>
                 ))}
@@ -182,7 +184,7 @@ function OrderEditor({ order, lines, model, readOnly, onBack, onSaveOrder, onSav
             <p className="mt-1 text-slate-500">Collected {formatMoney(collected)} · Balance {formatTotal(balance, totals.pricingIncomplete)}. Payments are the record of money received.</p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button type="button" disabled={readOnly} onClick={save} className="h-9 rounded-md bg-slate-900 px-3 text-sm font-medium text-white disabled:opacity-50">Save order</button>
-              <button type="button" className="h-9 rounded-md border border-slate-300 px-3 text-sm" onClick={() => downloadInvoicePdf({ order: normalize(form), lines: rows.map(normalizeLine), settings: model.settings })}>Download PDF</button>
+              <button type="button" className="h-9 rounded-md border border-slate-300 px-3 text-sm" onClick={() => downloadInvoicePdf({ order: normalize(form), lines: rows.map(normalizeLine), settings: model.settings, includeLogo: turfBrand })}>Download PDF</button>
               <input aria-label="Check amount" type="number" step="0.01" placeholder="Check amount" className="h-9 w-32 rounded-md border border-slate-200 px-2 text-sm" value={pay.amount} disabled={readOnly} onChange={(event) => setPay((current) => ({ ...current, amount: event.target.value }))} />
               <input aria-label="Check date" type="date" className="h-9 rounded-md border border-slate-200 px-2 text-sm" value={pay.date} disabled={readOnly} onChange={(event) => setPay((current) => ({ ...current, date: event.target.value }))} />
               <input aria-label="Check number" placeholder="Check #" className="h-9 w-28 rounded-md border border-slate-200 px-2 text-sm" value={pay.reference} disabled={readOnly} onChange={(event) => setPay((current) => ({ ...current, reference: event.target.value }))} />
@@ -204,12 +206,12 @@ function OrderEditor({ order, lines, model, readOnly, onBack, onSaveOrder, onSav
                   <button type="button" className="text-xs text-slate-400" disabled={readOnly} onClick={() => onDeletePurchase(purchase.id)}>Remove</button>
                 </div>
               ))}
-              <button type="button" disabled={readOnly} className="text-sm font-medium text-amber-800" onClick={() => onSavePurchase({ order_id: order.id, supplier_name: "Realturf Dallas", status: "needed", amount: null, notes: "" })}>Add supplier bill</button>
+              <button type="button" disabled={readOnly} className="text-sm font-medium text-amber-800" onClick={() => onSavePurchase({ order_id: order.id, supplier_name: turfBrand ? "Realturf Dallas" : "Supplier", status: "needed", amount: null, notes: "" })}>Add supplier bill</button>
             </div>
           </div>
         </div>
         <div className="xl:sticky xl:top-4 xl:self-start">
-          <InvoiceSheet order={form} lines={rows} settings={model.settings} totals={totals} />
+          <InvoiceSheet order={form} lines={rows} settings={model.settings} totals={totals} showLogo={turfBrand} />
         </div>
       </div>
     </div>

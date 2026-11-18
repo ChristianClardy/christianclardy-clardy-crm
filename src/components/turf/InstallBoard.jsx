@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 const inputClass = "mt-1 h-9 w-full rounded-md border border-slate-200 px-2 text-sm";
 
-export default function InstallBoard({ model, readOnly, focusId, onSaveJob, onRecordPayment }) {
+export default function InstallBoard({ model, readOnly, focusId, onSaveJob, onRecordPayment, companyName = "Turf'n Texas" }) {
   const items = useMemo(() => allScheduleItems(model).filter((item) => item.track === "install"), [model]);
   const [selected, setSelected] = useState(focusId || null);
   const current = items.find((item) => item.recordId === selected || item.id === selected) || null;
@@ -15,7 +15,7 @@ export default function InstallBoard({ model, readOnly, focusId, onSaveJob, onRe
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">Leads and projects already filed under Turf&apos;n Texas show here. Saving one files an install job and does not change the lead, so it does not start a text or email.</p>
+        <p className="text-sm text-slate-500">Leads and projects already filed under {companyName} show here. Saving one files an install job and does not change the lead, so it does not start a text or email.</p>
         <button type="button" disabled={readOnly} onClick={() => { const job = blankJob({ name: "New install" }); setSelected(job.id); onSaveJob(job); }} className="h-9 rounded-md bg-slate-900 px-3 text-sm font-medium text-white disabled:opacity-50">Add install</button>
       </div>
       <div className="overflow-x-auto">
@@ -61,7 +61,7 @@ export default function InstallBoard({ model, readOnly, focusId, onSaveJob, onRe
 }
 
 function moneyLine(item, payments) {
-  const collected = sumPayments(payments, (payment) => payment.turf_install_job_id === item.recordId || (item.projectId && payment.linked_job_id === item.projectId));
+  const collected = sumPayments(payments, (payment) => payment.turf_install_job_id === item.recordId || payment.operations_job_id === item.recordId || (item.projectId && payment.linked_job_id === item.projectId));
   const sell = item.sell == null ? "Sell —" : `Sell ${formatMoney(item.sell)}`;
   const cost = item.cost == null ? "Cost —" : `Cost ${formatMoney(item.cost)}`;
   return `${sell} · ${cost} · Collected ${formatMoney(collected)}`;
@@ -88,7 +88,7 @@ function JobEditor({ item, job, orders, payments, readOnly, onSaveJob, onRecordP
   const [form, setForm] = useState(source);
   const [pay, setPay] = useState({ amount: "", date: "", reference: "" });
   const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
-  const collected = sumPayments(payments, (payment) => payment.turf_install_job_id === form.id || (form.project_id && payment.linked_job_id === form.project_id));
+  const collected = sumPayments(payments, (payment) => payment.turf_install_job_id === form.id || payment.operations_job_id === form.id || (form.project_id && payment.linked_job_id === form.project_id));
 
   return (
     <form
@@ -109,7 +109,7 @@ function JobEditor({ item, job, orders, payments, readOnly, onSaveJob, onRecordP
         <h3 className="font-semibold text-slate-900">{form.name || "Install"}</h3>
         <span className="text-sm text-slate-500">Collected {formatMoney(collected)} from payments</span>
       </div>
-      {item.kind !== "job" && <p className="mb-3 text-sm text-amber-800">This is already in the CRM. Saving files a Turf&apos;n Texas install job linked to it. The lead or project itself is not edited.</p>}
+      {item.kind !== "job" && <p className="mb-3 text-sm text-amber-800">This is already in the CRM. Saving files an install job linked to it. The lead or project itself is not edited, so it does not start a text or email.</p>}
       <div className="grid gap-3 md:grid-cols-3">
         <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Job<input className={inputClass} value={form.name || ""} onChange={set("name")} disabled={readOnly} /></label>
         <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Customer<input className={inputClass} value={form.customer_name || ""} onChange={set("customer_name")} disabled={readOnly} /></label>

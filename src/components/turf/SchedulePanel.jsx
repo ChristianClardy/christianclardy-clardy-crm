@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 const inputClass = "h-8 w-full min-w-[7rem] rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-900";
 
-export default function SchedulePanel({ model, readOnly, initialDate, onPatch, onOpen, tracks = { install: true, distribution: true } }) {
+export default function SchedulePanel({ model, readOnly, initialDate, onPatch, onOpen, tracks = { install: true, distribution: true }, companyName = "Turf'n Texas" }) {
   const [cursor, setCursor] = useState(() => initialDate || new Date());
   const [view, setView] = useState("week");
   const [track, setTrack] = useState(() => new URLSearchParams(window.location.search).get("track") || "all");
@@ -66,14 +66,14 @@ export default function SchedulePanel({ model, readOnly, initialDate, onPatch, o
       </div>
 
       <p className="text-sm text-slate-700">
-        <span className="font-semibold">{census.shown} jobs</span> from the Turf&apos;n Texas database ({census.dated} with a date, {census.undated} unscheduled).
+        <span className="font-semibold">{census.shown} jobs</span> from {companyName} ({census.dated} with a date, {census.undated} unscheduled).
         Database count: {census.projects} project{census.projects === 1 ? "" : "s"}, {census.soldLeads} sold lead{census.soldLeads === 1 ? "" : "s"}, {census.soldEstimates} sold estimate{census.soldEstimates === 1 ? "" : "s"}.
         {census.projects + census.soldLeads + census.soldEstimates > census.shown ? " A sold lead that is already a project is listed once." : ""}
       </p>
 
       <div className="flex flex-wrap gap-2 text-xs">
         <Swatch className="bg-emerald-200 text-emerald-950 border-emerald-400" label="Install" />
-        <Swatch className="bg-amber-200 text-amber-950 border-amber-400" label="Distribution" />
+        {tracks.distribution && <Swatch className="bg-amber-200 text-amber-950 border-amber-400" label="Distribution" />}
         <span className="text-slate-500">Darker means further along. Drag a card onto a day to move it. Clearing the date in the report below takes it off the calendar.</span>
       </div>
 
@@ -113,7 +113,7 @@ export default function SchedulePanel({ model, readOnly, initialDate, onPatch, o
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-100 px-4 py-4">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Unscheduled</h2>
-            <p className="text-sm text-slate-500">Every Turf&apos;n Texas install and distribution order with no date. Edit a row here. A date moves it onto the calendar.</p>
+            <p className="text-sm text-slate-500">Every {companyName} {tracks.distribution ? "install and distribution order" : "job"} with no date. Edit a row here. A date moves it onto the calendar.</p>
           </div>
           <Filter label="Group" value={group} onChange={setGroup} options={[["track", "Install / distribution"], ["customer", "Customer"], ["none", "One list"]]} />
         </div>
