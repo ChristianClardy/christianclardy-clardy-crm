@@ -113,6 +113,71 @@ CREATE TABLE IF NOT EXISTS payments (
   linked_job_id uuid
 );
 
+-- Shapes taken from the live catalog (project fneasddxtejasvsojgcu).
+-- client_id on the credential tables is text. deals.company_id points at
+-- crm_companies, not company_profiles. estimates.client_id is uuid with no FK.
+CREATE TABLE IF NOT EXISTS clients (
+  id uuid PRIMARY KEY,
+  name text NOT NULL,
+  client_id text,
+  organization_id uuid,
+  company_id uuid REFERENCES company_profiles(id)
+);
+
+CREATE TABLE IF NOT EXISTS crm_companies (
+  id uuid PRIMARY KEY,
+  organization_id uuid,
+  name text NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS crm_activities (
+  id uuid PRIMARY KEY,
+  organization_id uuid,
+  type text NOT NULL,
+  company_id uuid REFERENCES crm_companies(id)
+);
+
+CREATE TABLE IF NOT EXISTS deals (
+  id uuid PRIMARY KEY,
+  organization_id uuid,
+  title text NOT NULL,
+  company_id uuid REFERENCES crm_companies(id),
+  brand_company_id uuid
+);
+
+CREATE TABLE IF NOT EXISTS estimates (
+  id uuid PRIMARY KEY,
+  title text NOT NULL,
+  client_id uuid,
+  company_id uuid REFERENCES company_profiles(id),
+  organization_id uuid
+);
+
+CREATE TABLE IF NOT EXISTS quickbooks_credentials (
+  id integer PRIMARY KEY,
+  client_id text NOT NULL,
+  client_secret text NOT NULL,
+  environment text NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS docusign_credentials (
+  id uuid PRIMARY KEY,
+  client_id text NOT NULL,
+  client_secret text NOT NULL,
+  environment text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS quickbooks_links (
+  id uuid PRIMARY KEY,
+  entity_type text NOT NULL,
+  entity_id text NOT NULL,
+  qb_type text NOT NULL,
+  qb_id text NOT NULL,
+  origin text NOT NULL
+);
+
 -- The archived import company. The migration may stamp organization_id.
 -- It must not flip is_active or rename it.
 INSERT INTO organizations (id, name, slug)
@@ -143,6 +208,38 @@ VALUES ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'Untagged Lead', NULL, 'Contacte
 INSERT INTO payments (id, organization_id, company_id, amount_received)
 VALUES ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', '2c9485d2-9b17-48d4-bea7-72770c1e9eb9', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 1250.00);
 
+INSERT INTO organizations (id, name, slug)
+VALUES ('99999999-9999-4999-8999-999999999999', 'Other Org', 'other');
+
+INSERT INTO clients (id, name, client_id, organization_id, company_id)
+VALUES ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'External Ref Client', 'EXT-100', NULL, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+
+INSERT INTO crm_companies (id, organization_id, name)
+VALUES ('f0f0f0f0-f0f0-40f0-80f0-f0f0f0f0f0f0', NULL, 'CRM Customer Co');
+
+INSERT INTO crm_activities (id, organization_id, type, company_id)
+VALUES ('f1f1f1f1-f1f1-41f1-81f1-f1f1f1f1f1f1', NULL, 'call', 'f0f0f0f0-f0f0-40f0-80f0-f0f0f0f0f0f0');
+
+INSERT INTO deals (id, organization_id, title, company_id)
+VALUES ('f2f2f2f2-f2f2-42f2-82f2-f2f2f2f2f2f2', NULL, 'Pool deal', 'f0f0f0f0-f0f0-40f0-80f0-f0f0f0f0f0f0');
+
+-- client_id matches a client, but there is no FK, and that client will be
+-- stamped from its company. The estimate must NOT inherit through client_id.
+-- A second organization on the client would leak into the estimate if it did.
+UPDATE clients SET organization_id = '99999999-9999-4999-8999-999999999999' WHERE id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+
+INSERT INTO estimates (id, title, client_id, company_id, organization_id)
+VALUES ('f3f3f3f3-f3f3-43f3-83f3-f3f3f3f3f3f3', 'No FK estimate', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', NULL, NULL);
+
+INSERT INTO quickbooks_credentials (id, client_id, client_secret, environment)
+VALUES (1, 'QB-APP-CLIENT', 'not-a-real-secret', 'sandbox');
+
+INSERT INTO docusign_credentials (id, client_id, client_secret, environment)
+VALUES ('f4f4f4f4-f4f4-44f4-84f4-f4f4f4f4f4f4', 'DS-INTEGRATION-KEY', 'not-a-real-secret', 'demo');
+
+INSERT INTO quickbooks_links (id, entity_type, entity_id, qb_type, qb_id, origin)
+VALUES ('f5f5f5f5-f5f5-45f5-85f5-f5f5f5f5f5f5', 'client', 'QB-CUST-1', 'Customer', '88', 'clardy');
+
 ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE company_profiles ENABLE ROW LEVEL SECURITY;
@@ -159,6 +256,16 @@ DROP POLICY IF EXISTS authenticated_full_access ON organizations;
 CREATE POLICY authenticated_full_access ON organizations FOR ALL TO authenticated USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS authenticated_full_access ON organization_members;
 CREATE POLICY authenticated_full_access ON organization_members FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+ALTER TABLE quickbooks_credentials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE docusign_credentials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE deals ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS authenticated_full_access ON quickbooks_credentials;
+CREATE POLICY authenticated_full_access ON quickbooks_credentials FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS authenticated_full_access ON docusign_credentials;
+CREATE POLICY authenticated_full_access ON docusign_credentials FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS authenticated_full_access ON deals;
+CREATE POLICY authenticated_full_access ON deals FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 \ir ../supabase/migrations/065_multi_tenant_foundation.sql
 
@@ -196,6 +303,33 @@ BEGIN
   FROM company_profiles WHERE id = 'a7c41e00-0000-4000-8000-000000000325';
   IF archived_active IS DISTINCT FROM false OR archived_name IS DISTINCT FROM 'Archived – March 2026 Lead Import' THEN
     RAISE EXCEPTION 'archived import company was modified (% / %)', archived_name, archived_active;
+  END IF;
+
+  IF (SELECT client_id FROM quickbooks_credentials WHERE id = 1) IS DISTINCT FROM 'QB-APP-CLIENT'
+     OR (SELECT organization_id FROM quickbooks_credentials WHERE id = 1)
+        IS DISTINCT FROM '2c9485d2-9b17-48d4-bea7-72770c1e9eb9'::uuid THEN
+    RAISE EXCEPTION 'quickbooks_credentials was joined on its text client_id or left unstamped';
+  END IF;
+  IF (SELECT client_id FROM docusign_credentials WHERE id = 'f4f4f4f4-f4f4-44f4-84f4-f4f4f4f4f4f4') IS DISTINCT FROM 'DS-INTEGRATION-KEY'
+     OR (SELECT organization_id FROM docusign_credentials WHERE id = 'f4f4f4f4-f4f4-44f4-84f4-f4f4f4f4f4f4')
+        IS DISTINCT FROM '2c9485d2-9b17-48d4-bea7-72770c1e9eb9'::uuid THEN
+    RAISE EXCEPTION 'docusign_credentials was joined on its text client_id or left unstamped';
+  END IF;
+  IF (SELECT company_id FROM deals WHERE id = 'f2f2f2f2-f2f2-42f2-82f2-f2f2f2f2f2f2')
+       IS DISTINCT FROM 'f0f0f0f0-f0f0-40f0-80f0-f0f0f0f0f0f0'::uuid
+     OR (SELECT organization_id FROM deals WHERE id = 'f2f2f2f2-f2f2-42f2-82f2-f2f2f2f2f2f2')
+       IS DISTINCT FROM '2c9485d2-9b17-48d4-bea7-72770c1e9eb9'::uuid THEN
+    RAISE EXCEPTION 'deal company_id (a CRM customer) was treated as a brand';
+  END IF;
+  IF (SELECT organization_id FROM estimates WHERE id = 'f3f3f3f3-f3f3-43f3-83f3-f3f3f3f3f3f3')
+       IS DISTINCT FROM '2c9485d2-9b17-48d4-bea7-72770c1e9eb9'::uuid THEN
+    RAISE EXCEPTION 'estimate inherited organization_id through a client_id that has no foreign key';
+  END IF;
+  IF (SELECT client_id FROM clients WHERE id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee') IS DISTINCT FROM 'EXT-100' THEN
+    RAISE EXCEPTION 'clients.client_id text reference was rewritten';
+  END IF;
+  IF (SELECT entity_id FROM quickbooks_links WHERE id = 'f5f5f5f5-f5f5-45f5-85f5-f5f5f5f5f5f5') IS DISTINCT FROM 'QB-CUST-1' THEN
+    RAISE EXCEPTION 'quickbooks_links.entity_id was rewritten';
   END IF;
   IF (SELECT organization_id FROM company_profiles WHERE id = 'a7c41e00-0000-4000-8000-000000000325')
      IS DISTINCT FROM '2c9485d2-9b17-48d4-bea7-72770c1e9eb9'::uuid THEN
@@ -264,6 +398,11 @@ BEGIN
   IF changed <> 0 THEN
     RAISE EXCEPTION 'North Star updated Clardy''s payment';
   END IF;
+  IF (SELECT count(*) FROM quickbooks_credentials) <> 0
+     OR (SELECT count(*) FROM docusign_credentials) <> 0
+     OR (SELECT count(*) FROM deals) <> 0 THEN
+    RAISE EXCEPTION 'North Star can see Clardy integration credentials or deals';
+  END IF;
 END $$;
 RESET ROLE;
 
@@ -291,14 +430,15 @@ BEGIN
 END $$;
 RESET ROLE;
 
--- Platform directory: Christian sees both tenants. North Star does not.
+-- Platform directory: Christian sees Clardy, North Star, and the fixture
+-- organization used to prove a non-FK client_id is not followed. North Star does not.
 SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', false);
 SET ROLE authenticated;
 DO $$
 DECLARE n int;
 BEGIN
   SELECT count(*) INTO n FROM public.platform_tenant_directory();
-  IF n <> 2 THEN RAISE EXCEPTION 'directory returned % tenants, expected 2', n; END IF;
+  IF n <> 3 THEN RAISE EXCEPTION 'directory returned % tenants, expected 3', n; END IF;
 END $$;
 RESET ROLE;
 

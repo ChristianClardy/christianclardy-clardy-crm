@@ -12,6 +12,10 @@
 --     and then roll this back on production.
 --
 -- Run in the Supabase SQL editor. Take a backup first.
+--
+-- The forward file's parent-backfill only follows a uuid foreign key. That
+-- check lives in 065 and is not a separate object, so this rollback does
+-- not drop or recreate it.
 
 DROP POLICY IF EXISTS tenant_isolation ON organizations;
 DROP POLICY IF EXISTS tenant_isolation ON employee_company_assignments;
