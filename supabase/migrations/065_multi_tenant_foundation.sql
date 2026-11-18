@@ -481,6 +481,20 @@ END $$;
 
 -- Inherit from a parent row when that parent is already stamped. Payments
 -- included: organization_id only. Amounts, status, and linked jobs stay.
+--
+-- A column is a parent link only when it is uuid AND a single-column foreign
+-- key to that parent table. Name alone is not enough. On the live database
+-- (read-only catalog check, project fneasddxtejasvsojgcu) these columns look
+-- like parent links and are not:
+--   quickbooks_credentials.client_id  text, no FK  (Intuit app id)
+--   docusign_credentials.client_id     text, no FK  (DocuSign integration key)
+--   clients.client_id                  text, no FK  (external reference; clients
+--                                          also has company_id → company_profiles,
+--                                          which does qualify)
+--   estimates.client_id                uuid, no FK
+--   deals.company_id                   uuid FK → crm_companies, not company_profiles
+--   crm_activities.company_id          uuid FK → crm_companies, not company_profiles
+-- Those rows get the founding organization below instead of a join.
 DO $$
 DECLARE
   r record;
@@ -501,17 +515,36 @@ BEGIN
   LOOP
     parent_col := NULL;
     parent_table := NULL;
-    IF EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass('public.'||r.table_name) AND attname = 'company_id' AND NOT attisdropped) THEN
-      parent_col := 'company_id'; parent_table := 'company_profiles';
-    ELSIF EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass('public.'||r.table_name) AND attname = 'project_id' AND NOT attisdropped) THEN
-      parent_col := 'project_id'; parent_table := 'projects';
-    ELSIF EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass('public.'||r.table_name) AND attname = 'client_id' AND NOT attisdropped) THEN
-      parent_col := 'client_id'; parent_table := 'clients';
-    ELSIF EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass('public.'||r.table_name) AND attname = 'employee_id' AND NOT attisdropped) THEN
-      parent_col := 'employee_id'; parent_table := 'employees';
-    ELSIF EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass('public.'||r.table_name) AND attname = 'subcontractor_id' AND NOT attisdropped) THEN
-      parent_col := 'subcontractor_id'; parent_table := 'subcontractors';
-    END IF;
+    SELECT candidate.col, candidate.tbl
+      INTO parent_col, parent_table
+    FROM (
+      VALUES
+        (1, 'company_id'::text, 'company_profiles'::text),
+        (2, 'project_id', 'projects'),
+        (3, 'client_id', 'clients'),
+        (4, 'employee_id', 'employees'),
+        (5, 'subcontractor_id', 'subcontractors')
+    ) AS candidate(ord, col, tbl)
+    WHERE EXISTS (
+      SELECT 1
+      FROM pg_attribute a
+      JOIN pg_type typ ON typ.oid = a.atttypid
+      JOIN pg_constraint fk
+        ON fk.conrelid = a.attrelid
+       AND fk.contype = 'f'
+       AND array_length(fk.conkey, 1) = 1
+       AND a.attnum = fk.conkey[1]
+      JOIN pg_class parent_rel ON parent_rel.oid = fk.confrelid
+      JOIN pg_namespace parent_ns ON parent_ns.oid = parent_rel.relnamespace
+      WHERE a.attrelid = to_regclass('public.' || r.table_name)
+        AND a.attname = candidate.col
+        AND NOT a.attisdropped
+        AND typ.typname = 'uuid'
+        AND parent_ns.nspname = 'public'
+        AND parent_rel.relname = candidate.tbl
+    )
+    ORDER BY candidate.ord
+    LIMIT 1;
 
     IF parent_col IS NOT NULL AND to_regclass('public.'||parent_table) IS NOT NULL THEN
       sql := format(
@@ -542,11 +575,15 @@ DECLARE
   rowj jsonb := to_jsonb(NEW);
   parent_org uuid;
 BEGIN
-  IF NEW.organization_id IS NULL AND rowj ? 'company_id' AND NULLIF(rowj->>'company_id','') IS NOT NULL THEN
+  -- Only cast values that are already uuids. quickbooks_credentials.client_id
+  -- and docusign_credentials.client_id are text and are not parents.
+  IF NEW.organization_id IS NULL AND rowj ? 'company_id'
+     AND (rowj->>'company_id') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
     SELECT organization_id INTO parent_org FROM company_profiles WHERE id = (rowj->>'company_id')::uuid;
     NEW.organization_id := parent_org;
   END IF;
-  IF NEW.organization_id IS NULL AND rowj ? 'project_id' AND NULLIF(rowj->>'project_id','') IS NOT NULL
+  IF NEW.organization_id IS NULL AND rowj ? 'project_id'
+     AND (rowj->>'project_id') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
      AND to_regclass('public.projects') IS NOT NULL THEN
     SELECT organization_id INTO parent_org FROM projects WHERE id = (rowj->>'project_id')::uuid;
     NEW.organization_id := parent_org;
