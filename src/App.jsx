@@ -44,6 +44,7 @@ import ModuleGate from './components/app/ModuleGate';
 import ProjectReport from './pages/ProjectReport';
 import { usePortalUser } from '@/lib/portalUser';
 import { tenantDemo } from '@/lib/tenantPreview';
+import { useEffect, useState } from "react";
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -253,6 +254,9 @@ const SubPortalApp = ({ portalUser }) => (
 );
 
 function App() {
+  if (import.meta.env.DEV && typeof window !== "undefined" && window.location.pathname.replace(/\/$/, "") === "/turf-preview") {
+    return <TurfPreviewHost />;
+  }
 
   return (
     <ThemeProvider>
@@ -269,6 +273,15 @@ function App() {
       </AuthProvider>
     </ThemeProvider>
   )
+}
+
+function TurfPreviewHost() {
+  const [Page, setPage] = useState(null);
+  useEffect(() => {
+    import("./pages/TurfPreview").then((mod) => setPage(() => mod.default));
+  }, []);
+  if (!Page) return null;
+  return <Page />;
 }
 
 export default App

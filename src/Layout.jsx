@@ -31,9 +31,10 @@ import {
   LogOut,
   Send,
   Landmark,
+  Sprout,
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import NotificationBell from "@/components/notifications/NotificationBell";
 import OverdueAppointmentGate from "@/components/scheduling/OverdueAppointmentGate";
 import CompanyScopeSwitcher from "@/components/company/CompanyScopeSwitcher";
@@ -43,6 +44,8 @@ import GrokAssistant from "@/components/assistant/GrokAssistant";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/lib/ThemeContext";
 import { useTenant } from "@/lib/TenantContext";
+import { supabase } from "@/lib/supabase";
+import { DISTRIBUTION_MODULE, INSTALL_MODULE, TURF_COMPANY_ID } from "@/lib/turf/constants";
 import { useRolePermissions, exitPreview } from "@/lib/useRolePermissions";
 import { ROLES } from "@/lib/permissions";
 import { ROLE_MODULE_TENANT } from "@/lib/tenantCatalog";
@@ -52,6 +55,15 @@ export default function Layout({ children, currentPageName }) {
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
   const { organization, moduleEnabled, isPlatformAdmin } = useTenant();
+  const [turfCompany, setTurfCompany] = useState(false);
+  useEffect(() => {
+    let live = true;
+    supabase.from("company_profiles").select("id").eq("id", TURF_COMPANY_ID).maybeSingle()
+      .then(({ data }) => { if (live) setTurfCompany(!!data); })
+      .catch(() => { if (live) setTurfCompany(false); });
+    return () => { live = false; };
+  }, []);
+  const showTurf = turfCompany && (moduleEnabled(INSTALL_MODULE) || moduleEnabled(DISTRIBUTION_MODULE));
   const { user, logout } = useAuth();
 
   const crmPages = new Set(["CRM", "Pipeline", "CRMContacts", "CRMCompanies", "CRMActivities", "CRMDashboard"]);
@@ -73,6 +85,7 @@ export default function Layout({ children, currentPageName }) {
     { name: "Dashboard", href: createPageUrl("Dashboard"), icon: LayoutDashboard, module: "dashboard" },
     { name: "Sales Dashboard", href: createPageUrl("SalesDashboard"), icon: CheckSquare, module: "sales_dashboard" },
     { name: "Projects", href: createPageUrl("Projects"), icon: FolderKanban, module: "projects" },
+    ...(showTurf ? [{ name: "Turf'n Texas", href: createPageUrl("Turf"), icon: Sprout }] : []),
     { name: "Builder Portal", href: createPageUrl("Builder"), icon: ClipboardList, module: "builder_portal" },
     { name: "Subcontractor Portal", href: createPageUrl("BuilderPortal"), icon: HardHat, module: "subcontractors" },
     {

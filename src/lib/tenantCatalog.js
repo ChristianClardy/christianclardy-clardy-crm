@@ -78,6 +78,8 @@ export const ORG_ISOLATED_TABLES = new Set([
   "selection_allowances", "site_visits", "sub_invoices", "subcontractor_barrier_acknowledgments",
   "subcontractor_portal_users", "subcontractors", "tasks", "tax_rates", "tenant_modules",
   "tenant_settings", "todo_items",
+  "turf_customers", "turf_install_jobs", "turf_order_lines", "turf_orders",
+  "turf_products", "turf_settings", "turf_supplier_purchases",
 ]);
 
 let isolationPromise = null;
