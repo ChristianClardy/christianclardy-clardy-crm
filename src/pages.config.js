@@ -71,6 +71,7 @@ import Prospects from './pages/Prospects';
 import Reports from './pages/Reports';
 import SalesDashboard from './pages/SalesDashboard';
 import TeamChat from './pages/TeamChat';
+import Turf from './pages/Turf';
 import WIPReport from './pages/WIPReport';
 import WorkplaceItems from './pages/WorkplaceItems';
 import __Layout from './Layout.jsx';
@@ -101,6 +102,7 @@ export const PAGES = {
     "Reports": Reports,
     "SalesDashboard": SalesDashboard,
     "TeamChat": TeamChat,
+    "Turf": Turf,
     "WIPReport": WIPReport,
     "WorkplaceItems": WorkplaceItems,
 }
