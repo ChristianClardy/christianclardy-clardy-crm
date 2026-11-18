@@ -11,19 +11,25 @@ const TABS = [
   ["schedule", "Schedule"],
   ["install", "Install"],
   ["distribution", "Distribution"],
-  ["catalog", "Catalog"],
+  ["catalog", "Products"],
 ];
 
 export default function TurfWorkspace({
-  model, readOnly, previewNote, initialDate, modules = { install: true, distribution: true },
+  model, readOnly, previewNote = "", initialDate = undefined, modules = { install: true, distribution: true },
   onSchedulePatch, onSaveJob, onSaveOrder, onSaveCustomer, onSaveProduct,
   onSavePurchase, onDeletePurchase, onSaveSettings, onRecordPayment,
+  eyebrow = "Turf'n Texas",
+  title = "Install and distribution",
+  description = "Install jobs and wholesale material orders stay on Turf'n Texas. Payments recorded here are the money collected. A price that is not on file stays blank.",
+  companyName = "Turf'n Texas",
+  brand = "turf",
 }) {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const requested = params.get("order");
   const [tab, setTab] = useState(() => {
     const hash = window.location.hash.replace("#", "");
-    if (TABS.some(([key]) => key === hash)) return hash;
+    const key = hash === "products" ? "catalog" : hash;
+    if (TABS.some(([id]) => id === key)) return key;
     if (new URLSearchParams(window.location.search).get("track")) return "schedule";
     return "overview";
   });
@@ -51,9 +57,9 @@ export default function TurfWorkspace({
   return (
     <div className="mx-auto max-w-screen-2xl space-y-6 p-6 lg:p-8">
       <div className="flex flex-col gap-1">
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">Turf&apos;n Texas</p>
-        <h1 className="text-3xl font-bold text-slate-900">Install and distribution</h1>
-        <p className="max-w-3xl text-sm text-slate-500">Install jobs and wholesale material orders stay on Turf&apos;n Texas. Payments recorded here are the money collected. A price that is not on file stays blank.</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">{eyebrow}</p>
+        <h1 className="text-3xl font-bold text-slate-900">{title}</h1>
+        <p className="max-w-3xl text-sm text-slate-500">{description}</p>
         {previewNote && <p className="text-sm text-amber-800">{previewNote}</p>}
       </div>
       <div className="flex flex-wrap gap-2">
@@ -63,16 +69,17 @@ export default function TurfWorkspace({
       </div>
       {active === "overview" && <OverviewPanel model={model} tracks={modules} onOpen={setTab} />}
       {active === "schedule" && (
-        <SchedulePanel model={model} tracks={modules} readOnly={readOnly} initialDate={initialDate} onPatch={onSchedulePatch} onOpen={openItem} />
+        <SchedulePanel model={model} tracks={modules} readOnly={readOnly} initialDate={initialDate} companyName={companyName} onPatch={onSchedulePatch} onOpen={openItem} />
       )}
       {active === "install" && (
-        <InstallBoard model={model} readOnly={readOnly} focusId={jobId} onSaveJob={onSaveJob} onRecordPayment={onRecordPayment} />
+        <InstallBoard model={model} readOnly={readOnly} focusId={jobId} companyName={companyName} onSaveJob={onSaveJob} onRecordPayment={onRecordPayment} />
       )}
       {active === "distribution" && (
         <DistributionPanel
           model={model}
           readOnly={readOnly}
           focusId={orderId}
+          brand={brand}
           onSaveOrder={onSaveOrder}
           onSavePurchase={onSavePurchase}
           onDeletePurchase={onDeletePurchase}

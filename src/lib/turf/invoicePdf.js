@@ -219,14 +219,14 @@ export function buildInvoicePdf({ order, lines, settings, assets, draft }) {
   return doc;
 }
 
-export async function loadInvoiceAssets() {
+export async function loadInvoiceAssets({ includeLogo = true } = {}) {
   const load = async (url) => {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Could not load ${url}`);
     return new Uint8Array(await response.arrayBuffer());
   };
   return {
-    logo: await load("/turf/logo.png"),
+    logo: includeLogo ? await load("/turf/logo.png") : null,
     gilda: await load("/turf/fonts/GildaDisplay-Regular.ttf"),
     lato: await load("/turf/fonts/Lato-Regular.ttf"),
     latoBold: await load("/turf/fonts/Lato-Bold.ttf"),
@@ -235,7 +235,8 @@ export async function loadInvoiceAssets() {
 }
 
 export async function downloadInvoicePdf(args) {
-  const assets = args.assets || await loadInvoiceAssets();
+  const includeLogo = args.includeLogo !== false;
+  const assets = args.assets || await loadInvoiceAssets({ includeLogo });
   const doc = buildInvoicePdf({ ...args, assets });
   const name = `${args.order?.order_number || "invoice"}.pdf`.replace(/[^\w.-]+/g, "-");
   doc.save(name);

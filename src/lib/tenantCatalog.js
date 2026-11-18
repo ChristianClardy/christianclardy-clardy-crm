@@ -80,6 +80,9 @@ export const ORG_ISOLATED_TABLES = new Set([
   "tenant_settings", "todo_items",
   "turf_customers", "turf_install_jobs", "turf_order_lines", "turf_orders",
   "turf_products", "turf_settings", "turf_supplier_purchases",
+  "distribution_customers", "distribution_order_lines", "distribution_orders",
+  "distribution_products", "distribution_settings", "distribution_supplier_purchases",
+  "operations_jobs",
 ]);
 
 let isolationPromise = null;

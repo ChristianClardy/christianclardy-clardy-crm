@@ -125,6 +125,11 @@ export function formatLongDate(iso) {
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 }
 
+export function paymentAppliesToOrder(payment, orderId) {
+  if (!payment || !orderId) return false;
+  return payment.turf_order_id === orderId || payment.distribution_order_id === orderId;
+}
+
 export function moneySnapshot(model) {
   let receivable = 0;
   let partialFloor = 0;
@@ -134,7 +139,7 @@ export function moneySnapshot(model) {
   for (const order of model.orders || []) {
     const lines = (model.lines || []).filter((line) => line.order_id === order.id);
     const totals = orderTotals(order, lines);
-    const collected = sumPayments(model.payments, (payment) => payment.turf_order_id === order.id);
+    const collected = sumPayments(model.payments, (payment) => paymentAppliesToOrder(payment, order.id));
     const balance = orderBalance(totals, collected);
     orders.push({ order, lines, totals, balance });
     if (balance.amount > 0.004) {

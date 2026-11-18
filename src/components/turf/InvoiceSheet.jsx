@@ -7,7 +7,7 @@ function unpricedNote(lines) {
   return `${names.join(" and ")} ${names.length === 1 ? "price is" : "prices are"} pending. Totals will update.`;
 }
 
-export default function InvoiceSheet({ order, lines, settings, totals }) {
+export default function InvoiceSheet({ order, lines, settings, totals, showLogo = true }) {
   const sorted = [...(lines || [])].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
   const draft = totals.pricingIncomplete || order.status === "quote";
   const taxPct = (Number(totals.taxRate) * 100).toLocaleString("en-US", { maximumFractionDigits: 2 });
@@ -25,7 +25,7 @@ export default function InvoiceSheet({ order, lines, settings, totals }) {
             <h2 className="text-4xl text-[#2d2a28]" style={{ fontFamily: '"Gilda Display", Georgia, serif' }}>Invoice</h2>
             <p className="mt-3 border-b border-[#2d2a28] pb-1 text-sm">Customer name: {order.contact_name || order.bill_to_name || "—"}</p>
           </div>
-          <img src="/turf/logo.png" alt="Turf'n Texas" className="h-14 w-auto object-contain" />
+          {showLogo && <img src="/turf/logo.png" alt={settings?.company_name || "Turf'n Texas"} className="h-14 w-auto object-contain" />}
         </div>
         <div className="mt-6 grid gap-6 sm:grid-cols-[180px_1fr]">
           <div className="space-y-3 text-sm">

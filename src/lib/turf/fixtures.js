@@ -210,7 +210,9 @@ export function blankOrder(settings, partial = {}) {
     bill_to_name: "",
     bill_to_address: "",
     deliver_to: "",
-    delivery_fee: settings?.default_delivery ?? 400,
+    delivery_fee: settings && Object.prototype.hasOwnProperty.call(settings, "default_delivery")
+      ? settings.default_delivery
+      : 400,
     tax_rate: settings?.tax_rate ?? 0.0825,
     payment_method: "Check",
     invoice_date: null,

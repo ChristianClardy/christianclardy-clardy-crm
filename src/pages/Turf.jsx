@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchMyCompanyAccess } from "@/lib/companyAccess";
-import { canSeeTurf, DEFAULT_SETTINGS, DISTRIBUTION_MODULE, INSTALL_MODULE, TURF_COMPANY_ID } from "@/lib/turf/constants";
+import { canSeeTurf, DEFAULT_SETTINGS, DISTRIBUTION_MODULE, INSTALL_MODULE, TURF_COMPANY_ID, TURF_COMPANY_NAME } from "@/lib/turf/constants";
 import { supabase } from "@/lib/supabase";
 import { useTenant } from "@/lib/TenantContext";
 import { applyCustomer, applyJob, applyOrder, applyPayment, applyProduct, applyPurchase, applySettings, removePurchase } from "@/lib/turf/model";
@@ -9,7 +9,7 @@ import { applySchedulePatch } from "@/lib/turf/schedule";
 import { useRolePermissions } from "@/lib/useRolePermissions";
 import TurfWorkspace from "@/components/turf/TurfWorkspace";
 
-export default function Turf() {
+export default function Turf({ presentation = "module", companyName = TURF_COMPANY_NAME }) {
   const { readOnly, loading: roleLoading } = useRolePermissions();
   const tenant = useTenant();
   const moduleEnabled = typeof tenant.moduleEnabled === "function" ? tenant.moduleEnabled : () => true;
@@ -97,6 +97,13 @@ export default function Turf() {
         model={model}
         readOnly={readOnly}
         modules={modules}
+        brand="turf"
+        companyName={presentation === "operations" ? companyName : TURF_COMPANY_NAME}
+        eyebrow={presentation === "operations" ? companyName : TURF_COMPANY_NAME}
+        title={presentation === "operations" ? "Operations" : "Install and distribution"}
+        description={presentation === "operations"
+          ? "Schedule, unscheduled jobs, and distribution for this company. Distribution lists this company's orders and products. Payments recorded here are the money collected. A price that is not on file stays blank."
+          : "Install jobs and wholesale material orders stay on Turf'n Texas. Payments recorded here are the money collected. A price that is not on file stays blank."}
         onSchedulePatch={(entry, patch) => run(() => persistSchedulePatch(model, entry, patch))}
         onSaveJob={(job) => run(() => saveJob(job))}
         onSaveOrder={(order, lines) => run(() => saveOrder(order, lines))}

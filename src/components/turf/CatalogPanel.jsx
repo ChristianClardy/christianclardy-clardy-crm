@@ -16,7 +16,7 @@ export default function CatalogPanel({ model, readOnly, onSaveProduct, onSaveCus
       <section className="rounded-2xl border border-slate-200 bg-white">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
           <div>
-            <h2 className="font-semibold text-slate-900">Price catalog</h2>
+            <h2 className="font-semibold text-slate-900">Products</h2>
             <p className="text-sm text-slate-500">A blank cost or sell price stays blank. Rows where the sell price is under the cost are marked.</p>
           </div>
           <input aria-label="Search products" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" className="h-9 w-56 rounded-md border border-slate-200 px-2 text-sm" />
@@ -63,7 +63,7 @@ export default function CatalogPanel({ model, readOnly, onSaveProduct, onSaveCus
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4">
-        <h2 className="font-semibold text-slate-900">Wholesale customers</h2>
+        <h2 className="font-semibold text-slate-900">Customers</h2>
         <div className="mt-3 space-y-3">
           {(model.customers || []).map((customer) => (
             <CustomerRow key={customer.id} customer={customer} readOnly={readOnly} onSave={onSaveCustomer} />
