@@ -14,6 +14,7 @@ import { DollarSign, Search, CheckCircle2, Clock, AlertCircle, RefreshCw, Plus, 
 import { getSelectedCompanyScope, subscribeToCompanyScope } from "@/lib/companyScope";
 import { cn } from "@/lib/utils";
 import { qbCall, qbAutoPush, useQbConnected } from "@/lib/quickbooks";
+import { stripeCall } from "@/lib/stripeInvoicing";
 import { isPartlyPaid, drawRemaining } from "@/lib/draws";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 
@@ -44,6 +45,9 @@ export default function Payments() {
   });
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [stripeCompanyIds, setStripeCompanyIds] = useState(() => new Set());
+  const [stripeBusyId, setStripeBusyId] = useState(null);
+  const [stripeNotice, setStripeNotice] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -52,6 +56,10 @@ export default function Payments() {
     qbAutoPush("sync").then((r) => {
       if (r && !r.skipped && !r.error && (r.payments_added || r.payments_updated || r.payments_removed || r.invoices_updated)) loadData();
     });
+    stripeCall("status").then((status) => {
+      const ids = new Set((status.companies || []).filter((row) => row.status === "connected" && row.stripe_account_id).map((row) => row.company_id));
+      setStripeCompanyIds(ids);
+    }).catch(() => setStripeCompanyIds(new Set()));
     const unsubScope = subscribeToCompanyScope(setSelectedCompanyScope);
     return () => unsubScope();
   }, []);
@@ -107,7 +115,8 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
 
   const filteredInvoices = invoices.filter((invoice) => {
     const project = projectMap[invoice.linked_job_id];
-    if (selectedCompanyScope !== "all" && !project) return false;
+    const companyId = invoice.company_id || project?.company_id;
+    if (selectedCompanyScope !== "all" && companyId !== selectedCompanyScope) return false;
     const client = project ? clientMap[project.client_id] : null;
     const q = search.toLowerCase();
     return !q ||
@@ -197,6 +206,46 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
   const [qbResult, setQbResult] = useState(null);   // { invoice_name, qb_payment_link } after success
   const [qbError, setQbError] = useState(null);
 
+  const money = (value) => Number(value || 0).toLocaleString(undefined, { style: "currency", currency: "USD" });
+
+  const handleDraftStripe = async (invoice) => {
+    setStripeBusyId(invoice.id);
+    setStripeNotice(null);
+    setQbError(null);
+    try {
+      const data = await stripeCall("ensure-draft", { invoice_id: invoice.id, kind: /final/i.test(invoice.invoice_type || "") ? "final" : "deposit" });
+      const row = data.invoice;
+      setStripeNotice(row
+        ? `Draft ready for ${invoice.invoice_name}. Subtotal ${money(row.subtotal)}, shipping ${money(row.shipping)}, tax ${money(row.tax)}. Nothing has been emailed.`
+        : "Stripe did not create a draft.");
+      await loadData();
+    } catch (err) {
+      setQbError(err.message);
+    } finally {
+      setStripeBusyId(null);
+    }
+  };
+
+  const handleFinalizeStripe = async (invoice) => {
+    const detail = invoice.stripe_subtotal != null
+      ? `Subtotal ${money(invoice.stripe_subtotal)}, shipping ${money(invoice.stripe_shipping)}, tax ${money(invoice.stripe_tax)} on the subtotal including shipping. Total ${money(invoice.amount)}.`
+      : `Total ${money(invoice.amount)}.`;
+    if (!await confirmAction(`${detail} Stripe will email the customer the hosted invoice. Nothing is sent until you confirm.`, { title: "Finalize and send?", confirmLabel: "Finalize & send" })) return;
+    setStripeBusyId(invoice.id);
+    setStripeNotice(null);
+    setQbError(null);
+    try {
+      const data = await stripeCall("finalize", { invoice_id: invoice.id, stripe_invoice_id: invoice.stripe_invoice_id });
+      const url = data.invoice?.hosted_invoice_url;
+      setStripeNotice(url ? `Sent. Pay now: ${url}` : "Sent through Stripe.");
+      await loadData();
+    } catch (err) {
+      setQbError(err.message);
+    } finally {
+      setStripeBusyId(null);
+    }
+  };
+
   const handleSendToQB = async (invoice) => {
     setQbSending(invoice.id);
     setQbError(null);
@@ -280,6 +329,13 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
           <button onClick={() => setQbResult(null)} className="text-emerald-500 hover:text-emerald-700"><X className="h-4 w-4" /></button>
         </div>
       )}
+      {stripeNotice && (
+        <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-slate-600" />
+          <p className="flex-1 text-sm text-slate-700">{stripeNotice}</p>
+          <button onClick={() => setStripeNotice(null)} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+        </div>
+      )}
       {qbError && (
         <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 shadow-sm">
           <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-500" />
@@ -302,6 +358,10 @@ const visibleProjects = useMemo(() => selectedCompanyScope === "all" ? projects 
         onSendToQB={handleSendToQB}
         qbSendingId={qbSending}
         qbConnected={qbConnected}
+        stripeCompanyIds={stripeCompanyIds}
+        onFinalizeStripe={handleFinalizeStripe}
+        onDraftStripe={handleDraftStripe}
+        stripeBusyId={stripeBusyId}
       />
 
       <ReceivedPaymentsTable payments={filteredPayments} projectMap={projectMap} clientMap={clientMap} companyMap={companyMap} />

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Check, ChevronDown, Loader2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { queueStripeDraft } from "@/lib/stripeInvoicing";
 import { useRolePermissions } from "@/lib/useRolePermissions";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
@@ -33,6 +34,9 @@ export default function ProjectStatusPicker({ project, onChange, className, styl
     setSaving(true);
     try {
       const updated = await base44.entities.Project.update(project.id, { status: key });
+      if (key === "completed") {
+        await queueStripeDraft({ kind: "final", project_id: project.id, company_id: project.company_id });
+      }
       onChange?.(updated || { ...project, status: key });
     } catch {
       // base44Client already alerted the reason

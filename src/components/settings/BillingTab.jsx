@@ -79,7 +79,7 @@ export default function BillingTab() {
 
       <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
         <p className="font-medium text-slate-800">Stripe test mode</p>
-        <p className="mt-1">Add these on the Vercel project for Production and Preview. Use test keys only (`sk_test_`, `pk_test_`, `whsec_`). A live key is refused. The webhook is `POST /api/invite?action=billing-webhook` and needs the raw request body.</p>
+        <p className="mt-1">Add these on the Vercel project for Production and Preview. Use test keys only (`sk_test_`, `pk_test_`, `whsec_`). A live key is refused. The subscription webhook is `POST /api/invite?action=billing-webhook`. Job and distribution invoices are separate: each company connects its own Stripe account under Settings → Companies.</p>
         <ul className="mt-2 list-disc pl-5">
           {STRIPE_ENV_KEYS.map((key) => <li key={key}><code>{key}</code></li>)}
         </ul>

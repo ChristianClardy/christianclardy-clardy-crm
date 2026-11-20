@@ -167,7 +167,7 @@ export default function QuickBooksTab() {
             </ol>
             <CopyField label="Webhook endpoint" value={WEBHOOK_URL} />
             <ol start={7} className="list-decimal pl-5 space-y-2">
-              <li>For the <strong>Pay now</strong> link on invoices, QuickBooks Payments must be turned on in QuickBooks (gear icon → Account and settings → Payments). Without it invoices still send, just without online paying.</li>
+              <li>For the <strong>Pay now</strong> link on invoices, QuickBooks Payments must be turned on in QuickBooks (gear icon → Account and settings → Payments). Without it invoices still send, just without online paying. When that company is connected to Stripe, the Pay now link is the Stripe invoice instead, and QuickBooks stays the fallback.</li>
               <li>Click <strong>Connect to QuickBooks</strong> below and approve access for your company.</li>
             </ol>
             <p className="text-xs text-slate-500">Want to try it first? Use the Development (sandbox) keys and the Sandbox environment, then switch to Production keys.</p>

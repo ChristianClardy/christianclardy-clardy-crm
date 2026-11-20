@@ -18,6 +18,7 @@ import {
   saveOperationsJob,
 } from "@/lib/operations/queries";
 import { DISTRIBUTION_MODULE, INSTALL_MODULE } from "@/lib/turf/constants";
+import { queueStripeDraft } from "@/lib/stripeInvoicing";
 import { useTenant } from "@/lib/TenantContext";
 import { useRolePermissions } from "@/lib/useRolePermissions";
 
@@ -140,9 +141,26 @@ export default function Operations() {
         eyebrow={company.name || "Operations"}
         title="Operations"
         description="Schedule, unscheduled jobs, and distribution for this company. Distribution lists this company's orders and products. Payments recorded here are the money collected. A price that is not on file stays blank."
-        onSchedulePatch={(entry, patch) => run(() => persistOperationsSchedule(model, entry, patch))}
-        onSaveJob={(job) => run(() => saveOperationsJob(company.id, job, org))}
-        onSaveOrder={(order, lines) => run(() => saveDistributionOrder(company.id, order, lines, org))}
+        onSchedulePatch={(entry, patch) => run(async () => {
+          await persistOperationsSchedule(model, entry, patch);
+          if (entry.kind === "job" && patch.status === "approved") await queueStripeDraft({ kind: "deposit", operations_job_id: entry.recordId });
+          if (entry.kind === "job" && patch.status === "installed") await queueStripeDraft({ kind: "final", operations_job_id: entry.recordId });
+          if (entry.kind === "order" && patch.status === "invoiced") await queueStripeDraft({ kind: "distribution", distribution_order_id: entry.recordId });
+        })}
+        onSaveJob={(job) => run(async () => {
+          const previous = (model.jobs || []).find((row) => row.id === job.id);
+          await saveOperationsJob(company.id, job, org);
+          if (previous?.stage === job.stage) return;
+          if (job.stage === "approved") await queueStripeDraft({ kind: "deposit", operations_job_id: job.id });
+          if (job.stage === "installed") await queueStripeDraft({ kind: "final", operations_job_id: job.id });
+        })}
+        onSaveOrder={(order, lines) => run(async () => {
+          const previous = (model.orders || []).find((row) => row.id === order.id);
+          await saveDistributionOrder(company.id, order, lines, org);
+          if (previous?.status !== "invoiced" && order.status === "invoiced") {
+            await queueStripeDraft({ kind: "distribution", distribution_order_id: order.id });
+          }
+        })}
         onSaveCustomer={(customer) => run(() => saveDistributionCustomer(company.id, customer, org))}
         onSaveProduct={(product) => run(() => saveDistributionProduct(company.id, product, org))}
         onSavePurchase={(purchase) => run(() => saveDistributionPurchase(company.id, purchase, org))}

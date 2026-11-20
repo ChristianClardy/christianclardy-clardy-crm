@@ -1,6 +1,7 @@
 import { base44 } from "@/api/base44Client";
 import { LEAD_STAGES, PROSPECT_THRESHOLD_STAGE, WON_STATUS } from "@/lib/leadStages";
 import { carryContactFilesToProject, carryLeadFiles, carryRecordFiles } from "@/lib/carryFiles";
+import { queueStripeDraft } from "@/lib/stripeInvoicing";
 
 // Deal.stage key the Pipeline board (PipelineView.jsx) uses for a won deal.
 const PIPELINE_WON_STAGE = "Closed Won";
@@ -232,6 +233,9 @@ async function carryFilesOntoProject(project, client, lead, created) {
   } catch (err) {
     console.error("Failed to carry files onto project:", err?.message || err);
   }
+  // Draft only. Finalize & send is a separate step, and a missing Stripe
+  // connection does not block the project.
+  queueStripeDraft({ kind: "deposit", project_id: project.id, company_id: project.company_id || null });
   return project;
 }
 

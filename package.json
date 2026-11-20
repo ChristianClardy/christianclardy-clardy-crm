@@ -9,7 +9,8 @@
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test api/_lib/billing.test.js api/_lib/stripeInvoicing.test.js src/lib/turf/money.test.js src/lib/turf/schedule.test.js src/lib/operations/access.test.js src/lib/fileQueries.test.js"
   },
   "dependencies": {
     "@base44/vite-plugin": "^1.0.6",

@@ -5,6 +5,7 @@ import { lineFromProduct } from "@/lib/turf/model";
 import { downloadInvoicePdf } from "@/lib/turf/invoicePdf";
 import { formatMoney, formatTotal, orderTotals, paymentAppliesToOrder, sumPayments } from "@/lib/turf/money";
 import InvoiceSheet from "./InvoiceSheet";
+import StripeOrderBox from "./StripeOrderBox";
 
 const inputClass = "mt-1 h-9 w-full rounded-md border border-slate-200 px-2 text-sm";
 
@@ -191,6 +192,8 @@ function OrderEditor({ order, lines, model, readOnly, onBack, onSaveOrder, onSav
               <button type="button" disabled={readOnly || !pay.amount} className="h-9 rounded-md border border-slate-300 px-3 text-sm disabled:opacity-50" onClick={() => { onRecordPayment({ amount: pay.amount, date: pay.date, method: form.payment_method || "Check", reference: pay.reference, notes: form.order_number, orderId: order.id }); setPay({ amount: "", date: "", reference: "" }); }}>Record check</button>
             </div>
           </div>
+
+          <StripeOrderBox orderId={order.id} brand={brand} readOnly={readOnly} />
 
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <h3 className="font-semibold text-slate-900">Supplier purchases</h3>

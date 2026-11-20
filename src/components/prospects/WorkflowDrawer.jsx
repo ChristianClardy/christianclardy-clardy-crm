@@ -4,6 +4,7 @@ import { X, Calendar, MessageSquare, CheckCircle, XCircle, ChevronRight } from "
 import { WORKFLOW_STAGES } from "./WorkflowBadge";
 import { cn } from "@/lib/utils";
 import { ensureProjectForWonJob } from "@/lib/leadConversion";
+import { queueStripeDraft } from "@/lib/stripeInvoicing";
 
 export default function WorkflowDrawer({ prospect, onClose, onUpdated }) {
   const [stage, setStage] = useState(prospect.workflow_stage || "new_lead");
@@ -26,6 +27,9 @@ export default function WorkflowDrawer({ prospect, onClose, onUpdated }) {
     if (stage === "approved") updates.status = "active";
     // If dead lead, keep as prospect so it stays visible in prospects (just with dead stage)
     await base44.entities.Client.update(prospect.id, updates);
+    if (stage === "completed" && prospect.workflow_stage !== "completed") {
+      await queueStripeDraft({ kind: "final", client_id: prospect.id, company_id: prospect.company_id });
+    }
     // Approving a job puts it on the Projects board, same as winning a lead.
     if (stage === "approved" && prospect.workflow_stage !== "approved") {
       try {
