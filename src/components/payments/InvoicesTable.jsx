@@ -4,6 +4,7 @@ import { Pencil, Send, Trash2, ExternalLink, Cloud, Loader2 } from "lucide-react
 import InvoicePreviewCard from "@/components/payments/InvoicePreviewCard";
 import InvoicePdfDownloadButton from "@/components/payments/InvoicePdfDownloadButton";
 import { getInvoiceBranding } from "@/components/payments/invoiceBrandingUtils";
+import { payUrlForInvoice } from "@/lib/stripeInvoicing";
 
 // invoice_status_enum values: draft, sent, paid, overdue, cancelled.
 const statusStyles = {
@@ -15,7 +16,7 @@ const statusStyles = {
 };
 const statusLabel = (s) => { const v = (s || "draft").toLowerCase(); return v.charAt(0).toUpperCase() + v.slice(1); };
 
-export default function InvoicesTable({ invoices, projectMap, clientMap, companyMap, onEdit, onMarkSent, onDelete, onSendToQB, qbSendingId, qbConnected = false }) {
+export default function InvoicesTable({ invoices, projectMap, clientMap, companyMap, onEdit, onMarkSent, onDelete, onSendToQB, qbSendingId, qbConnected = false, stripeCompanyIds, onFinalizeStripe, onDraftStripe, stripeBusyId }) {
   const getInvoicePdfTargetId = (invoiceId) => `invoice-preview-${invoiceId}`;
   const previewInvoice = invoices[0];
   const previewProject = previewInvoice ? projectMap[previewInvoice.linked_job_id] : null;
@@ -27,7 +28,7 @@ export default function InvoicesTable({ invoices, projectMap, clientMap, company
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-200 bg-slate-50 px-5 py-4">
         <h2 className="text-lg font-semibold text-slate-900">Invoices</h2>
-        <p className="mt-1 text-sm text-slate-500">Create invoices now and send them by external email later.</p>
+        <p className="mt-1 text-sm text-slate-500">Stripe drafts stay here until you finalize and send. QuickBooks Pay now is used when that company is not connected to Stripe.</p>
       </div>
 
       {invoices.length === 0 ? (
@@ -48,7 +49,7 @@ export default function InvoicesTable({ invoices, projectMap, clientMap, company
                   <th className="px-5 py-3">Due</th>
                   <th className="px-5 py-3 text-right">Amount</th>
                   <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3 w-28" />
+                  <th className="px-5 py-3" />
                 </tr>
               </thead>
               <tbody>
@@ -56,8 +57,11 @@ export default function InvoicesTable({ invoices, projectMap, clientMap, company
                   const project = projectMap[invoice.linked_job_id];
                   const client = project ? clientMap[project.client_id] : null;
 
-                  const company = project ? companyMap[project.company_id] : null;
+                  const companyId = invoice.company_id || project?.company_id;
+                  const company = companyMap[companyId] || (project ? companyMap[project.company_id] : null);
                   const branding = getInvoiceBranding(company);
+                  const stripeOn = stripeCompanyIds?.has(companyId);
+                  const payUrl = payUrlForInvoice(invoice, { stripeConnected: stripeOn });
 
                   return (
                     <tbody key={invoice.id}>
@@ -73,12 +77,15 @@ export default function InvoicesTable({ invoices, projectMap, clientMap, company
                       <td className="px-5 py-4 text-right font-semibold text-slate-900">${Number(invoice.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td className="px-5 py-4">
                         <Badge className={statusStyles[(invoice.invoice_status || "draft").toLowerCase()] || statusStyles.draft}>{statusLabel(invoice.invoice_status)}</Badge>
-                        {invoice.qb_invoice_id && (
+                        {invoice.qb_invoice_id && !stripeOn && (
                           <p className="mt-1 text-xs font-medium text-emerald-600">In QuickBooks</p>
+                        )}
+                        {invoice.stripe_invoice_id && (
+                          <p className="mt-1 text-xs font-medium text-emerald-700">Stripe {invoice.stripe_status || "draft"}</p>
                         )}
                       </td>
                       <td className="px-5 py-4">
-                        <div className="flex justify-end gap-1">
+                        <div className="flex flex-wrap justify-end gap-1">
                           <InvoicePdfDownloadButton
                             targetId={getInvoicePdfTargetId(invoice.id)}
                             fileName={(invoice.invoice_name || "invoice").replace(/\s+/g, "-").toLowerCase()}
@@ -92,18 +99,28 @@ export default function InvoicesTable({ invoices, projectMap, clientMap, company
                           <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-500" onClick={() => onDelete(invoice)}>
                             <Trash2 className="w-3.5 h-3.5" />
                           </Button>
-                          {invoice.qb_payment_link && (
+                          {stripeOn && invoice.stripe_status === "draft" && invoice.stripe_invoice_id && (
+                            <Button variant="outline" size="sm" className="h-8" disabled={stripeBusyId === invoice.id} onClick={() => onFinalizeStripe?.(invoice)}>
+                              Finalize & send
+                            </Button>
+                          )}
+                          {stripeOn && !invoice.stripe_invoice_id && (
+                            <Button variant="outline" size="sm" className="h-8" disabled={stripeBusyId === invoice.id} onClick={() => onDraftStripe?.(invoice)}>
+                              Stripe draft
+                            </Button>
+                          )}
+                          {payUrl && (
                             <Button
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 text-emerald-600"
                               title="Open the customer's Pay now page"
-                              onClick={() => window.open(invoice.qb_payment_link, "_blank")}
+                              onClick={() => window.open(payUrl, "_blank")}
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
                             </Button>
                           )}
-                          {qbConnected && <Button
+                          {qbConnected && !stripeOn && <Button
                             variant="ghost"
                             size="icon"
                             className={invoice.qb_invoice_id ? "h-8 w-8 text-emerald-600" : "h-8 w-8 text-slate-400"}

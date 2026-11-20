@@ -64,6 +64,34 @@ test('test checkout sends the organization id and does not mention job payments'
   assert.doesNotMatch(decoded, /amount_received/);
 });
 
+test('checkout.session.completed stays inactive until the payment is paid', () => {
+  const session = {
+    id: 'cs_test',
+    customer: 'cus_123',
+    subscription: 'sub_123',
+    metadata: { organization_id: 'org-9' },
+    payment_status: 'unpaid',
+  };
+  const waiting = billing.subscriptionUpdateFromEvent({ type: 'checkout.session.completed', data: { object: session } });
+  assert.equal(waiting.status, 'incomplete');
+  const paid = billing.subscriptionUpdateFromEvent({
+    type: 'checkout.session.completed',
+    data: { object: { ...session, payment_status: 'paid' } },
+  });
+  assert.equal(paid.status, 'active');
+  assert.equal(paid.stripeSubscription, 'sub_123');
+  const asyncPaid = billing.subscriptionUpdateFromEvent({
+    type: 'checkout.session.async_payment_succeeded',
+    data: { object: { ...session, payment_status: 'paid' } },
+  });
+  assert.equal(asyncPaid.status, 'active');
+  const asyncFailed = billing.subscriptionUpdateFromEvent({
+    type: 'checkout.session.async_payment_failed',
+    data: { object: session },
+  });
+  assert.equal(asyncFailed.status, 'past_due');
+});
+
 test('webhook signature accepts a fresh test payload and maps the subscription', () => {
   const secret = 'whsec_test';
   const event = {

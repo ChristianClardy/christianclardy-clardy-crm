@@ -5,6 +5,14 @@
       "destination": "/api/quickbooks?action=oauth-callback"
     },
     {
+      "source": "/StripeConnectCallback",
+      "destination": "/api/invite?action=stripe-oauth-callback"
+    },
+    {
+      "source": "/api/stripe-invoicing",
+      "destination": "/api/invite?action=stripe-invoicing"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

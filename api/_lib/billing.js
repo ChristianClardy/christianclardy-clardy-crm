@@ -90,10 +90,15 @@ function subscriptionUpdateFromEvent(event) {
   const obj = event.data?.object || {};
   const orgId = obj.metadata?.organization_id || obj.client_reference_id || obj.subscription_details?.metadata?.organization_id;
   if (!orgId) return null;
-  if (event.type === 'checkout.session.completed') {
+  if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded' || event.type === 'checkout.session.async_payment_failed') {
+    const paid = obj.payment_status === 'paid' || obj.payment_status === 'no_payment_required';
+    let status = 'incomplete';
+    if (event.type === 'checkout.session.async_payment_succeeded') status = 'active';
+    else if (event.type === 'checkout.session.async_payment_failed') status = 'past_due';
+    else if (paid) status = 'active';
     return {
       orgId,
-      status: 'active',
+      status,
       stripeCustomer: obj.customer || null,
       stripeSubscription: obj.subscription || null,
       periodEnd: null,

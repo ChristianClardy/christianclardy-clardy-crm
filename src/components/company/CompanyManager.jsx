@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { TURF_COMPANY_ID } from "@/lib/turf/constants";
 import { operationsColumnsReady, saveCompanyOperations } from "@/lib/operations/company";
+import CompanyStripePanel, { StripeSetupNote } from "@/components/company/CompanyStripePanel";
+import { stripeCall } from "@/lib/stripeInvoicing";
 
 const emptyForm = { name: "", code: "", color: "", notes: "", is_active: true };
 
@@ -18,10 +20,23 @@ export default function CompanyManager() {
   const [form, setForm] = useState(emptyForm);
   const [columnsReady, setColumnsReady] = useState(false);
   const [flagError, setFlagError] = useState("");
+  const [stripeStatus, setStripeStatus] = useState(null);
+  const [stripeNotice, setStripeNotice] = useState("");
+
+  const loadStripe = () => {
+    stripeCall("status").then(setStripeStatus).catch((err) => setStripeNotice(err.message));
+  };
 
   useEffect(() => {
     loadCompanies();
     operationsColumnsReady().then(setColumnsReady).catch(() => setColumnsReady(false));
+    loadStripe();
+    const params = new URLSearchParams(window.location.search);
+    const stripe = params.get("stripe");
+    if (stripe === "connected") setStripeNotice("Stripe is connected for this company. Invoices are created as drafts until you finalize and send.");
+    else if (stripe === "denied") setStripeNotice("Stripe connect was cancelled.");
+    else if (stripe === "live_key") setStripeNotice("A live Stripe key was refused. Use the test client id and a test secret key.");
+    else if (stripe) setStripeNotice("Stripe connect did not finish. Try Connect Stripe again.");
   }, []);
 
   const loadCompanies = async () => {
@@ -99,6 +114,8 @@ export default function CompanyManager() {
         </div>
       )}
       {flagError && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{flagError}</div>}
+      <StripeSetupNote status={stripeStatus} />
+      {stripeNotice && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">{stripeNotice}</div>}
 
       {companies.length === 0 ? (
         <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-white py-16 text-center text-slate-500">No companies added yet.</div>
@@ -134,6 +151,14 @@ export default function CompanyManager() {
                       />
                     )}
                   </div>
+                  <CompanyStripePanel
+                    company={company}
+                    connection={(stripeStatus?.companies || []).find((row) => row.company_id === company.id)}
+                    migrationRequired={stripeStatus?.migration_required === true}
+                    configured={stripeStatus?.configured}
+                    missing={stripeStatus?.missing}
+                    onChange={loadStripe}
+                  />
                 </div>
                 <div className="flex gap-1">
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(company)}><Edit2 className="h-3.5 w-3.5" /></Button>

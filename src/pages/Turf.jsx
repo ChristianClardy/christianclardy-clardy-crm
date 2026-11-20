@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { useTenant } from "@/lib/TenantContext";
 import { applyCustomer, applyJob, applyOrder, applyPayment, applyProduct, applyPurchase, applySettings, removePurchase } from "@/lib/turf/model";
 import { isMissingTurfSchema, loadTurf, persistSchedulePatch, recordPayment, saveCustomer, saveJob, saveOrder, saveProduct, savePurchase, deletePurchase, saveSettings } from "@/lib/turf/queries";
+import { queueStripeDraft } from "@/lib/stripeInvoicing";
 import { applySchedulePatch } from "@/lib/turf/schedule";
 import { useRolePermissions } from "@/lib/useRolePermissions";
 import TurfWorkspace from "@/components/turf/TurfWorkspace";
@@ -104,9 +105,26 @@ export default function Turf({ presentation = "module", companyName = TURF_COMPA
         description={presentation === "operations"
           ? "Schedule, unscheduled jobs, and distribution for this company. Distribution lists this company's orders and products. Payments recorded here are the money collected. A price that is not on file stays blank."
           : "Install jobs and wholesale material orders stay on Turf'n Texas. Payments recorded here are the money collected. A price that is not on file stays blank."}
-        onSchedulePatch={(entry, patch) => run(() => persistSchedulePatch(model, entry, patch))}
-        onSaveJob={(job) => run(() => saveJob(job))}
-        onSaveOrder={(order, lines) => run(() => saveOrder(order, lines))}
+        onSchedulePatch={(entry, patch) => run(async () => {
+          await persistSchedulePatch(model, entry, patch);
+          if (entry.kind === "job" && patch.status === "approved") await queueStripeDraft({ kind: "deposit", turf_install_job_id: entry.recordId });
+          if (entry.kind === "job" && patch.status === "installed") await queueStripeDraft({ kind: "final", turf_install_job_id: entry.recordId });
+          if (entry.kind === "order" && patch.status === "invoiced") await queueStripeDraft({ kind: "distribution", turf_order_id: entry.recordId });
+        })}
+        onSaveJob={(job) => run(async () => {
+          const previous = (model.jobs || []).find((row) => row.id === job.id);
+          await saveJob(job);
+          if (previous?.stage === job.stage) return;
+          if (job.stage === "approved") await queueStripeDraft({ kind: "deposit", turf_install_job_id: job.id });
+          if (job.stage === "installed") await queueStripeDraft({ kind: "final", turf_install_job_id: job.id });
+        })}
+        onSaveOrder={(order, lines) => run(async () => {
+          const previous = (model.orders || []).find((row) => row.id === order.id);
+          await saveOrder(order, lines);
+          if (previous?.status !== "invoiced" && order.status === "invoiced") {
+            await queueStripeDraft({ kind: "distribution", turf_order_id: order.id });
+          }
+        })}
         onSaveCustomer={(customer) => run(() => saveCustomer(customer))}
         onSaveProduct={(product) => run(() => saveProduct(product))}
         onSavePurchase={(purchase) => run(() => savePurchase(purchase))}

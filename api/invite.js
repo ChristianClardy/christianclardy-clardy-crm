@@ -31,11 +31,18 @@
 // token (see src/pages/JoinPortal.jsx). The join token is HMAC-signed and
 // works for an active sub, PM or customer login, or, for a staff-link token,
 // a staff login that hasn't signed in since the link was made.
+// ?action=billing-webhook: Clardy.io SaaS subscription. Raw body required.
+// ?action=stripe-invoicing: per-company Connect invoicing. Public URL
+// /api/stripe-invoicing (vercel.json). Stripe-Signature is the webhook;
+// other POSTs are staff actions. GET ?action=stripe-oauth-callback is the
+// Connect return (/StripeConnectCallback). No Resend or Twilio sends.
 
 const crypto = require('crypto');
 const { getStaffCaller, READ_ONLY_MESSAGE } = require('./_lib/staffAuth.js');
 const privacy = require('./_lib/privacy.js');
 const billing = require('./_lib/billing.js');
+const stripeInvoicing = require('./_lib/stripeInvoicing.js');
+const { readRawBody } = require('./_lib/rawBody.js');
 
 const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -352,12 +359,6 @@ async function handleTextLink(req, res, caller) {
   return res.status(200).json({ url: joinUrl(req, userId), email: email.toLowerCase(), days: JOIN_LINK_DAYS });
 }
 
-// Active member of the staff org and not a portal-only login, i.e. is_staff()
-// for a given user (041_customer_portal.sql).
-async function isStaffUser(userId) {
-  return !!(await orgIdForUser(userId)) && !(await getPortalLogin(userId));
-}
-
 async function handleStaffLink(req, res, caller) {
   const { email: rawEmail, full_name } = req.body || {};
   const email = String(rawEmail || '').trim().toLowerCase();
@@ -459,11 +460,14 @@ async function handleBilling(req, res, action) {
     if (!status.configured && status.mode !== 'test') {
       return res.status(501).json({ error: 'stripe_not_configured', missing: status.missing });
     }
-    const raw = typeof req.rawBody === 'string' ? req.rawBody : null;
+    // Same pattern as the QuickBooks webhook: read the stream before anything
+    // touches req.body. Vercel does not set req.rawBody, and parsing JSON
+    // first drops the bytes the signature was computed on.
+    const raw = await readRawBody(req);
     if (!raw) {
       return res.status(501).json({
         error: 'stripe_webhook_needs_raw_body',
-        message: 'Signature checks need the raw request body. Vercel currently parses JSON before this function runs.',
+        message: 'Signature checks need the exact request bytes. The stream is read before the body is parsed.',
       });
     }
     const ok = billing.verifyStripeSignature(raw, req.headers['stripe-signature'], process.env.STRIPE_WEBHOOK_SECRET);
@@ -497,6 +501,19 @@ async function handleBilling(req, res, action) {
 }
 
 module.exports = async function handler(req, res) {
+  const action = req.query?.action;
+
+  // Stripe Connect return. The browser arrives with a GET and no staff
+  // token; the signed state is the authorization. Registered in vercel.json
+  // as /StripeConnectCallback so it does not add a serverless function.
+  if (action === 'stripe-oauth-callback') {
+    if (req.method !== 'GET') {
+      res.status(405).send('Method Not Allowed');
+      return;
+    }
+    return stripeInvoicing.handleOAuth(req, res);
+  }
+
   if (req.method !== 'POST') {
     res.status(405).send('Method Not Allowed');
     return;
@@ -507,7 +524,25 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const action = req.query?.action;
+  // Per-company invoicing. Public URL is /api/stripe-invoicing (vercel.json
+  // rewrite). A Stripe-Signature header is the connected-account webhook.
+  // Anything else is a staff JSON action. Separate from billing-webhook.
+  if (action === 'stripe-invoicing') {
+    try {
+      const signature = req.headers['stripe-signature'];
+      if (signature) return await stripeInvoicing.handleWebhook(req, res, await readRawBody(req));
+      const raw = await readRawBody(req);
+      let body = {};
+      if (raw) body = JSON.parse(raw);
+      else if (req.body && typeof req.body === 'object') body = req.body;
+      return await stripeInvoicing.handleStaff(req, res, body);
+    } catch (err) {
+      if (err instanceof SyntaxError) return res.status(400).json({ error: 'Invalid JSON body.' });
+      res.status(err.status || 500).json({ error: err.message });
+    }
+    return;
+  }
+
   if (action === 'billing-status' || action === 'billing-checkout' || action === 'billing-webhook') {
     try {
       await handleBilling(req, res, action);
