@@ -1,13 +1,28 @@
 // Serverless upload handler — uses service role key to bypass RLS
 // POST /api/upload  (multipart/form-data)
 // Fields: file (required), entity_type, entity_id, uploaded_by, file_type_category
+//
+// POST /api/assistant-upload is rewritten here (vercel.json). The Hobby plan
+// allows 12 serverless functions, and this file was already one of them, so
+// the assistant route is an action on this function instead of a new file.
 
 const { requireStaff } = require('./_lib/staffAuth.js');
+const { handleAssistantUpload } = require('./_lib/assistantUpload.js');
 const SUPABASE_URL = 'https://fneasddxtejasvsojgcu.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const BUCKET = 'Attachements';
 
+function isAssistantUpload(req) {
+  if (req.query?.action === 'assistant') return true;
+  const url = req.url || '';
+  return url.includes('action=assistant') || url.includes('/assistant-upload');
+}
+
 module.exports = async function handler(req, res) {
+  // Assistant token only. Checked before staff auth so a bearer token that is
+  // not a user session is not sent to Supabase Auth.
+  if (isAssistantUpload(req)) return handleAssistantUpload(req, res);
+
   // Staff only: this endpoint uses the service role key.
   if (req.method !== 'OPTIONS' && !(await requireStaff(req, res))) return;
   if (req.method !== 'POST') {

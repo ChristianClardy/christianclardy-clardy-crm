@@ -1,4 +1,10 @@
-**Welcome to your Base44 project** 
+**Welcome to your Base44 project**
+
+## Assistant file upload
+
+An external assistant files documents with `POST /api/assistant-upload`. The bearer token, the 25 MB limit, and how to replace a Google Drive link are in [docs/assistant-upload.md](docs/assistant-upload.md).
+
+ 
 
 **About**
 

@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/assistant-upload",
+      "destination": "/api/upload?action=assistant"
+    },
+    {
       "source": "/QuickBooksCallback",
       "destination": "/api/quickbooks?action=oauth-callback"
     },
